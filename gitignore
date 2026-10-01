@@ -1,0 +1,5 @@
+.env
+proveam.db
+__pycache__/
+uploads/
+.DS_Store
