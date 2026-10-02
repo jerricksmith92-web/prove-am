@@ -29,7 +29,7 @@ PAGE = """
 <style>
 *{margin:0;padding:0;box-sizing:border-box} body{background:#000;color:#fff;font-family:-apple-system,sans-serif}
 .top{position:sticky;top:0;z-index:10;background:#000;border-bottom:1px solid #151515;padding:12px 0 8px;text-align:center}
-.logo-circle{width:62px;height:62px;border-radius:50%;border:2.5px solid #D4AF37;background:radial-gradient(circle,#FFD700,#8B7500);display:flex;align-items:center;justify-content:center;margin:0 auto 6px;font-weight:900;color:#000;font-size:22px;overflow:hidden}
+.logo-circle{width:68px;height:68px;border-radius:50%;border:2.5px solid #D4AF37;background:#000;display:flex;align-items:center;justify-content:center;margin:0 auto 6px;overflow:hidden}
 .logo-text{color:#D4AF37;font-size:28px;font-weight:900;letter-spacing:2px}
 .sub{color:#888;font-size:12px}
 .install{display:none;background:#D4AF37;color:#000;border:none;padding:8px 14px;border-radius:20px;font-weight:800;font-size:12px;margin:8px auto 0;cursor:pointer}
@@ -45,10 +45,9 @@ input{width:100%;padding:13px;border-radius:12px;border:1px solid #2a2a2a;backgr
 .act{flex:1;padding:9px 4px;border-radius:18px;text-align:center;font-size:11px;text-decoration:none;border:1px solid #333;background:#1e1e1e;color:#fff;cursor:pointer;min-width:60px}
 .del{background:#251010;border-color:#5a2222;color:#ff7a7a}.dl{background:#102116;border-color:#204d2a;color:#7dff9f}
 .text-reply-box{display:flex;gap:6px;margin-top:8px}.text-reply-box input{flex:1;margin:0}
-.streak-fire{font-size:16px}
 </style></head><body>
 <div class="top">
-<div class="logo-circle"><img src="/static/uploads/logo.jpg" onerror="this.style.display='none';document.getElementById('paText').style.display='block'" style="width:100%;height:100%;object-fit:cover"><span id="paText" style="display:none">PA</span></div>
+<div class="logo-circle" style="background:#000"><img src="https://raw.githubusercontent.com/jerricksmith92-web/prove-am/main/logo.jpg" style="width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.style.display='none';document.getElementById('paText').style.display='block'"><span id="paText" style="display:none">PA</span></div>
 <div class="logo-text">PROVE AM</div>
 <div class="sub">@{{ session.get('username','Guest') }}</div>
 <button id="installBtn" class="install">📲 Install PROVE AM</button>
@@ -60,17 +59,17 @@ input{width:100%;padding:13px;border-radius:12px;border:1px solid #2a2a2a;backgr
 <form method="post" action="/auth"><input name="username" placeholder="Username" required><input name="password" type="password" placeholder="Password" required><button class="btn btn-gold" name="action" value="signup">SIGN UP</button><button class="btn btn-dark" name="action" value="login">LOGIN</button></form></div>
 {% else %}
 
-<div class="card flex"><div><div style="font-weight:800" class="streak-fire">🔥 Streak: <span class="gold">{{ streak }} days</span></div><div class="small">Longest: {{ longest }} days | Total Posts: {{ total }}</div></div><a href="/friends" style="color:#D4AF37;text-decoration:none">👥 Friends</a></div>
+<div class="card flex"><div><div style="font-weight:800">🔥 Streak: <span class="gold">{{ streak }} days</span></div><div class="small">Longest: {{ longest }} days | Total Posts: {{ total }}</div></div><a href="/friends" style="color:#D4AF37;text-decoration:none">👥 Friends</a></div>
 
 <div class="card"><input id="to_user" placeholder="Challenge who? (username)"><input id="challenge_text" placeholder="Ask them to prove... e.g. Prove you dey gym!"><button class="btn btn-gold" onclick="doChallenge()">⚡ ASK TO PROVE AM</button></div>
 
-<div class="card"><div style="color:#D4AF37;font-weight:800;margin-bottom:8px">📸 PROVE AM NOW</div><video id="video" autoplay playsinline muted></video><input type="file" id="fileInput" accept="image/*" capture="environment" style="display:none"><canvas id="canvas" style="display:none"></canvas><input id="caption" placeholder="What you dey prove?"><button class="btn btn-gold" onclick="doCapture()">📸 CAPTURE & PROVE</button><button class="btn btn-dark" onclick="doTextPost()">💬 POST TEXT ONLY</button><button class="btn btn-dark" onclick="document.getElementById('fileInput').click()">📁 Gallery (Fix Black Camera)</button></div>
+<div class="card"><div style="color:#D4AF37;font-weight:800;margin-bottom:8px">📸 PROVE AM NOW</div><video id="video" autoplay playsinline muted></video><input type="file" id="fileInput" accept="image/*" capture="environment" style="display:none"><canvas id="canvas" style="display:none"></canvas><input id="caption" placeholder="What you dey prove?"><button class="btn btn-gold" onclick="doCapture()">📸 CAPTURE & PROVE</button><button class="btn btn-dark" onclick="doTextPost()">💬 POST TEXT ONLY</button><button class="btn btn-dark" onclick="document.getElementById('fileInput').click()">📁 Gallery</button></div>
 
 {% for p in posts %}
 <div class="card"><div class="flex"><b>@{{ p['username'] }}</b><span class="small">{{ p['timestamp'] }}</span></div>
 {% if p['challenge_from'] %}<div style="background:#D4AF37;color:#000;padding:7px 10px;border-radius:9px;margin:8px 0;font-size:12px;font-weight:700">{{ p['challenge_from'] }}: {{ p['caption'] }}</div>
 {% else %}<div style="margin:8px 0;font-size:13px;white-space:pre-wrap">{{ p['caption'] }}</div>{% endif %}
-{% if p['image'] and 'logo.jpg' not in p['image'] %}<img src="/{{ p['image'] }}" class="post-img">{% endif %}
+{% if p['image'] and 'logo.jpg' not in p['image'] and 'logo-full' not in p['image'] %}<img src="/{{ p['image'] }}" class="post-img">{% endif %}
 <div class="actions"><button class="act" onclick="doReply({{ p['id'] }})">📸 Reply</button><button class="act" onclick="document.getElementById('text-{{ p['id'] }}').style.display='flex'">💬 Text</button><a class="act dl" href="/{{ p['image'] }}" download>⬇️ Download</a>{% if p['user_id']==session['user_id'] %}<a class="act del" href="/delete/{{ p['id'] }}">🗑️ Delete</a>{% endif %}</div>
 <div id="text-{{ p['id'] }}" class="text-reply-box" style="display:none"><input id="input-{{ p['id'] }}" placeholder="Type text reply..."><button class="act btn-gold" style="flex:0.4" onclick="doTextReply({{ p['id'] }})">Send</button></div>
 {% for r in replies if r['post_id']==p['id'] %}<div style="margin-top:10px;background:#151515;padding:9px;border-radius:10px;border-left:2px solid #D4AF37"><div class="small">@{{ r['username'] }} replied:</div>{% if r['text'] %}<div style="font-size:13px;margin:4px 0">{{ r['text'] }}</div>{% endif %}{% if r['image'] %}<img src="/{{ r['image'] }}" style="width:100%;border-radius:8px;margin-top:4px">{% endif %}<div class="small">{{ r['timestamp'] }}</div></div>{% endfor %}
@@ -107,7 +106,6 @@ def home():
     conn = get_db()
     posts = conn.execute('SELECT * FROM posts ORDER BY id DESC').fetchall()
     replies = conn.execute('SELECT * FROM replies ORDER BY id DESC').fetchall()
-    # REAL STREAK CALCULATION
     rows = conn.execute('SELECT DATE(timestamp) as d FROM posts WHERE user_id=? GROUP BY DATE(timestamp) ORDER BY d DESC', (session['user_id'],)).fetchall()
     total_posts = conn.execute('SELECT COUNT(*) FROM posts WHERE user_id=?', (session['user_id'],)).fetchone()[0]
     streak = 0
@@ -117,7 +115,7 @@ def home():
             last_date = datetime.strptime(rows[0]['d'], '%Y-%m-%d').date()
             today = date.today()
             diff = (today - last_date).days
-            if diff <= 1: # posted today or yesterday = streak alive
+            if diff <= 1:
                 streak = 1
                 for i in range(1, len(rows)):
                     prev = datetime.strptime(rows[i-1]['d'], '%Y-%m-%d').date()
@@ -128,14 +126,14 @@ def home():
                         break
             else:
                 streak = 0
-        except Exception as e:
+        except:
             streak = len(rows) if rows else 0
     conn.close()
     return render_template_string(PAGE, posts=posts, replies=replies, streak=streak, longest=longest_days, total=total_posts)
 
 @app.route('/manifest.json')
 def manifest():
-    return jsonify({"name":"PROVE AM","short_name":"PROVE AM","start_url":"/","display":"standalone","background_color":"#000000","theme_color":"#D4AF37","icons":[{"src":"/static/uploads/logo.jpg","sizes":"192x192","type":"image/jpeg"}]})
+    return jsonify({"name":"PROVE AM","short_name":"PROVE AM","start_url":"/","display":"standalone","background_color":"#000000","theme_color":"#D4AF37","icons":[{"src":"https://raw.githubusercontent.com/jerricksmith92-web/prove-am/main/logo.jpg","sizes":"192x192","type":"image/jpeg"}]})
 
 @app.route('/sw.js')
 def sw():
