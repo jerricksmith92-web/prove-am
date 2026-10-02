@@ -1,32 +1,49 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Result - PROVE AM</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Result - PROVE AM</title>
 <style>
-body{font-family:Arial;background:#0a0a0a;color:white;padding:15px}
-.card{background:#1a1a1a;padding:20px;border-radius:15px;max-width:600px;margin:20px auto;border:1px solid #333}
-.PASS{color:#00ff88}.SUSPECT{color:#ffcc00}.FORGERY{color:#ff4444}
-.check{border-bottom:1px solid #222;padding:12px 0;text-align:left}
-.score{font-size:48px;font-weight:bold;margin:10px}
-button{background:#ffcc00;color:black;padding:12px 25px;border:none;border-radius:8px;font-weight:bold;margin-top:20px;width:100%}
+body{background:#0a0a0a;color:white;font-family: -apple-system, sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;padding:20px}
+.card{background:#1a1a1a;padding:25px;border-radius:20px;width:100%;max-width:420px}
+.header{display:flex;justify-content:space-between;align-items:center}
+.logo{font-weight:900;color:#FFD100} .logo span{color:#CE1126}
+.flag{display:flex;height:6px;border-radius:10px;overflow:hidden;width:60px}
+.flag div{flex:1}.red{background:#CE1126}.gold{background:#FFD100}.green{background:#006B3F}
+.score{font-size:58px;font-weight:900;margin:10px 0}
+.pass{color:#00ff88}.suspect{color:#ffcc00}.fail{color:#ff4444}
+.check{border-top:1px solid #333;padding:12px 0}
+.btn{background:#FFD100;color:black;border:none;padding:14px;border-radius:10px;font-weight:800;width:100%;margin-top:10px;display:block;text-align:center;text-decoration:none}
+.btn2{background:#333;color:white}
+.cert{border:1px dashed #FFD100;padding:15px;border-radius:10px;margin-top:15px;background:#111}
 </style>
 </head>
 <body>
-<div class="card">
+<div class="card" id="certificate">
+<div class="header">
+<div class="logo">PROVE <span>AM</span></div>
+<div class="flag"><div class="red"></div><div class="gold"></div><div class="green"></div></div>
+</div>
 <h2>Verification Result</h2>
-<p>File: {{filename}}</p>
-<div class="score">{{score}}%</div>
-<h3>{{verdict}}</h3>
-<hr>
+<small>File: {{filename}}</small>
+<div class="score {% if score >= 80 %}pass{% elif score >=60 %}suspect{% else %}fail{% endif %}">{{score}}%</div>
+<div style="font-weight:800;margin-bottom:15px">{{verdict}}</div>
+
 {% for c in checks %}
 <div class="check">
-<b>{{c.check}}</b> - <span class="{{c.status}}">{{c.status}}</span><br>
-<small style="color:#aaa">{{c.detail}} | Score: {{c.score}}</small>
+<b>{{c.check}} - <span class="{% if c.status=='PASS' %}pass{% elif c.status=='SUSPECT' %}suspect{% else %}fail{% endif %}">{{c.status}}</span></b><br>
+<small>{{c.detail}} | Score: {{c.score}}</small>
 </div>
 {% endfor %}
-<a href="/"><button>Verify Another Document</button></a>
-<p style="font-size:11px;color:#666;margin-top:15px">{{date}} | PROVE AM 🇬🇭</p>
+
+<div class="cert">
+<b>📜 Verification Certificate</b><br>
+<small>Date: {{date}}<br>ID: PA-{{score}}{{filename[:3]}}-GH<br>Verified by PROVE AM AI<br>prove-am.vercel.app</small>
+</div>
+
+<a href="/" class="btn">Verify Another Document</a>
+<button onclick="window.print()" class="btn btn2">📥 Download Certificate as PDF</button>
+<small style="color:#666;display:block;margin-top:10px;text-align:center">{{date}} | PROVE AM 🇬🇭</small>
 </div>
 </body>
 </html>
