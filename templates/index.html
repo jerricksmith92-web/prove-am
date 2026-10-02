@@ -2,36 +2,51 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PROVE AM - Ghana Document Verifier</title>
+<title>PROVE AM - Ghana Verifier</title>
 <style>
-body{background:#0a0a0a;color:white;font-family: -apple-system, BlinkMacSystemFont, sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0}
-.card{background:#1a1a1a;padding:30px;border-radius:20px;width:90%;max-width:400px;text-align:center;box-shadow:0 0 30px rgba(255,209,0,0.2)}
-.logo{font-size:32px;font-weight:900;color:#FFD100;letter-spacing:2px}
-.logo span{color:#CE1126}
-.flag{display:flex;height:8px;border-radius:10px;overflow:hidden;margin:10px 0 20px 0;animation:wave 2s infinite}
+body{background:#000;color:white;font-family:-apple-system,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0}
+.card{background:#181818;padding:28px;border-radius:22px;width:88%;max-width:380px;text-align:center;border:1px solid #222;box-shadow:0 10px 40px rgba(255,209,0,0.15)}
+.logo{font-size:34px;font-weight:900;letter-spacing:1px}
+.logo.y{color:#FFD100}.logo.r{color:#CE1126}
+.flag{height:7px;display:flex;border-radius:20px;overflow:hidden;margin:12px 0 18px 0}
 .flag div{flex:1}
 .red{background:#CE1126}.gold{background:#FFD100}.green{background:#006B3F}
-@keyframes wave{0%,100%{transform:scaleX(1)}50%{transform:scaleX(1.05)}}
-.upload{border:2px dashed #FFD100;padding:30px;border-radius:15px;margin-top:15px;cursor:pointer}
-button{background:#FFD100;color:black;border:none;padding:15px 25px;border-radius:10px;font-weight:800;width:100%;margin-top:15px;font-size:16px}
-small{color:#888}
+.upload-area{border:2px dashed #444;padding:28px 15px;border-radius:16px;background:#111;transition:0.2s;display:block;cursor:pointer}
+.upload-area:hover{border-color:#FFD100;background:#1a1a1a}
+.upload-area b{font-size:16px;display:block;margin-bottom:4px}
+.btn{background:#FFD100;color:#000;border:none;padding:15px;border-radius:12px;font-weight:900;width:100%;margin-top:16px;font-size:16px;display:none}
+small{color:#777}
 </style>
 </head>
 <body>
 <div class="card">
-<div class="logo">PROVE <span>AM</span> 🇬🇭</div>
+<div class="logo"><span class="y">PROVE</span> <span class="r">AM</span> 🇬🇭</div>
 <div class="flag"><div class="red"></div><div class="gold"></div><div class="green"></div></div>
-<p>Upload Ghana ID, Passport, Certificate to verify forgery</p>
-<form action="/upload" method="post" enctype="multipart/form-data">
-<label class="upload">
-<input type="file" name="file" id="file" hidden required onchange="this.form.submit()">
-<span id="text">📄 Click to Upload Document<br><small>PDF, JPG, PNG</small></span>
+
+<p style="color:#ccc;margin:5px 0 20px 0;font-size:14px">Upload Ghana ID, Passport, Certificate<br>to verify forgery</p>
+
+<form id="form" action="/upload" method="post" enctype="multipart/form-data">
+<label class="upload-area" for="file">
+<b>📄 Click to Upload Document</b>
+<small>PDF, JPG, PNG • Max 10MB</small>
 </label>
+<input type="file" name="file" id="file" hidden accept=".pdf,.jpg,.jpeg,.png" required>
+<button id="btn" class="btn">⏳ Scanning Document...</button>
 </form>
-<p><small>ELA Forgery Detection • 100% Private</small></p>
+
+<p style="margin-top:18px"><small>ELA Forgery Detection • 100% Private • Ghana 🇬🇭</small></p>
 </div>
+
 <script>
-document.getElementById('file').addEventListener('change', function(){document.getElementById('text').innerText='⏳ Scanning...';});
+const fileInput = document.getElementById('file');
+const btn = document.getElementById('btn');
+fileInput.addEventListener('change', function(){
+  if(this.files.length>0){
+    btn.style.display='block';
+    btn.innerText='⏳ Scanning ' + this.files[0].name + '...';
+    document.getElementById('form').submit();
+  }
+});
 </script>
 </body>
 </html>
