@@ -5,21 +5,20 @@ from PIL import Image, ImageChops
 
 TEMPLATE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), 'templates'))
 app = Flask(__name__, template_folder=TEMPLATE_DIR)
-app.secret_key = "prove-am-2024"
+app.secret_key = "prove-am-2024-final"
 
 UPLOAD_FOLDER = "/tmp/uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 def perform_ela(image_path):
+    original_path = image_path
     try:
-        original_path = image_path
-
-        # --- FIX FOR PDF ---
+        # --- PDF SUPPORT ---
         if image_path.lower().endswith('.pdf'):
             import fitz
             doc = fitz.open(image_path)
-            page = doc[0] # first page
+            page = doc[0]
             pix = page.get_pixmap(dpi=200)
             png_path = os.path.join(UPLOAD_FOLDER, "converted.png")
             pix.save(png_path)
@@ -34,10 +33,15 @@ def perform_ela(image_path):
         extrema = diff.getextrema()
         max_diff = max([ex[1] for ex in extrema])
 
-        if max_diff < 8:
+        # --- LENIENT FOR PDF ---
+        is_pdf = original_path.lower().endswith('.pdf')
+        limit_pass = 60 if is_pdf else 12
+        limit_suspect = 90 if is_pdf else 30
+
+        if max_diff < limit_pass:
             return "PASS", 92, f"Low ELA ({max_diff}) - Original document"
-        elif max_diff < 25:
-            return "SUSPECT", 60, f"Medium ELA ({max_diff}) - Possible edit"
+        elif max_diff < limit_suspect:
+            return "SUSPECT", 68, f"Medium ELA ({max_diff}) - Minor compression differences"
         else:
             return "FORGERY", 25, f"High ELA ({max_diff}) - Edited region detected"
 
@@ -56,7 +60,6 @@ def upload():
     if f.filename == '':
         return "No file", 400
 
-    # Save file
     path = os.path.join(UPLOAD_FOLDER, f.filename)
     f.save(path)
 
@@ -68,15 +71,17 @@ def upload():
         {"check": "Compression Check", "status": "PASS" if score>70 else "SUSPECT", "score": score, "detail": "Compression consistent" if score>70 else "Inconsistent compression"}
     ]
 
-    if score >= 80:
+    avg = int(sum(c['score'] for c in checks)/3)
+
+    if avg >= 80:
         verdict = "✅ ORIGINAL - No Forgery Detected"
-    elif score >= 50:
+    elif avg >= 50:
         verdict = "⚠️ SUSPECT - Check Carefully"
     else:
         verdict = "❌ FORGERY - Document Edited"
 
     date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-    return render_template('result.html', filename=f.filename, checks=checks, score=score, verdict=verdict, date=date)
+    return render_template('result.html', filename=f.filename, checks=checks, score=avg, verdict=verdict, date=date)
 
 if __name__ == '__main__':
     app.run(debug=True)
