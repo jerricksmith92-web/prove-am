@@ -1,24 +1,37 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>PROVE AM - No Cap 🇬🇭</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PROVE AM - Ghana Document Verifier</title>
 <style>
-body{font-family:Arial;background:#0a0a0a;color:white;text-align:center;padding:20px}
-.card{background:#1a1a1a;padding:30px;border-radius:20px;max-width:500px;margin:40px auto;border:1px solid #333}
-button{background:#ffcc00;color:black;padding:15px 30px;border:none;border-radius:10px;font-weight:bold;font-size:16px;cursor:pointer;width:100%;margin-top:15px}
-input{margin:20px 0;color:white}
+body{background:#0a0a0a;color:white;font-family: -apple-system, BlinkMacSystemFont, sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0}
+.card{background:#1a1a1a;padding:30px;border-radius:20px;width:90%;max-width:400px;text-align:center;box-shadow:0 0 30px rgba(255,209,0,0.2)}
+.logo{font-size:32px;font-weight:900;color:#FFD100;letter-spacing:2px}
+.logo span{color:#CE1126}
+.flag{display:flex;height:8px;border-radius:10px;overflow:hidden;margin:10px 0 20px 0;animation:wave 2s infinite}
+.flag div{flex:1}
+.red{background:#CE1126}.gold{background:#FFD100}.green{background:#006B3F}
+@keyframes wave{0%,100%{transform:scaleX(1)}50%{transform:scaleX(1.05)}}
+.upload{border:2px dashed #FFD100;padding:30px;border-radius:15px;margin-top:15px;cursor:pointer}
+button{background:#FFD100;color:black;border:none;padding:15px 25px;border-radius:10px;font-weight:800;width:100%;margin-top:15px;font-size:16px}
+small{color:#888}
 </style>
 </head>
 <body>
 <div class="card">
-<h1>PROVE AM 🇬🇭</h1>
-<p>No Cap - Real Document Verification</p>
+<div class="logo">PROVE <span>AM</span> 🇬🇭</div>
+<div class="flag"><div class="red"></div><div class="gold"></div><div class="green"></div></div>
+<p>Upload Ghana ID, Passport, Certificate to verify forgery</p>
 <form action="/upload" method="post" enctype="multipart/form-data">
-<input type="file" name="file" required accept=".pdf,.png,.jpg,.jpeg">
-<button type="submit">🔍 VERIFY DOCUMENT</button>
+<label class="upload">
+<input type="file" name="file" id="file" hidden required onchange="this.form.submit()">
+<span id="text">📄 Click to Upload Document<br><small>PDF, JPG, PNG</small></span>
+</label>
 </form>
-<p style="font-size:11px;color:#777;margin-top:20px">Real ELA • Metadata • Edge Check • Ghana Made</p>
+<p><small>ELA Forgery Detection • 100% Private</small></p>
 </div>
+<script>
+document.getElementById('file').addEventListener('change', function(){document.getElementById('text').innerText='⏳ Scanning...';});
+</script>
 </body>
 </html>
