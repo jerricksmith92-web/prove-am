@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 body{font-family:Arial;background:#0a0a0a;color:white;padding:15px}
-.card{background:#1a1a1a;padding:20px;border-radius:15px;max-width:600px;margin:auto;border:1px solid #333}
-.pass{color:#00ff88} .suspect{color:#ffcc00} .forgery{color:#ff4444}
+.card{background:#1a1a1a;padding:20px;border-radius:15px;max-width:600px;margin:20px auto;border:1px solid #333}
+.PASS{color:#00ff88}.SUSPECT{color:#ffcc00}.FORGERY{color:#ff4444}
 .check{border-bottom:1px solid #222;padding:12px 0;text-align:left}
-.score{font-size:50px;font-weight:bold;margin:10px}
-button{background:#ffcc00;color:black;padding:12px 25px;border:none;border-radius:8px;font-weight:bold;cursor:pointer;margin-top:20px}
+.score{font-size:48px;font-weight:bold;margin:10px}
+button{background:#ffcc00;color:black;padding:12px 25px;border:none;border-radius:8px;font-weight:bold;margin-top:20px;width:100%}
 </style>
 </head>
 <body>
@@ -17,16 +17,16 @@ button{background:#ffcc00;color:black;padding:12px 25px;border:none;border-radiu
 <h2>Verification Result</h2>
 <p>File: {{filename}}</p>
 <div class="score">{{score}}%</div>
-<h3 class="{{ 'pass' if 'ORIGINAL' in verdict else 'forgery' if 'FORGERY' in verdict else 'suspect' }}">{{verdict}}</h3>
+<h3>{{verdict}}</h3>
 <hr>
 {% for c in checks %}
 <div class="check">
-<b>{{c.check}}</b> - <span class="{{c.status|lower}}">{{c.status}}</span><br>
+<b>{{c.check}}</b> - <span class="{{c.status}}">{{c.status}}</span><br>
 <small style="color:#aaa">{{c.detail}} | Score: {{c.score}}</small>
 </div>
 {% endfor %}
-<a href="/"><button>Verify Another</button></a>
-<p style="font-size:11px;color:#666;margin-top:15px">{{date}}</p>
+<a href="/"><button>Verify Another Document</button></a>
+<p style="font-size:11px;color:#666;margin-top:15px">{{date}} | PROVE AM 🇬🇭</p>
 </div>
 </body>
 </html>
