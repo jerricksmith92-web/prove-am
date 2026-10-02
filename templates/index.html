@@ -1,52 +1,82 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PROVE AM - Ghana Verifier</title>
-<style>
-body{background:#000;color:white;font-family:-apple-system,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0}
-.card{background:#181818;padding:28px;border-radius:22px;width:88%;max-width:380px;text-align:center;border:1px solid #222;box-shadow:0 10px 40px rgba(255,209,0,0.15)}
-.logo{font-size:34px;font-weight:900;letter-spacing:1px}
-.logo.y{color:#FFD100}.logo.r{color:#CE1126}
-.flag{height:7px;display:flex;border-radius:20px;overflow:hidden;margin:12px 0 18px 0}
-.flag div{flex:1}
-.red{background:#CE1126}.gold{background:#FFD100}.green{background:#006B3F}
-.upload-area{border:2px dashed #444;padding:28px 15px;border-radius:16px;background:#111;transition:0.2s;display:block;cursor:pointer}
-.upload-area:hover{border-color:#FFD100;background:#1a1a1a}
-.upload-area b{font-size:16px;display:block;margin-bottom:4px}
-.btn{background:#FFD100;color:#000;border:none;padding:15px;border-radius:12px;font-weight:900;width:100%;margin-top:16px;font-size:16px;display:none}
-small{color:#777}
-</style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
 </head>
-<body>
-<div class="card">
-<div class="logo"><span class="y">PROVE</span> <span class="r">AM</span> 🇬🇭</div>
-<div class="flag"><div class="red"></div><div class="gold"></div><div class="green"></div></div>
+<body class="max-w-[430px] mx-auto bg-black text-white min-h-screen flex flex-col">
 
-<p style="color:#ccc;margin:5px 0 20px 0;font-size:14px">Upload Ghana ID, Passport, Certificate<br>to verify forgery</p>
+<!-- LOGO -->
+<div class="flex items-center justify-between px-4 py-3">
+  <div class="flex items-center gap-2">
+    <div class="w-8 h-8 bg-[#FFFC00] rounded-full flex items-center justify-center text-black font-black">P</div>
+    <span class="font-black">Prove AM</span>
+  </div>
+  <i class="fa-solid fa-ellipsis-vertical"></i>
+</div>
 
-<form id="form" action="/upload" method="post" enctype="multipart/form-data">
-<label class="upload-area" for="file">
-<b>📄 Click to Upload Document</b>
-<small>PDF, JPG, PNG • Max 10MB</small>
-</label>
-<input type="file" name="file" id="file" hidden accept=".pdf,.jpg,.jpeg,.png" required>
-<button id="btn" class="btn">⏳ Scanning Document...</button>
-</form>
+<!-- TABS -->
+<div class="flex bg-[#111] mx-3 rounded-full p-1 text-[13px] font-bold">
+  <button id="tabChat" onclick="showTab('chat')" class="flex-1 py-2 rounded-full bg-[#FFFC00] text-black">WhatsApp Chat</button>
+  <button id="tabPost" onclick="showTab('post')" class="flex-1 py-2 rounded-full text-white/60">Instagram Post</button>
+  <button id="tabStreak" onclick="showTab('streak')" class="flex-1 py-2 rounded-full text-white/60">Snapchat Streak</button>
+</div>
 
-<p style="margin-top:18px"><small>ELA Forgery Detection • 100% Private • Ghana 🇬🇭</small></p>
+<!-- 1. WHATSAPP CHAT -->
+<div id="viewChat" class="flex-1 bg-[#0B141A] flex flex-col">
+  <div id="waList"></div>
+  <!-- Opened chat -->
+  <div id="waOpened" class="hidden fixed inset-0 z-50 bg-[#0B141A] max-w-[430px] mx-auto flex flex-col">
+    <div class="bg-[#202C33] px-3 py-3 flex items-center gap-3">
+      <button onclick="closeWa()"><i class="fa-solid fa-arrow-left"></i></button>
+      <img id="waAvatar" class="w-9 h-9 rounded-full">
+      <div class="flex-1">
+        <p id="waName" class="font-bold"></p>
+        <p class="text-[11px] text-white/60">tap here • 🔥 12 day streak • online</p>
+      </div>
+      <i class="fa-solid fa-video"></i><i class="fa-solid fa-phone"></i>
+    </div>
+    <div id="waMsgs" class="flex-1 overflow-y-auto p-3 space-y-1"></div>
+    <div id="waReply" class="hidden bg-[#202C33] px-3 py-2 border-l-4 border-[#53BDEB]"></div>
+    <div class="bg-[#202C33] p-2 flex gap-2">
+      <div class="flex-1 bg-[#2A3942] rounded-full px-3 py-2">
+        <textarea id="waInput" placeholder="Message" class="bg-transparent w-full outline-none text-[14px]"></textarea>
+      </div>
+      <button id="waMic" onmousedown="startWaAudio()" onmouseup="stopWaAudio()" class="w-11 h-11 rounded-full bg-[#00A884]"><i id="waMicIcon" class="fa-solid fa-microphone"></i></button>
+      <button id="waSend" onclick="sendWa()" class="hidden w-11 h-11 rounded-full bg-[#00A884]"><i class="fa-solid fa-paper-plane"></i></button>
+    </div>
+  </div>
+</div>
+
+<!-- 2. INSTAGRAM POSTS - PERMANENT -->
+<div id="viewPost" class="hidden flex-1 bg-white text-black">
+  <div id="igFeed"></div>
+</div>
+
+<!-- 3. SNAPCHAT STREAKS - 24H -->
+<div id="viewStreak" class="hidden flex-1 bg-[#0A0A0A]">
+  <div class="m-3 bg-[#1A1A1A] rounded-2xl p-3 flex justify-between">
+    <p class="font-bold text-[13px]">🔥 Restore Streaks for free — 3h left!</p>
+    <button class="bg-[#FFFC00] text-black px-4 py-1 rounded-full text-[12px] font-bold">Restore</button>
+  </div>
+  <div id="snapList"></div>
 </div>
 
 <script>
-const fileInput = document.getElementById('file');
-const btn = document.getElementById('btn');
-fileInput.addEventListener('change', function(){
-  if(this.files.length>0){
-    btn.style.display='block';
-    btn.innerText='⏳ Scanning ' + this.files[0].name + '...';
-    document.getElementById('form').submit();
-  }
-});
+/* same JS as I built — includes audio + reply */
+const friends=[{name:'Maxwell Kyere',avatar:'https://i.pravatar.cc/100?img=3',last:'Prove you dey gym?',time:'10:14',unread:4,streak:12,story:true},{name:'Serwaa 😍',avatar:'https://i.pravatar.cc/100?img=5',last:'Audio • 0:08',time:'09:31',unread:1,streak:45,story:true}];
+let currentWa,waReply,waMessages={},recording=false;
+function showTab(t){['chat','post','streak'].forEach(x=>{document.getElementById('view'+x[0].toUpperCase()+x.slice(1)).classList.toggle('hidden',x!==t)})}
+function openWa(name){currentWa=name;document.getElementById('waName').innerText=name;document.getElementById('waAvatar').src=friends.find(f=>f.name==name).avatar;document.getElementById('waOpened').classList.remove('hidden');if(!waMessages[name])waMessages[name]=[{from:'them',text:'Yo prove you dey gym?',time:'10:12'},{from:'me',text:'I dey go now',time:'10:13'},{from:'them',type:'audio',duration:'0:08',time:'10:14'}];renderWaMsgs()}
+function closeWa(){document.getElementById('waOpened').classList.add('hidden')}
+function renderWaMsgs(){const box=document.getElementById('waMsgs');box.innerHTML='';waMessages[currentWa].forEach((m,i)=>{box.innerHTML+=`<div class='flex ${m.from=='me'?'justify-end':''}'><div onclick='setWaReply(${i})' class='${m.from=='me'?'bg-[#005C4B]':'bg-[#202C33]'} rounded-lg px-3 py-2 max-w-[75%]'>${m.type=='audio'?`🎤 ${m.duration}`:m.text}<p class='text-[10px] text-white/40'>${m.time} ✓✓</p></div></div>`})}
+function setWaReply(i){waReply=waMessages[currentWa][i];document.getElementById('waReply').classList.remove('hidden');document.getElementById('waReply').innerHTML=`Replying to ${waReply.text||'Audio'}`}
+function sendWa(){const v=document.getElementById('waInput').value;if(!v)return;waMessages[currentWa].push({from:'me',text:(waReply?'↩ '+waReply.text+' — ':'')+v,time:'now'});document.getElementById('waInput').value='';renderWaMsgs()}
+function startWaAudio(){recording=true}function stopWaAudio(){if(!recording)return;recording=false;waMessages[currentWa].push({from:'me',type:'audio',duration:'0:05',time:'now'});renderWaMsgs()}
+function renderAll(){document.getElementById('waList').innerHTML=friends.map(f=>`<div onclick="openWa('${f.name}')" class='flex gap-3 p-3 border-b border-white/5'><img src='${f.avatar}' class='w-12 h-12 rounded-full'><div><p class='font-bold'>${f.name} 🔥${f.streak}</p><p class='text-[12px] text-white/50'>${f.last}</p></div></div>`).join('');document.getElementById('igFeed').innerHTML=`<div class='p-3'><img src='https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=500' class='w-full rounded-xl'><p class='font-bold mt-2'>42 likes</p><p><b>Samuel</b> Prove you dey gym! 💪</p></div>`;document.getElementById('snapList').innerHTML=friends.map(f=>`<div class='flex justify-between p-4 border-b border-white/5'><div class='flex gap-3'><div class='p-[2px] rounded-full bg-[#FFFC00]'><img src='${f.avatar}' class='w-12 h-12 rounded-full border-2 border-black'></div><div><p class='font-bold'>${f.name}</p><p class='text-[12px] text-purple-400'>${f.unread} new Proof</p></div></div><span>🔥${f.streak}</span></div>`).join('')}
+renderAll();
 </script>
 </body>
 </html>
