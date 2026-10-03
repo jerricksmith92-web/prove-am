@@ -237,8 +237,35 @@ def api_messages():
 def api_send():
     me=session.get('username')
     if request.is_json: data=request.json; other=data.get('receiver',''); txt=data.get('text','')[:500]; url=''
-    else: other=request.form.get('receiver',''); txt=request.form.get('text','')[:500]; file=request.files.get('media'); url='';
+    @app.route('/api/send', methods=['POST'])
+def api_send():
+    me=session.get('username')
+    if request.is_json:
+        data=request.json
+        other=data.get('receiver','')
+        txt=data.get('text','')[:500]
+        url=''
+    else:
+        other=request.form.get('receiver','')
+        txt=request.form.get('text','')[:500]
+        file=request.files.get('media')
+        url=''
         if file and file.filename:
+            import uuid
+            ext=file.filename.rsplit('.',1)[-1].lower()
+            name=str(uuid.uuid4())[:8]+'.'+ext
+            os.makedirs('static/uploads',exist_ok=True)
+            path=os.path.join('static/uploads',name)
+            file.save(path)
+            url='/'+path
+    if not txt and not url:
+        return jsonify({"ok":False})
+    conn=get_conn()
+    c=conn.cursor()
+    c.execute("INSERT INTO messages (sender,receiver,text,media_url,created_at) VALUES (%s,%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO messages (sender,receiver,text,media_url,created_at) VALUES (?,?,?,?,?)", (me,other,txt,url,datetime.now().isoformat()))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok":True})
             import uuid; ext=file.filename.rsplit('.',1)[-1].lower(); name=str(uuid.uuid4())[:8]+'.'+ext; os.makedirs('static/uploads',exist_ok=True); path=os.path.join('static/uploads',name); file.save(path); url='/'+path
     if not txt and not url: return jsonify({"ok":False})
     conn=get_conn(); c=conn.cursor()
