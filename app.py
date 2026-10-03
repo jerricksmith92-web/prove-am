@@ -629,11 +629,11 @@ def api_posts():
 @app.route('/api/post', methods=['POST'])
 def api_post():
     me=session.get('username')
-    if not me: return jsonify({"ok":False,"error":"not login"}),401
+    if not me: return jsonify({"ok":False,"error":"login"})
     try:
         txt=request.form.get('text','')[:500]
         f=request.files.get('media'); url=''
-                if f and f.filename and f.filename!='':
+        if f and f.filename and f.filename!='':
             ext=f.filename.rsplit('.',1)[-1].lower()
             try:
                 import cloudinary, cloudinary.uploader
@@ -649,24 +649,12 @@ def api_post():
                 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
                 f.seek(0); f.save(lp)
                 url=f"static/uploads/{name}"
-        if not txt and not url: return jsonify({"ok":False,"error":"empty"}),400
-        conn=get_conn(); c=conn.cursor()
-        c.execute("INSERT INTO posts (username,text,media_url,created_at) VALUES (%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO posts (username,text,media_url,created_at) VALUES (?,?,?,?)",(me,txt,url,datetime.now().isoformat()))
+        conn=sqlite3.connect(DB); c=conn.cursor()
+        c.execute("INSERT INTO posts(username,text,image,created) VALUES(?,?,?,?)",(me,txt,url,time.time()))
         conn.commit(); conn.close()
         return jsonify({"ok":True})
     except Exception as e:
-        traceback.print_exc()
-        # auto repair
-        try:
-            run_alter("ALTER TABLE posts ADD COLUMN IF NOT EXISTS text TEXT" if USE_POSTGRES else "ALTER TABLE posts ADD COLUMN text TEXT")
-            run_alter("ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_url TEXT" if USE_POSTGRES else "ALTER TABLE posts ADD COLUMN media_url TEXT")
-            # retry once
-            conn=get_conn(); c=conn.cursor()
-            c.execute("INSERT INTO posts (username,text,media_url,created_at) VALUES (%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO posts (username,text,media_url,created_at) VALUES (?,?,?,?)",(me,txt,url,datetime.now().isoformat()))
-            conn.commit(); conn.close()
-            return jsonify({"ok":True})
-        except Exception as e2:
-            return jsonify({"ok":False,"error":f"Server save failed: {str(e)} | repair {str(e2)}"}),500
+        print(f"POST ERR {e}"); return jsonify({"ok":False,"error":str(e)})
 
 @app.route('/api/post/delete', methods=['POST'])
 def api_post_delete():
