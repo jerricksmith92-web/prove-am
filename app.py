@@ -511,8 +511,10 @@ def api_users():
 
 @app.route('/api/search')
 def api_search():
-    me=session.get('username'); q=(request.args.get('q','') or '').strip().lower()
-    conn=get_conn(); c=conn.cursor()
+    me = session.get('username')
+    q = (request.args.get('q','') or '').strip().lower()
+    conn = get_conn()
+    c = conn.cursor()
     try:
         if q:
             like = f"%{q}%"
@@ -523,28 +525,29 @@ def api_search():
                 c.execute("SELECT username,pic_url FROM profiles WHERE LOWER(username) LIKE? OR LOWER(username) LIKE? LIMIT 30", (like, like2))
         else:
             c.execute("SELECT username,pic_url FROM profiles LIMIT 30")
-        users=c.fetchall()
+        users = c.fetchall()
     except Exception as e:
         print(f"SEARCH ERROR: {e}")
-        users=[]
-   ...
-    me=session.get('username'); q=request.args.get('q','').lower()
-    conn=get_conn(); c=conn.cursor()
-    if q:
-        c.execute("SELECT username,pic_url FROM profiles WHERE LOWER(username) LIKE %s" if USE_POSTGRES else "SELECT username,pic_url FROM profiles WHERE LOWER(username) LIKE?", ('%'+q+'%',))
-    else:
-        c.execute("SELECT username,pic_url FROM profiles LIMIT 20")
-    users=c.fetchall()
-    # get friend statuses
-    c.execute("SELECT sender,receiver,status FROM friends WHERE sender=%s OR receiver=%s" if USE_POSTGRES else "SELECT sender,receiver,status FROM friends WHERE sender=? OR receiver=?", (me,me))
-    fr=c.fetchall()
-    status_map={}
+        users = []
+    try:
+        if USE_POSTGRES:
+            c.execute("SELECT sender,receiver,status FROM friends WHERE sender=%s OR receiver=%s", (me,me))
+        else:
+            c.execute("SELECT sender,receiver,status FROM friends WHERE sender=? OR receiver=?", (me,me))
+        fr = c.fetchall()
+    except:
+        fr = []
+    status_map = {}
     for s,r,st in fr:
-        if s==me: status_map[r]= 'friends' if st=='accepted' else 'pending_sent'
-        else: status_map[s]= 'friends' if st=='accepted' else 'pending_received'
-    out=[]
+        if s == me:
+            status_map[r] = 'friends' if st == 'accepted' else 'pending_sent'
+        else:
+            status_map[s] = 'friends' if st == 'accepted' else 'pending_received'
+    out = []
     for u,pic in users:
-        out.append({"username":u,"pic_url":pic or "","friend_status":status_map.get(u,'none')})
+        if u == me:
+            continue
+        out.append({"username": u, "pic_url": pic or "", "friend_status": status_map.get(u, 'none')})
     conn.close()
     return jsonify(out)
 
