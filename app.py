@@ -384,6 +384,3 @@ def chat_send(other):
 
 @app.route('/post/<int:id>')
 def single_post(id): return redirect('/')
-
-if __name__=='__main__':
-    app.run(host='0.0.0.0',port=int(os.environ.get("PORT",5000)))
