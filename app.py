@@ -413,22 +413,35 @@ def api_posts():
         out.append({"id":pid,"username":uname,"text":txt,"media_url":media,"created_at":created,"like_count":like_count,"liked":liked,"comment_count":comment_count,"pic":pic,"online":online})
     conn.close(); return jsonify(out)
     @app.route('/api/post', methods=['POST'])
+@app.route('/api/post', methods=['POST'])
 def api_post():
     me=session.get('username')
-    if not me: return jsonify({"ok":False})
+    if not me:
+        return jsonify({"ok":False})
     txt=request.form.get('text','')[:500]
-    file=request.files.get('media'); url=''
+    file=request.files.get('media')
+    url=''
     if file and file.filename:
-        import uuid; ext=file.filename.rsplit('.',1)[-1].lower()
+        import uuid
+        ext=file.filename.rsplit('.',1)[-1].lower()
         name=str(uuid.uuid4())[:8]+'.'+ext
         os.makedirs('static/uploads', exist_ok=True)
         path=os.path.join('static/uploads',name)
-        file.save(path); url='/'+path
-    if not txt and not url: return jsonify({"ok":False})
-    conn=get_conn(); c=conn.cursor(); now=datetime.now().isoformat()
-    if USE_POSTGRES: c.execute("INSERT INTO posts (username,text,media_url,created_at) VALUES (%s,%s,%s,%s)",(me,txt,url,now))
-    else: c.execute("INSERT INTO posts (username,text,media_url,created_at) VALUES (?,?,?,?)",(me,txt,url,now))
-    conn.commit(); conn.close(); return jsonify({"ok":True})
+        file.save(path)
+        url='/'+path
+    if not txt and not url:
+        return jsonify({"ok":False})
+    conn=get_conn()
+    c=conn.cursor()
+    now=datetime.now().isoformat()
+    if USE_POSTGRES:
+        c.execute("INSERT INTO posts (username,text,media_url,created_at) VALUES (%s,%s,%s,%s)",(me,txt,url,now))
+    else:
+        c.execute("INSERT INTO posts (username,text,media_url,created_at) VALUES (?,?,?,?)",(me,txt,url,now))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok":True})
+
 @app.route('/api/like', methods=['POST'])
 def api_like():
     me=session.get('username'); data=request.json; pid=data.get('post_id')
