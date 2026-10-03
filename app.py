@@ -9,7 +9,7 @@ app.secret_key = os.environ.get("SECRET","prove-am-v35-all-in-one")
 DB_URL = os.environ.get("DATABASE_URL","")
 USE_POSTGRES = DB_URL.startswith("postgres")
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
-
+os.makedirs('static/uploads', exist_ok=True)
 def get_conn():
     if USE_POSTGRES:
         try:
