@@ -9,6 +9,8 @@ app.secret_key = os.environ.get("SECRET","prove-am-v35-all-in-one")
 DB_URL = os.environ.get("DATABASE_URL","")
 USE_POSTGRES = DB_URL.startswith("postgres")
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
+import cloudinary, cloudinary.uploader
+cloudinary.config(cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME'), api_key=os.environ.get('CLOUDINARY_API_KEY'), api_secret=os.environ.get('CLOUDINARY_API_SECRET'))
 os.makedirs('static/uploads', exist_ok=True)
 def get_conn():
     if USE_POSTGRES:
