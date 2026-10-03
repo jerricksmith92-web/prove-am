@@ -1,5 +1,4 @@
 Flask
 cloudinary
-psycopg[binary]==3.2.3
+psycopg[binary]
 gunicorn
-Werkzeug
