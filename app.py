@@ -511,6 +511,23 @@ def api_users():
 
 @app.route('/api/search')
 def api_search():
+    me=session.get('username'); q=(request.args.get('q','') or '').strip().lower()
+    conn=get_conn(); c=conn.cursor()
+    try:
+        if q:
+            like = f"%{q}%"
+            like2 = f"%{q.split()[0]}%" if ' ' in q else like
+            if USE_POSTGRES:
+                c.execute("SELECT username,pic_url FROM profiles WHERE LOWER(username) LIKE %s OR LOWER(username) LIKE %s LIMIT 30", (like, like2))
+            else:
+                c.execute("SELECT username,pic_url FROM profiles WHERE LOWER(username) LIKE? OR LOWER(username) LIKE? LIMIT 30", (like, like2))
+        else:
+            c.execute("SELECT username,pic_url FROM profiles LIMIT 30")
+        users=c.fetchall()
+    except Exception as e:
+        print(f"SEARCH ERROR: {e}")
+        users=[]
+   ...
     me=session.get('username'); q=request.args.get('q','').lower()
     conn=get_conn(); c=conn.cursor()
     if q:
