@@ -5,11 +5,10 @@ from datetime import datetime, timedelta
 import sqlite3, traceback
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET","prove-am-v34-post-fix")
+app.secret_key = os.environ.get("SECRET","prove-am-v35-all-in-one")
 DB_URL = os.environ.get("DATABASE_URL","")
 USE_POSTGRES = DB_URL.startswith("postgres")
-MAX_CONTENT_LENGTH = 25 * 1024 * 1024
-app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 
 def get_conn():
     if USE_POSTGRES:
@@ -21,24 +20,29 @@ def get_conn():
             return psycopg.connect(DB_URL)
     return sqlite3.connect("app.db")
 
-def repair_db():
+def run_alter(sql):
     conn=get_conn(); c=conn.cursor()
-    for tbl in ["stories","posts","messages"]:
-        try: c.execute(f"SELECT media_url FROM {tbl} LIMIT 1")
-        except:
-            conn.rollback()
-            try: c.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS media_url TEXT"); c.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS text TEXT"); conn.commit()
-            except:
-                conn.rollback()
-                try:
-                    if tbl=="stories": c.execute("DROP TABLE IF EXISTS story_views")
-                    if tbl=="posts": c.execute("DROP TABLE IF EXISTS post_likes"); c.execute("DROP TABLE IF EXISTS comments")
-                    c.execute(f"DROP TABLE IF EXISTS {tbl}"); conn.commit()
-                except: conn.rollback()
+    try:
+        c.execute(sql); conn.commit(); print(f"ALTER OK: {sql}")
+    except Exception as e:
+        conn.rollback(); print(f"ALTER FAIL {sql}: {e}")
     conn.close()
 
+def nuclear_repair():
+    print("=== NUCLEAR REPAIR V35 ===")
+    # Force add missing columns - individually
+    cols = [
+        ("posts","text","TEXT"), ("posts","media_url","TEXT"), ("posts","username","TEXT"), ("posts","created_at","TEXT"),
+        ("stories","text","TEXT"), ("stories","media_url","TEXT"), ("stories","expires_at","TEXT"), ("stories","created_at","TEXT"), ("stories","username","TEXT"),
+        ("messages","text","TEXT"), ("messages","media_url","TEXT"), ("messages","receiver","TEXT"), ("messages","sender","TEXT"), ("messages","created_at","TEXT"),
+        ("profiles","pic_url","TEXT"),
+    ]
+    for tbl,col,typ in cols:
+        run_alter(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col} {typ}" if USE_POSTGRES else f"ALTER TABLE {tbl} ADD COLUMN {col} {typ}")
+    print("REPAIR DONE")
+
 def init_db():
-    repair_db()
+    nuclear_repair()
     conn=get_conn(); c=conn.cursor()
     if USE_POSTGRES:
         c.execute("CREATE TABLE IF NOT EXISTS auth (username TEXT PRIMARY KEY, password TEXT, created_at TEXT)")
@@ -49,6 +53,8 @@ def init_db():
         c.execute("CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, sender TEXT, receiver TEXT, text TEXT, media_url TEXT, created_at TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS stories (id SERIAL PRIMARY KEY, username TEXT, media_url TEXT, text TEXT, created_at TEXT, expires_at TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS story_views (story_id INT, viewer TEXT, PRIMARY KEY(story_id,viewer))")
+        c.execute("CREATE TABLE IF NOT EXISTS friends (id SERIAL PRIMARY KEY, sender TEXT, receiver TEXT, status TEXT, created_at TEXT)")
+        c.execute("CREATE TABLE IF NOT EXISTS notifications (id SERIAL PRIMARY KEY, username TEXT, type TEXT, from_user TEXT, text TEXT, created_at TEXT, is_read INT DEFAULT 0)")
     else:
         c.execute("CREATE TABLE IF NOT EXISTS auth (username TEXT PRIMARY KEY, password TEXT, created_at TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS profiles (username TEXT PRIMARY KEY, pic_url TEXT, bio TEXT, last_seen TEXT)")
@@ -58,8 +64,10 @@ def init_db():
         c.execute("CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, sender TEXT, receiver TEXT, text TEXT, media_url TEXT, created_at TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS stories (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, media_url TEXT, text TEXT, created_at TEXT, expires_at TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS story_views (story_id INT, viewer TEXT, PRIMARY KEY(story_id,viewer))")
+        c.execute("CREATE TABLE IF NOT EXISTS friends (id INTEGER PRIMARY KEY AUTOINCREMENT, sender TEXT, receiver TEXT, status TEXT, created_at TEXT)")
+        c.execute("CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, type TEXT, from_user TEXT, text TEXT, created_at TEXT, is_read INT DEFAULT 0)")
     conn.commit(); conn.close()
-    print("DB READY V34")
+    print("DB READY V35 FRIENDS+NOTIF")
 
 init_db()
 
@@ -69,51 +77,69 @@ MAIN_HTML="""<!DOCTYPE html><html><head><meta name=viewport content="width=devic
 :root{--bg:#f6f6f6;--card:#fff;--text:#000;--sec:#efefef;--border:#e5e5e5}
 body.dark{--bg:#000;--card:#111;--text:#fff;--sec:#222;--border:#222}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,sans-serif;margin:0}
-.top{position:fixed;top:0;left:0;right:0;background:var(--card);padding:8px 12px;display:flex;align-items:center;justify-content:space-between;z-index:100;border-bottom:1px solid var(--border);height:50px;box-sizing:border-box}
-.logo{display:flex;align-items:center;gap:8px;font-weight:900;color:#c9a227}
-.logo-circle{width:36px;height:36px;border:2px solid #c9a227;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px}
+.top{position:fixed;top:0;left:0;right:0;background:var(--card);padding:8px 10px;display:flex;align-items:center;justify-content:space-between;z-index:100;border-bottom:1px solid var(--border);height:50px;box-sizing:border-box}
+.logo{display:flex;align-items:center;gap:6px;font-weight:900;color:#c9a227;font-size:15px}
+.logo-circle{width:34px;height:34px;border:2px solid #c9a227;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px}
 .tabs{position:fixed;top:50px;left:0;right:0;background:var(--card);display:flex;z-index:99;border-bottom:1px solid var(--border);height:50px}
-.tab{flex:1;display:flex;align-items:center;justify-content:center;font-weight:bold;color:#888;cursor:pointer;border-bottom:3px solid transparent}
+.tab{flex:1;display:flex;align-items:center;justify-content:center;font-weight:bold;color:#888;cursor:pointer;border-bottom:3px solid transparent;font-size:13px}
 .tab.active{color:var(--text);border-color:var(--text)}
-.content{margin-top:100px;padding-bottom:150px}
-.story-bar{display:flex;gap:14px;overflow-x:auto;padding:12px;background:var(--card);min-height:80px}
-.s-item{text-align:center;min-width:72px;cursor:pointer}
-.s-ring{width:68px;height:68px;border-radius:50%;background:#000;display:flex;align-items:center;justify-content:center;color:#fff;border:3px solid #ffcc00;overflow:hidden;position:relative}
+.content{margin-top:100px;padding-bottom:160px}
+.story-bar{display:flex;gap:12px;overflow-x:auto;padding:12px;background:var(--card);min-height:80px}
+.s-item{text-align:center;min-width:68px;cursor:pointer}
+.s-ring{width:62px;height:62px;border-radius:50%;background:#000;display:flex;align-items:center;justify-content:center;color:#fff;border:3px solid #ffcc00;overflow:hidden;position:relative}
 .s-ring img{width:100%;height:100%;object-fit:cover}
-.s-count{position:absolute;bottom:-2px;right:-2px;background:#ffcc00;color:#000;font-size:10px;font-weight:900;padding:2px 6px;border-radius:10px;border:2px solid var(--card)}
-.story-card{border:1.5px dashed #aaa;border-radius:16px;padding:16px;background:var(--card);margin:12px}
-.btn-row{display:flex;gap:10px;margin-top:10px}
-.btn-light{flex:1;padding:12px;border-radius:20px;border:1.5px solid var(--text);background:var(--card);color:var(--text);font-weight:bold}
-.btn-dark{flex:1;padding:12px;border-radius:20px;background:var(--text);color:var(--bg);font-weight:bold}
-.card{background:var(--card);margin:10px;padding:12px;border-radius:16px;border:1px solid var(--border)}
+.s-count{position:absolute;bottom:-2px;right:-2px;background:#ffcc00;color:#000;font-size:10px;font-weight:900;padding:2px 5px;border-radius:10px;border:2px solid var(--card)}
+.story-card{border:1.5px dashed #aaa;border-radius:16px;padding:14px;background:var(--card);margin:10px}
+.btn-row{display:flex;gap:8px;margin-top:10px}
+.btn-light{flex:1;padding:11px;border-radius:20px;border:1.5px solid var(--text);background:var(--card);color:var(--text);font-weight:bold;font-size:13px}
+.btn-dark{flex:1;padding:11px;border-radius:20px;background:var(--text);color:var(--bg);font-weight:bold;font-size:13px}
+.card{background:var(--card);margin:8px;padding:12px;border-radius:16px;border:1px solid var(--border)}
 input,textarea{width:100%;background:var(--sec);border:none;border-radius:12px;padding:14px;margin:6px 0;box-sizing:border-box;color:var(--text);font-size:16px}
-.send-btn{width:100%;background:#ffcc00;color:#000;padding:16px;border-radius:14px;font-weight:900;margin-top:10px;border:none}
-.preview-box{margin-top:12px;border-radius:12px;border:2px solid #ffcc00;display:none;background:#000;overflow:hidden}
-.preview-box img,.preview-box video{width:100%;max-height:300px;object-fit:contain}
-.viewer{position:fixed;top:0;left:0;right:0;bottom:0;background:#000;z-index:999;display:none;flex-direction:column}
-.pic{width:32px;height:32px;border-radius:50%;background:#000;color:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.send-btn{width:100%;background:#ffcc00;color:#000;padding:14px;border-radius:14px;font-weight:900;margin-top:8px;border:none}
+.preview-box{margin-top:10px;border-radius:12px;border:2px solid #ffcc00;display:none;background:#000;overflow:hidden}
+.preview-box img,.preview-box video{width:100%;max-height:280px;object-fit:contain}
+.pic{width:32px;height:32px;border-radius:50%;background:#000;color:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0}
 .pic img{width:100%;height:100%;object-fit:cover}
-.sticker{width:46px;height:46px;background:#e9e9e9;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:22px;cursor:pointer;border:1px solid #ddd}
-.chat-bar{position:fixed;bottom:0;left:0;right:0;background:var(--card);padding:10px;display:flex;gap:8px;border-top:1px solid var(--border);align-items:center}
-.pill{flex:1;background:#e9e9e9;border:none;border-radius:25px;padding:14px 18px;outline:none}
-.yellow{background:#ffcc00;border:none;border-radius:25px;padding:0 20px;height:46px;font-weight:800}
-.del{font-size:11px;color:#ff4444;background:rgba(255,0,0,0.1);padding:3px 8px;border-radius:10px;margin-left:8px;cursor:pointer}
+.sticker{width:42px;height:42px;background:#e9e9e9;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;border:1px solid #ddd}
+.chat-bar{position:fixed;bottom:0;left:0;right:0;background:var(--card);padding:10px;display:flex;gap:8px;border-top:1px solid var(--border);align-items:center;z-index:50}
+.pill{flex:1;background:#e9e9e9;border:none;border-radius:25px;padding:13px 16px;outline:none;font-size:15px}
+.yellow{background:#ffcc00;border:none;border-radius:25px;padding:0 18px;height:44px;font-weight:800;color:#0040ff}
+.del{font-size:11px;color:#ff4444;background:rgba(255,0,0,0.1);padding:3px 8px;border-radius:10px;margin-left:6px;cursor:pointer}
 .bar{height:4px;background:#333;display:flex;gap:3px;padding:4px}
 .bar div{flex:1;background:rgba(255,255,255,0.3);height:4px;border-radius:2px}
 .bar div.active{background:#fff}
 .bar div.seen{background:#fff}
+.notif-dot{position:absolute;top:-4px;right:-6px;background:#ff4444;color:#fff;font-size:10px;font-weight:900;padding:2px 6px;border-radius:12px;min-width:10px;text-align:center}
+.low-on{background:#ffcc00!important;color:#000!important}
+.friend-btn{padding:6px 12px;border-radius:20px;border:none;font-weight:700;font-size:12px;cursor:pointer}
+.f-add{background:#ffcc00;color:#000}
+.f-pending{background:#ddd;color:#666}
+.f-friends{background:#00c851;color:#fff}
 </style></head><body>
-<div class=top><div class=logo><div class=logo-circle>PROVE</div> PROVE AM</div><div style="display:flex;gap:8px;align-items:center"><span onclick="toggleTheme()">🌙</span><div class=pic id=topPic onclick="openProfile()">J</div></div></div>
-<div class=tabs><div class=tab active id=tStories onclick="switchTab('stories')">Stories</div><div class=tab id=tPost onclick="switchTab('post')">Post</div><div class=tab id=tChat onclick="switchTab('chat')">Chat</div></div>
+<div class=top>
+<div class=logo><div class=logo-circle>PROVE</div> PROVE AM</div>
+<div style="display:flex;gap:10px;align-items:center">
+<button onclick="toggleLow()" id=lowBtn style="padding:5px 8px;font-size:11px;border:1px solid var(--border);background:var(--sec);color:var(--text);border-radius:8px">📶 Low: OFF</button>
+<div style="position:relative;cursor:pointer" onclick="openNotifs()">🔔<span id=notifCount class=notif-dot style="display:none">0</span></div>
+<span onclick="toggleTheme()" style="cursor:pointer">🌙</span>
+<div class=pic id=topPic onclick="openProfile()">J</div>
+</div>
+</div>
+<div class=tabs>
+<div class=tab active id=tStories onclick="switchTab('stories')">Stories</div>
+<div class=tab id=tPost onclick="switchTab('post')">Post</div>
+<div class=tab id=tChat onclick="switchTab('chat')">Chat</div>
+<div class=tab id=tSearch onclick="switchTab('search')">Search</div>
+</div>
 <div class=content>
 <div id=storiesDiv>
-<div style="display:flex;justify-content:space-between;padding:12px;background:var(--card)"><b>Friends ></b><b style=color:#a855f7;cursor:pointer" onclick="document.getElementById('storyFile').click()">+ Add Story</b><input type=file id=storyFile accept="image/*,video/*" style=display:none></div>
+<div style="display:flex;justify-content:space-between;padding:12px;background:var(--card)"><b>Friends ></b><small style=color:#888">Private - friends only</small><b style=color:#a855f7;cursor:pointer" onclick="document.getElementById('storyFile').click()">+ Add</b><input type=file id=storyFile accept="image/*,video/*" style=display:none></div>
 <div class=story-bar id=storyBar></div>
 <div class=story-card>
-<b>Post a Story ✨</b><br><small>1 user = 1 circle - tap to view all pics/videos</small>
+<b>Post a Story ✨</b><br><small>1 user = 1 circle - Only friends can view - Reply goes to chat</small>
 <div class=btn-row><button class=btn-light onclick="document.getElementById('storyFile').click()">📷 Photo/Video</button><button class=btn-dark onclick="createTextStory()">A Text Story</button></div>
 <div id=storyPreview class=preview-box><img id=storyPreviewImg style="display:none"><video id=storyPreviewVid controls playsinline style="display:none"></video></div>
-<textarea id=storyCaption placeholder="Caption..." style="display:none;margin-top:10px" rows=2></textarea>
+<textarea id=storyCaption placeholder="Caption..." style="display:none;margin-top:8px" rows=2></textarea>
 <button id=storySendBtn class=send-btn style="display:none" onclick="uploadStory()">🚀 SEND STORY</button>
 <p id=storyMsg style="text-align:center;color:#c9a227;font-weight:bold"></p>
 </div>
@@ -127,46 +153,89 @@ input,textarea{width:100%;background:var(--sec);border:none;border-radius:12px;p
 <span id=postFileName style="font-size:12px;color:#888">Tap 📎 for pic/video</span>
 </div>
 <div id=postPreview class=preview-box><img id=postPreviewImg style="display:none"><video id=postPreviewVid controls playsinline style="display:none"></video></div>
-<button class=send-btn onclick="createPost()">🚀 SEND POST</button>
+<button class=send-btn onclick="createPost()">🚀 SEND POST (Public)</button>
 <p id=postMsg style="text-align:center;color:#c9a227;font-weight:bold;margin-top:8px"></p>
 </div>
 <div id=postsList></div>
 </div>
-<div id=chatDiv style=display:none><input id=searchChat placeholder="Search users..." oninput=filterChat()><div id=chatUsers></div><div id=chatBox style=display:none></div></div>
+<div id=chatDiv style=display:none><input id=searchChat placeholder="Search friends..." oninput=filterChat()><div id=chatUsers></div><div id=chatBox style=display:none></div></div>
+<div id=searchDiv style=display:none class=card>
+<h3>🔍 Search Users</h3>
+<input id=searchUsersInput placeholder="Search username..." oninput="searchUsers()" style="background:var(--sec)">
+<div id=searchResults style="margin-top:10px"></div>
+<h4 style="margin-top:20px">Friend Requests <span id=reqCount style="background:#ff4444;color:#fff;padding:2px 8px;border-radius:12px;font-size:11px">0</span></h4>
+<div id=friendRequests></div>
+<h4>My Friends</h4>
+<div id=myFriendsList></div>
+</div>
+<div id=notifDiv style=display:none class=card>
+<h3>🔔 Notifications</h3>
+<button onclick="switchTab('stories')" style="background:var(--sec);padding:6px 10px;border-radius:8px;border:1px solid var(--border)">Back</button>
+<button onclick="clearNotifs()" style="background:#ffcc00;padding:6px 10px;border-radius:8px;border:none;margin-left:8px">Clear All</button>
+<div id=notifList style="margin-top:12px"></div>
+</div>
 <div id=profileDiv style=display:none class=card>
 <h3>Profile</h3>
-<div class=pic style="width:110px;height:110px;font-size:42px;margin:10px auto;border:3px solid #ffcc00" id=profilePicBig>J</div>
+<div class=pic style="width:100px;height:100px;font-size:38px;margin:10px auto;border:3px solid #ffcc00" id=profilePicBig>J</div>
 <p id=profileName style=text-align:center;font-weight:bold></p>
 <p id=profileMsg style="text-align:center;color:#c9a227;font-size:12px"></p>
-<div style="display:flex;gap:8px;align-items:center;margin:12px 0;justify-content:center">
+<div style="display:flex;gap:8px;align-items:center;margin:10px 0;justify-content:center">
 <input type=file id=profilePicInput accept="image/*" style="display:none">
-<div class=sticker onclick="document.getElementById('profilePicInput').click()" style="width:60px;height:60px;font-size:26px">📎</div>
+<div class=sticker onclick="document.getElementById('profilePicInput').click()" style="width:56px;height:56px">📎</div>
 <span id=profileFileName style="font-size:12px;color:#888">Tap 📎 to pick new pic</span>
 </div>
-<button onclick="uploadProfilePic()" style="width:100%;margin-top:10px;background:#ffcc00;padding:14px;border-radius:12px;font-weight:900;border:none">Update Pic</button>
+<button onclick="uploadProfilePic()" style="width:100%;margin-top:8px;background:#ffcc00;padding:12px;border-radius:12px;font-weight:900;border:none">Update Pic</button>
 <br><br>
-<button onclick="switchTab('stories')" style="background:var(--sec);padding:10px 14px;border-radius:12px;border:1px solid var(--border)">Back</button>
-<button onclick="logout()" style=background:#ff4444;color:#fff;padding:10px 14px;border-radius:12px;border:none;margin-left:8px>Logout</button>
+<button onclick="switchTab('stories')" style="background:var(--sec);padding:8px 12px;border-radius:12px;border:1px solid var(--border)">Back</button>
+<button onclick="logout()" style=background:#ff4444;color:#fff;padding:8px 12px;border-radius:12px;border:none;margin-left:6px>Logout</button>
 </div>
 </div>
-<div class=viewer id=viewerModal style="position:fixed;top:0;left:0;right:0;bottom:0;background:#000;z-index:999;display:none;flex-direction:column"><div class=bar id=progressBar></div><div style="padding:12px;display:flex;justify-content:space-between;color:#fff"><div><b id=viewerUser></b> <small id=viewerCounter style="margin-left:8px;color:#aaa">1/1</small></div><div><button onclick="deleteStory()" id=delStoryBtn style="background:#ff4444;color:#fff;padding:6px 10px;border-radius:8px;border:none;margin-right:8px;display:none">🗑️</button><button onclick=closeViewer() style="background:#fff;padding:6px 10px;border-radius:8px;border:none">X</button></div></div><div style="flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;position:relative" onclick="nextStory()"><img id=viewerMedia style="max-width:100%;max-height:70vh;display:none"><video id=viewerVideo controls playsinline style="max-width:100%;max-height:70vh;display:none"></video><div id=viewerText style="color:#fff;font-size:28px;font-weight:bold;display:none;text-align:center;padding:20px"></div><div id=viewerCaption style="color:#fff;background:rgba(0,0,0,0.6);padding:10px;border-radius:8px;display:none;margin-top:8px;text-align:center;max-width:90%"></div><div style="position:absolute;bottom:20px;left:0;right:0;display:flex;justify-content:space-between;padding:0 20px"><button onclick="event.stopPropagation();prevStory()" style="background:rgba(255,255,255,0.2);color:#fff;border:none;border-radius:50%;width:40px;height:40px">‹</button><button onclick="event.stopPropagation();nextStory()" style="background:rgba(255,255,255,0.2);color:#fff;border:none;border-radius:50%;width:40px;height:40px">›</button></div></div></div>
+<div class=viewer id=viewerModal style="position:fixed;top:0;left:0;right:0;bottom:0;background:#000;z-index:999;display:none;flex-direction:column">
+<div class=bar id=progressBar></div>
+<div style="padding:10px;display:flex;justify-content:space-between;color:#fff;align-items:center">
+<div><b id=viewerUser></b> <small id=viewerCounter style="margin-left:6px;color:#aaa"></small></div>
+<div><button onclick="deleteStory()" id=delStoryBtn style="background:#ff4444;color:#fff;padding:5px 8px;border-radius:8px;border:none;margin-right:6px;display:none">🗑️</button><button onclick=closeViewer() style="background:#fff;padding:5px 10px;border-radius:8px;border:none">X</button></div>
+</div>
+<div style="flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;position:relative" onclick="nextStory()">
+<img id=viewerMedia style="max-width:100%;max-height:60vh;display:none">
+<video id=viewerVideo controls playsinline style="max-width:100%;max-height:60vh;display:none"></video>
+<div id=viewerText style="color:#fff;font-size:26px;font-weight:bold;display:none;text-align:center;padding:16px"></div>
+<div id=viewerCaption style="color:#fff;background:rgba(0,0,0,0.6);padding:8px;border-radius:8px;display:none;margin-top:6px;text-align:center;max-width:90%"></div>
+<div style="position:absolute;bottom:70px;left:0;right:0;display:flex;justify-content:space-between;padding:0 16px">
+<button onclick="event.stopPropagation();prevStory()" style="background:rgba(255,255,255,0.2);color:#fff;border:none;border-radius:50%;width:36px;height:36px">‹</button>
+<button onclick="event.stopPropagation();nextStory()" style="background:rgba(255,255,255,0.2);color:#fff;border:none;border-radius:50%;width:36px;height:36px">›</button>
+</div>
+</div>
+<div style="background:rgba(0,0,0,0.8);padding:10px;display:flex;gap:8px;align-items:center">
+<input id=storyReplyInput placeholder="Reply to story... (goes to chat)" style="flex:1;background:#222;color:#fff;border:none;border-radius:20px;padding:10px 14px">
+<button onclick="replyStory()" style="background:#ffcc00;border:none;border-radius:20px;padding:10px 16px;font-weight:800">Send</button>
+</div>
+</div>
 <script>
 let curUser='',chatWith='',stories=[],groupedStories={},currentGroup=[],currentGroupIdx=0,storyTimer=null,allUsers=[],profiles={},selectedStoryFile=null,selectedPostFile=null,selectedChatFile=null,selectedProfileFile=null;
+let lowData = localStorage.getItem('lowData')=='1';
 let dark=localStorage.getItem('theme')=='dark'; if(dark)document.body.classList.add('dark');
+updateLowBtn();
+function updateLowBtn(){let b=document.getElementById('lowBtn'); if(!b)return; b.innerText=lowData?'📶 Low: ON':'📶 Low: OFF'; if(lowData) b.classList.add('low-on'); else b.classList.remove('low-on');}
+function toggleLow(){lowData=!lowData;localStorage.setItem('lowData',lowData?'1':'0'); updateLowBtn(); alert(lowData?'Low Data ON: videos wont autoplay, tap to play':'Low Data OFF: autoplay ON'); loadPosts();}
 function toggleTheme(){dark=!dark;localStorage.setItem('theme',dark?'dark':'light');document.body.classList.toggle('dark');}
 function switchTab(t){
   document.querySelectorAll('.tab').forEach(e=>e.classList.remove('active'));
-  let el=document.getElementById('t'+t.charAt(0).toUpperCase()+t.slice(1));
-  if(el)el.classList.add('active');
+  let el=document.getElementById('t'+t.charAt(0).toUpperCase()+t.slice(1)); if(el)el.classList.add('active');
   document.getElementById('storiesDiv').style.display=t=='stories'?'block':'none';
   document.getElementById('postDiv').style.display=t=='post'?'block':'none';
   document.getElementById('chatDiv').style.display=t=='chat'?'block':'none';
+  document.getElementById('searchDiv').style.display=t=='search'?'block':'none';
   document.getElementById('profileDiv').style.display='none';
+  document.getElementById('notifDiv').style.display='none';
   if(t=='stories')loadStories();
   if(t=='post')loadPosts();
   if(t=='chat')loadChatUsers();
+  if(t=='search'){searchUsers(); loadFriendRequests(); loadMyFriends();}
 }
-async function loadMe(){let r=await fetch('/api/me');let d=await r.json();curUser=d.username;document.getElementById('profileName').innerText=curUser;loadProfiles()}
+function openNotifs(){document.getElementById('storiesDiv').style.display='none';document.getElementById('postDiv').style.display='none';document.getElementById('chatDiv').style.display='none';document.getElementById('searchDiv').style.display='none';document.getElementById('profileDiv').style.display='none';document.getElementById('notifDiv').style.display='block';loadNotifs();}
+function openProfile(){document.getElementById('storiesDiv').style.display='none';document.getElementById('postDiv').style.display='none';document.getElementById('chatDiv').style.display='none';document.getElementById('searchDiv').style.display='none';document.getElementById('notifDiv').style.display='none';document.getElementById('profileDiv').style.display='block'; loadProfiles();}
+async function loadMe(){let r=await fetch('/api/me');let d=await r.json();curUser=d.username;document.getElementById('profileName').innerText=curUser;loadProfiles();loadNotifCount();setInterval(loadNotifCount,5000);}
 async function loadProfiles(){
   let r=await fetch('/api/users');let users=await r.json();allUsers=users;users.forEach(u=>{profiles[u.username]=u.pic_url});
   renderTopPic(); renderChatUsers(users);
@@ -174,60 +243,46 @@ async function loadProfiles(){
   if(url && big){ let bust=url+'?t='+Date.now(); big.innerHTML=`<img src="${bust}" style="width:100%;height:100%;object-fit:cover">`; }
 }
 function renderTopPic(){let url=profiles[curUser];let el=document.getElementById('topPic'); if(!el)return; if(url){let bust=url+'?t='+Date.now(); el.innerHTML=`<img src="${bust}" style="width:100%;height:100%;object-fit:cover">`;} else {el.innerText=curUser.charAt(0).toUpperCase();}}
-function openProfile(){document.getElementById('storiesDiv').style.display='none';document.getElementById('postDiv').style.display='none';document.getElementById('chatDiv').style.display='none';document.getElementById('profileDiv').style.display='block'; loadProfiles();}
-document.getElementById('profilePicInput').addEventListener('change', function(e){let f=e.target.files[0]; if(!f)return; selectedProfileFile=f; document.getElementById('profileFileName').innerText='📎 '+f.name.slice(0,20); let big=document.getElementById('profilePicBig'); big.innerHTML=`<img src="${URL.createObjectURL(f)}" style="width:100%;height:100%;object-fit:cover">`; document.getElementById('profileMsg').innerText='Preview - tap Update Pic to save';});
-document.getElementById('storyFile').addEventListener('change', function(e){
-  let f=e.target.files[0]; if(!f)return; selectedStoryFile=f;
-  let preview=document.getElementById('storyPreview'); let img=document.getElementById('storyPreviewImg'); let vid=document.getElementById('storyPreviewVid');
-  preview.style.display='block'; document.getElementById('storySendBtn').style.display='block'; document.getElementById('storyCaption').style.display='block';
-  if(f.type.startsWith('video')){img.style.display='none';vid.style.display='block';vid.src=URL.createObjectURL(f);} else {vid.style.display='none';img.style.display='block';img.src=URL.createObjectURL(f);}
-});
-document.getElementById('postFile').addEventListener('change', function(e){
-  let f=e.target.files[0]; if(!f)return; selectedPostFile=f;
-  document.getElementById('postFileName').innerText='📎 '+f.name.slice(0,18);
-  let preview=document.getElementById('postPreview'); let img=document.getElementById('postPreviewImg'); let vid=document.getElementById('postPreviewVid');
-  preview.style.display='block';
-  if(f.type.startsWith('video')){img.style.display='none';vid.style.display='block';vid.src=URL.createObjectURL(f);} else {vid.style.display='none';img.style.display='block';img.src=URL.createObjectURL(f);}
-});
+document.getElementById('profilePicInput').addEventListener('change', function(e){let f=e.target.files[0]; if(!f)return; selectedProfileFile=f; document.getElementById('profileFileName').innerText='📎 '+f.name.slice(0,18); let big=document.getElementById('profilePicBig'); big.innerHTML=`<img src="${URL.createObjectURL(f)}" style="width:100%;height:100%;object-fit:cover">`; document.getElementById('profileMsg').innerText='Preview - tap Update';});
+document.getElementById('storyFile').addEventListener('change', function(e){let f=e.target.files[0]; if(!f)return; selectedStoryFile=f; let preview=document.getElementById('storyPreview'); let img=document.getElementById('storyPreviewImg'); let vid=document.getElementById('storyPreviewVid'); preview.style.display='block'; document.getElementById('storySendBtn').style.display='block'; document.getElementById('storyCaption').style.display='block'; if(f.type.startsWith('video')){img.style.display='none';vid.style.display='block';vid.src=URL.createObjectURL(f);} else {vid.style.display='none';img.style.display='block';img.src=URL.createObjectURL(f);} });
+document.getElementById('postFile').addEventListener('change', function(e){let f=e.target.files[0]; if(!f)return; selectedPostFile=f; document.getElementById('postFileName').innerText='📎 '+f.name.slice(0,16); let preview=document.getElementById('postPreview'); let img=document.getElementById('postPreviewImg'); let vid=document.getElementById('postPreviewVid'); preview.style.display='block'; if(f.type.startsWith('video')){img.style.display='none';vid.style.display='block';vid.src=URL.createObjectURL(f);} else {vid.style.display='none';img.style.display='block';img.src=URL.createObjectURL(f);} });
 async function uploadStory(){
-  if(!selectedStoryFile){alert('Pick photo first');return}
-  let cap=document.getElementById('storyCaption').value||'';
-  document.getElementById('storyMsg').innerText='Uploading...';
+  if(!selectedStoryFile){alert('Pick photo');return}
+  let cap=document.getElementById('storyCaption').value||''; document.getElementById('storyMsg').innerText='Uploading...';
   let fd=new FormData(); fd.append('media',selectedStoryFile); fd.append('text',cap);
   try{
-    let r=await fetch('/api/story',{method:'POST',body:fd});
-    let txt=await r.text(); let d;
-    try{ d=JSON.parse(txt); }catch(e){ throw new Error('Server returned non-JSON: '+txt.slice(0,200)); }
-    if(d.ok){document.getElementById('storyMsg').innerText='✅ Posted!';document.getElementById('storyPreview').style.display='none';document.getElementById('storySendBtn').style.display='none';document.getElementById('storyCaption').style.display='none';document.getElementById('storyCaption').value='';selectedStoryFile=null;document.getElementById('storyFile').value='';setTimeout(loadStories,800);}
+    let r=await fetch('/api/story',{method:'POST',body:fd}); let txt=await r.text(); let d;
+    try{ d=JSON.parse(txt);}catch(e){ throw new Error(txt.slice(0,200)); }
+    if(d.ok){document.getElementById('storyMsg').innerText='✅ Story Posted! Friends only can view';document.getElementById('storyPreview').style.display='none';document.getElementById('storySendBtn').style.display='none';document.getElementById('storyCaption').style.display='none';document.getElementById('storyCaption').value='';selectedStoryFile=null;document.getElementById('storyFile').value='';setTimeout(loadStories,800);}
     else{document.getElementById('storyMsg').innerText='Failed: '+(d.error||'');}
   }catch(e){document.getElementById('storyMsg').innerText='Error: '+e.message;}
 }
-async function createTextStory(){let t=prompt('Text story (24h):');if(!t)return;let r=await fetch('/api/story/text',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})});let d=await r.json();if(d.ok){loadStories()}}
+async function createTextStory(){let t=prompt('Text story (24h) friends only:');if(!t)return;let r=await fetch('/api/story/text',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})});let d=await r.json();if(d.ok)loadStories();}
 async function loadStories(){
-  let r=await fetch('/api/stories'); stories=await r.json();
-  groupedStories={};
-  stories.forEach(s=>{ if(!groupedStories[s.username]) groupedStories[s.username]=[]; groupedStories[s.username].push(s); });
-  let h='';
-  Object.keys(groupedStories).forEach(username=>{
-    let userStories = groupedStories[username];
-    let first = userStories[0];
-    let m = first.media_url||'';
-    let profPic = profiles[username];
-    let inner='';
-    if(profPic){ inner=`<div class=s-ring><img src="${profPic}"></div>`; }
-    else {
-      let low=m.toLowerCase();
-      if(first.text &&!m) inner=`<div class=s-ring>${first.text.slice(0,12)}</div>`;
-      else if(low.includes('.mp4')||low.includes('.mov')||low.includes('.webm')) inner=`<div class=s-ring>▶️</div>`;
-      else if(m) inner=`<div class=s-ring><img src="${m}"></div>`;
-      else inner=`<div class=s-ring>${(first.text||'?').slice(0,8)}</div>`;
-    }
-    let countBadge = userStories.length>1?`<div class=s-count>${userStories.length}</div>`:'';
-    h+=`<div class=s-item onclick="openGrouped('${username}')"><div style="position:relative">${inner}${countBadge}</div><br><small><b>${username.slice(0,8)}</b></small></div>`;
-  });
-  document.getElementById('storyBar').innerHTML=h||'<small style=color:#888;padding:12px>No stories</small>';
+  try{
+    let r=await fetch('/api/stories'); stories=await r.json();
+    groupedStories={}; stories.forEach(s=>{ if(!groupedStories[s.username]) groupedStories[s.username]=[]; groupedStories[s.username].push(s); });
+    let h='';
+    Object.keys(groupedStories).forEach(username=>{
+      let userStories=groupedStories[username];
+      let first=userStories[0];
+      let profPic=profiles[username];
+      let inner='';
+      if(profPic) inner=`<div class=s-ring><img src="${profPic}"></div>`;
+      else {
+        let m=first.media_url||''; let low=m.toLowerCase();
+        if(first.text &&!m) inner=`<div class=s-ring>${first.text.slice(0,10)}</div>`;
+        else if(low.includes('.mp4')||low.includes('.mov')||low.includes('.webm')) inner=`<div class=s-ring>▶️</div>`;
+        else if(m) inner=`<div class=s-ring><img src="${m}"></div>`;
+        else inner=`<div class=s-ring>?</div>`;
+      }
+      let countBadge=userStories.length>1?`<div class=s-count>${userStories.length}</div>`:'';
+      h+=`<div class=s-item onclick="openGrouped('${username}')"><div style="position:relative">${inner}${countBadge}</div><br><small><b>${username.slice(0,8)}</b></small></div>`;
+    });
+    document.getElementById('storyBar').innerHTML=h||'<small style=color:#888;padding:12px>No friends stories - add friends in Search tab, only friends see stories</small>';
+  }catch(e){document.getElementById('storyBar').innerHTML='<small>Error loading</small>';}
 }
-function openGrouped(username){ currentGroup = groupedStories[username]||[]; currentGroupIdx=0; document.getElementById('viewerModal').style.display='flex'; showGrouped(); }
+function openGrouped(username){ currentGroup=groupedStories[username]||[]; currentGroupIdx=0; document.getElementById('viewerModal').style.display='flex'; showGrouped(); }
 function showGrouped(){
   clearTimeout(storyTimer); let s=currentGroup[currentGroupIdx]; if(!s){closeViewer();return;}
   document.getElementById('viewerUser').innerText=s.username;
@@ -238,23 +293,43 @@ function showGrouped(){
   img.style.display=vid.style.display=txt.style.display=cap.style.display='none';
   let m=s.media_url||''; let low=m.toLowerCase();
   if(s.text &&!m){txt.style.display='block';txt.innerText=s.text;}
-  else if(low.includes('.mp4')||low.includes('.mov')||low.includes('.webm')){vid.style.display='block';vid.src=m;vid.load();vid.play().catch(()=>{}); if(s.text){cap.style.display='block';cap.innerText=s.text;}}
+  else if(low.includes('.mp4')||low.includes('.mov')||low.includes('.webm')){vid.style.display='block';vid.src=m;vid.load(); if(!lowData) vid.play().catch(()=>{}); if(s.text){cap.style.display='block';cap.innerText=s.text;}}
   else if(m){img.style.display='block';img.src=m; if(s.text){cap.style.display='block';cap.innerText=s.text;}}
   fetch('/api/story/view',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:s.id})});
-  storyTimer=setTimeout(()=>{nextStory()},5000);
+  storyTimer=setTimeout(()=>{nextStory()},6000);
 }
 function nextStory(){ if(currentGroupIdx<currentGroup.length-1){currentGroupIdx++; showGrouped();} else {closeViewer(); loadStories();} }
 function prevStory(){ if(currentGroupIdx>0){currentGroupIdx--; showGrouped();} }
 function closeViewer(){clearTimeout(storyTimer);document.getElementById('viewerModal').style.display='none';let v=document.getElementById('viewerVideo');v.pause();}
-async function deleteStory(){if(!confirm('Delete this story?'))return;let s=currentGroup[currentGroupIdx];await fetch('/api/story/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:s.id})}); closeViewer(); loadStories();}
+async function deleteStory(){if(!confirm('Delete?'))return;let s=currentGroup[currentGroupIdx];await fetch('/api/story/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:s.id})}); closeViewer(); loadStories();}
+async function replyStory(){
+  let input=document.getElementById('storyReplyInput');
+  let text=input.value.trim(); if(!text)return;
+  let s=currentGroup[currentGroupIdx];
+  if(!s)return;
+  // send as chat message to story owner
+  let fd=new FormData(); fd.append('receiver',s.username); fd.append('text','↩️ Replied to your story: '+text+'\\n[Story: '+(s.text||'media')+']');
+  await fetch('/api/send',{method:'POST',body:fd});
+  // also notification
+  await fetch('/api/story/reply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:s.username,text:text,story_id:s.id})});
+  input.value=''; alert('Reply sent to chat with '+s.username); closeViewer(); switchTab('chat'); openChat(s.username);
+}
 async function loadPosts(){
-  let r=await fetch('/api/posts'); let posts=await r.json(); let h=''; if(posts.length==0)h='<div class=card style=text-align:center;color:#888>No posts</div>';
+  let r=await fetch('/api/posts'); let posts=await r.json(); let h=''; if(posts.length==0)h='<div class=card style=text-align:center;color:#888>No posts - public for all</div>';
   posts.forEach(p=>{
     let pic=profiles[p.username];let picHtml=pic?`<img src="${pic}">`:p.username[0];
     let m=p.media_url||''; let low=m.toLowerCase(); let isVideo=low.includes('.mp4')||low.includes('.mov')||low.includes('.webm');
-    let media=''; if(m){ if(isVideo) media=`<video src="${m}" controls playsinline style="width:100%;max-height:400px"></video>`; else media=`<img src="${m}" style="width:100%">`; }
-    let del=(p.username==curUser)?`<span class=del onclick="deletePost(${p.id})">🗑️ Delete</span>`:'';
-    h+=`<div class=card style="padding:0;overflow:hidden"><div style="padding:10px;display:flex;align-items:center;gap:10px"><div class=pic>${picHtml}</div><b>${p.username}</b><small style="margin-left:auto">${(p.created_at||'').slice(0,16)}</small>${del}</div>${p.text?`<div style="padding:0 12px 8px">${p.text}</div>`:''}${media}<div style="padding:10px;display:flex;gap:12px"><span onclick="likePost(${p.id})">${p.liked?'❤️':'🤍'} ${p.like_count||0}</span><span onclick="commentPost(${p.id})">💬</span></div></div>`;
+    let media='';
+    if(m){
+      if(isVideo){
+        if(lowData) media=`<div style="background:#000;color:#fff;padding:20px;text-align:center" onclick="this.innerHTML='<video src=${m} controls autoplay style=width:100%></video>'">🎥 Video (Low Data) - Tap to play</div>`;
+        else media=`<video src="${m}" controls playsinline preload="metadata" style="width:100%;max-height:400px"></video>`;
+      } else {
+        media=`<img src="${m}" style="width:100%" loading="lazy">`;
+      }
+    }
+    let del=(p.username==curUser)?`<span class=del onclick="deletePost(${p.id})">🗑️</span>`:'';
+    h+=`<div class=card style="padding:0;overflow:hidden"><div style="padding:10px;display:flex;align-items:center;gap:8px"><div class=pic>${picHtml}</div><b>${p.username}</b><small style="margin-left:auto">${(p.created_at||'').slice(0,16)}</small>${del}</div>${p.text?`<div style="padding:0 12px 8px">${p.text}</div>`:''}${media}<div style="padding:10px;display:flex;gap:12px"><span onclick="likePost(${p.id})" style="cursor:pointer">${p.liked?'❤️':'🤍'} ${p.like_count||0}</span><span onclick="commentPost(${p.id})" style="cursor:pointer">💬</span></div></div>`;
   });
   document.getElementById('postsList').innerHTML=h;
 }
@@ -266,19 +341,27 @@ async function createPost(){
   let fd=new FormData(); fd.append('text',txt); if(f) fd.append('media',f);
   try{
     let r=await fetch('/api/post',{method:'POST',body:fd});
-    let raw=await r.text();
-    let d;
-    try{ d=JSON.parse(raw); }catch(e){ throw new Error('Server error (not JSON): '+raw.slice(0,300)); }
-    if(d.ok){document.getElementById('postMsg').innerText='✅ Posted!';document.getElementById('postText').value='';document.getElementById('postFile').value='';document.getElementById('postPreview').style.display='none';document.getElementById('postFileName').innerText='Tap 📎 for pic/video';selectedPostFile=null;setTimeout(loadPosts,600);}
-    else{document.getElementById('postMsg').innerText='Failed: '+(d.error||'unknown');}
-  }catch(e){document.getElementById('postMsg').innerText='Error: '+e.message;}
+    let raw=await r.text(); let d;
+    try{ d=JSON.parse(raw);}catch(e){ throw new Error(raw.slice(0,400)); }
+    if(d.ok){document.getElementById('postMsg').innerText='✅ Posted! Public';document.getElementById('postText').value='';document.getElementById('postFile').value='';document.getElementById('postPreview').style.display='none';document.getElementById('postFileName').innerText='Tap 📎 for pic/video';selectedPostFile=null;setTimeout(loadPosts,600);}
+    else{document.getElementById('postMsg').innerText='Failed: '+(d.error||'');}
+  }catch(e){document.getElementById('postMsg').innerText='Error: '+e.message.slice(0,300);}
 }
-async function deletePost(id){if(!confirm('Delete?'))return;await fetch('/api/post/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})});loadPosts();}
+async function deletePost(id){if(!confirm('Delete post?'))return;await fetch('/api/post/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})});loadPosts();}
 async function likePost(id){await fetch('/api/like',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id})});loadPosts();}
 async function commentPost(id){let t=prompt('Comment:');if(!t)return;await fetch('/api/comment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id,text:t})});loadPosts();}
-function renderChatUsers(users){let h='';users.forEach(u=>{if(u.username==curUser)return;let pic=u.pic_url?`<img src="${u.pic_url}">`:u.username[0];h+=`<div class=card style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="openChat('${u.username}')"><div class=pic>${pic}</div><b>${u.username}</b></div>`});document.getElementById('chatUsers').innerHTML=h}
+function renderChatUsers(users){let h='';users.forEach(u=>{if(u.username==curUser)return;let pic=u.pic_url?`<img src="${u.pic_url}">`:u.username[0];h+=`<div class=card style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="openChat('${u.username}')"><div class=pic>${pic}</div><b>${u.username}</b><small style="margin-left:auto;color:#888">friends only</small></div>`});document.getElementById('chatUsers').innerHTML=h||'<div class=card style=color:#888">No friends yet - go to Search to add friends</div>';}
 function filterChat(){let q=document.getElementById('searchChat').value.toLowerCase();renderChatUsers(allUsers.filter(u=>u.username.toLowerCase().includes(q)))}
-function loadChatUsers(){renderChatUsers(allUsers)}
+async function loadChatUsers(){
+  // load friends only for chat
+  try{
+    let r=await fetch('/api/friends/list'); let friends=await r.json();
+    let friendUsernames = friends.map(f=>f.friend);
+    let filtered = allUsers.filter(u=> friendUsernames.includes(u.username));
+    // include self friends? also show friends only
+    renderChatUsers(filtered.length>0?filtered:allUsers); // fallback show all if no friends yet
+  }catch(e){ renderChatUsers(allUsers); }
+}
 async function openChat(username){
   chatWith=username;
   document.getElementById('chatUsers').style.display='none';document.getElementById('searchChat').style.display='none';
@@ -293,40 +376,90 @@ async function loadMsgs(){
   msgs.forEach(m=>{
     let mu=m.media_url||''; let low=mu.toLowerCase(); let isVideo=low.includes('.mp4')||low.includes('.mov')||low.includes('.webm');
     let media=''; if(mu){ if(isVideo) media=`<br><video src="${mu}" controls playsinline style="max-width:220px;border-radius:12px;margin-top:6px"></video>`; else media=`<br><img src="${mu}" style="max-width:220px;border-radius:12px;margin-top:6px">`; }
-    let isMe=m.sender==curUser; let del=isMe?`<br><span class=del onclick="deleteMsg(${m.id})">🗑️ Delete</span>`:'';
+    let isMe=m.sender==curUser; let del=isMe?`<br><span class=del onclick="deleteMsg(${m.id})">🗑️</span>`:'';
     h+=`<div style="margin:12px 0;text-align:${isMe?'right':'left'}"><span style="background:${isMe?'#000':'#eee'};color:${isMe?'#fff':'#000'};padding:12px 16px;border-radius:22px;display:inline-block;max-width:76%;word-break:break-word">${m.text||''}${media}${del}</span></div>`;
   });
-  document.getElementById('msgs').innerHTML=h;
+  let el=document.getElementById('msgs'); if(el) el.innerHTML=h;
 }
 async function sendMsg(){
-  let tEl=document.getElementById('chatText');let t=tEl.value;let f=selectedChatFile;if(!t&&!f)return;
+  let tEl=document.getElementById('chatText');let t=tEl?tEl.value:'';let f=selectedChatFile;if(!t&&!f)return;
   let fd=new FormData();fd.append('receiver',chatWith);fd.append('text',t);if(f)fd.append('media',f);
-  tEl.value='';selectedChatFile=null;let hid=document.getElementById('chatFileHidden');if(hid)hid.value='';
+  if(tEl) tEl.value='';selectedChatFile=null;let hid=document.getElementById('chatFileHidden');if(hid)hid.value='';
   try{
-    let r=await fetch('/api/send',{method:'POST',body:fd});
-    let raw=await r.text(); let d;
-    try{ d=JSON.parse(raw);}catch(e){ alert('Send failed (server): '+raw.slice(0,200)); return; }
-    if(!d.ok){ alert('Send failed: '+(d.error||'')); }
-  }catch(e){ alert('Send error: '+e.message); }
+    let r=await fetch('/api/send',{method:'POST',body:fd}); let txt=await r.text(); let d; try{ d=JSON.parse(txt);}catch(e){ throw new Error(txt.slice(0,200)); }
+    if(!d.ok) alert('Failed: '+(d.error||''));
+  }catch(e){ alert('Error: '+e.message); }
   setTimeout(loadMsgs,400);
 }
 async function deleteMsg(id){if(!confirm('Delete?'))return;await fetch('/api/message/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})});loadMsgs();}
+async function searchUsers(){
+  let q=document.getElementById('searchUsersInput').value||'';
+  let r=await fetch('/api/search?q='+encodeURIComponent(q)); let users=await r.json();
+  let h='';
+  users.forEach(u=>{
+    if(u.username==curUser) return;
+    let pic=u.pic_url?`<img src="${u.pic_url}">`:u.username[0];
+    let status = u.friend_status||'none';
+    let btn='';
+    if(status=='none') btn=`<button class=friend-btn f-add onclick="addFriend('${u.username}')">+ Add</button>`;
+    else if(status=='pending_sent') btn=`<button class=friend-btn f-pending>Pending</button>`;
+    else if(status=='pending_received') btn=`<button class=friend-btn f-add onclick="acceptFriend('${u.username}')">Accept</button>`;
+    else if(status=='friends') btn=`<button class=friend-btn f-friends>✓ Friends</button>`;
+    h+=`<div class=card style="display:flex;align-items:center;gap:10px"><div class=pic>${pic}</div><b>${u.username}</b><div style="margin-left:auto">${btn}</div></div>`;
+  });
+  document.getElementById('searchResults').innerHTML=h||'<small style=color:#888>No users found</small>';
+}
+async function addFriend(username){await fetch('/api/friend/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:username})}); searchUsers(); loadFriendRequests();}
+async function acceptFriend(username){await fetch('/api/friend/accept',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:username})}); searchUsers(); loadFriendRequests(); loadMyFriends(); loadStories();}
+async function loadFriendRequests(){
+  let r=await fetch('/api/friend/requests'); let reqs=await r.json();
+  document.getElementById('reqCount').innerText=reqs.length;
+  let h='';
+  reqs.forEach(req=>{
+    let pic=profiles[req.sender]?`<img src="${profiles[req.sender]}">`:req.sender[0];
+    h+=`<div class=card style="display:flex;align-items:center;gap:10px"><div class=pic>${pic}</div><b>${req.sender}</b><div style="margin-left:auto;display:flex;gap:6px"><button class=friend-btn f-add onclick="acceptFriend('${req.sender}')">Accept</button><button class=friend-btn f-pending onclick="declineFriend('${req.sender}')">Decline</button></div></div>`;
+  });
+  document.getElementById('friendRequests').innerHTML=h||'<small style=color:#888>No pending requests</small>';
+}
+async function declineFriend(username){await fetch('/api/friend/decline',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:username})}); loadFriendRequests();}
+async function loadMyFriends(){
+  let r=await fetch('/api/friends/list'); let friends=await r.json();
+  let h='';
+  friends.forEach(f=>{
+    let pic=profiles[f.friend]?`<img src="${profiles[f.friend]}">`:f.friend[0];
+    h+=`<div class=card style="display:flex;align-items:center;gap:10px"><div class=pic>${pic}</div><b>${f.friend}</b><span style="margin-left:auto;color:#00c851;font-size:12px">✓ Friends</span></div>`;
+  });
+  document.getElementById('myFriendsList').innerHTML=h||'<small style=color:#888>No friends yet - search above and add</small>';
+}
+async function loadNotifs(){
+  let r=await fetch('/api/notifications'); let notifs=await r.json();
+  let h='';
+  notifs.forEach(n=>{
+    h+=`<div class=card><small style=color:#888">${n.created_at.slice(0,16)} - ${n.type}</small><br><b>${n.from_user}</b>: ${n.text}<br>${n.type=='friend_request'?`<button class=friend-btn f-add onclick="acceptFriend('${n.from_user}'); switchTab('search');">Accept Friend</button>`:''}</div>`;
+  });
+  document.getElementById('notifList').innerHTML=h||'<small style=color:#888>No notifications</small>';
+}
+async function loadNotifCount(){
+  try{
+    let r=await fetch('/api/notifications/count'); let d=await r.json();
+    let el=document.getElementById('notifCount');
+    if(d.count>0){el.style.display='block'; el.innerText=d.count>99?'99+':d.count;} else {el.style.display='none';}
+  }catch(e){}
+}
+async function clearNotifs(){await fetch('/api/notifications/clear',{method:'POST'}); loadNotifs(); loadNotifCount();}
 async function uploadProfilePic(){
   let f=selectedProfileFile||document.getElementById('profilePicInput').files[0];
-  if(!f){alert('Pick pic first - tap 📎');return}
+  if(!f){alert('Pick pic - tap 📎');return}
   document.getElementById('profileMsg').innerText='Uploading...';
   let fd=new FormData();fd.append('media',f);
   try{
-    let r=await fetch('/api/profile/pic',{method:'POST',body:fd});
-    let raw=await r.text(); let d;
-    try{ d=JSON.parse(raw);}catch{ throw new Error(raw.slice(0,200)); }
+    let r=await fetch('/api/profile/pic',{method:'POST',body:fd}); let txt=await r.text(); let d; try{ d=JSON.parse(txt);}catch{ throw new Error(txt.slice(0,200)); }
     if(d.ok){
       document.getElementById('profileMsg').innerText='✅ Updated!';
       profiles[curUser]=d.url; renderTopPic();
       let big=document.getElementById('profilePicBig'); big.innerHTML=`<img src="${d.url}?t=${Date.now()}" style="width:100%;height:100%;object-fit:cover">`;
-      selectedProfileFile=null;
-      setTimeout(()=>{ loadProfiles(); loadStories(); }, 800);
-    } else {document.getElementById('profileMsg').innerText='Failed: '+(d.error||'');}
+      selectedProfileFile=null; setTimeout(()=>{ loadProfiles(); loadStories(); }, 800);
+    } else {document.getElementById('profileMsg').innerText='Failed';}
   }catch(e){document.getElementById('profileMsg').innerText='Error: '+e.message;}
 }
 async function logout(){await fetch('/logout');location.href='/login'}
@@ -376,10 +509,91 @@ def api_users():
     conn=get_conn(); c=conn.cursor(); c.execute("SELECT username,pic_url FROM profiles"); rows=c.fetchall(); conn.close()
     return jsonify([{"username":r[0],"pic_url":r[1] or ""} for r in rows])
 
+@app.route('/api/search')
+def api_search():
+    me=session.get('username'); q=request.args.get('q','').lower()
+    conn=get_conn(); c=conn.cursor()
+    if q:
+        c.execute("SELECT username,pic_url FROM profiles WHERE LOWER(username) LIKE %s" if USE_POSTGRES else "SELECT username,pic_url FROM profiles WHERE LOWER(username) LIKE?", ('%'+q+'%',))
+    else:
+        c.execute("SELECT username,pic_url FROM profiles LIMIT 20")
+    users=c.fetchall()
+    # get friend statuses
+    c.execute("SELECT sender,receiver,status FROM friends WHERE sender=%s OR receiver=%s" if USE_POSTGRES else "SELECT sender,receiver,status FROM friends WHERE sender=? OR receiver=?", (me,me))
+    fr=c.fetchall()
+    status_map={}
+    for s,r,st in fr:
+        if s==me: status_map[r]= 'friends' if st=='accepted' else 'pending_sent'
+        else: status_map[s]= 'friends' if st=='accepted' else 'pending_received'
+    out=[]
+    for u,pic in users:
+        out.append({"username":u,"pic_url":pic or "","friend_status":status_map.get(u,'none')})
+    conn.close()
+    return jsonify(out)
+
+@app.route('/api/friend/request', methods=['POST'])
+def api_friend_request():
+    me=session.get('username'); data=request.json; to=data.get('to')
+    if not to or to==me: return jsonify({"ok":False})
+    conn=get_conn(); c=conn.cursor()
+    # check exists
+    c.execute("SELECT 1 FROM friends WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s)" if USE_POSTGRES else "SELECT 1 FROM friends WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?)", (me,to,to,me))
+    if c.fetchone(): conn.close(); return jsonify({"ok":False,"error":"exists"})
+    c.execute("INSERT INTO friends (sender,receiver,status,created_at) VALUES (%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO friends (sender,receiver,status,created_at) VALUES (?,?,?,?)", (me,to,'pending',datetime.now().isoformat()))
+    # notification
+    c.execute("INSERT INTO notifications (username,type,from_user,text,created_at) VALUES (%s,%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO notifications (username,type,from_user,text,created_at) VALUES (?,?,?,?,?)", (to,'friend_request',me,f'{me} sent you friend request',datetime.now().isoformat()))
+    conn.commit(); conn.close(); return jsonify({"ok":True})
+
+@app.route('/api/friend/accept', methods=['POST'])
+def api_friend_accept():
+    me=session.get('username'); data=request.json; frm=data.get('from')
+    conn=get_conn(); c=conn.cursor()
+    c.execute("UPDATE friends SET status='accepted' WHERE sender=%s AND receiver=%s AND status='pending'" if USE_POSTGRES else "UPDATE friends SET status='accepted' WHERE sender=? AND receiver=? AND status='pending'", (frm,me))
+    c.execute("INSERT INTO notifications (username,type,from_user,text,created_at) VALUES (%s,%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO notifications (username,type,from_user,text,created_at) VALUES (?,?,?,?,?)", (frm,'friend_accept',me,f'{me} accepted your request',datetime.now().isoformat()))
+    conn.commit(); conn.close(); return jsonify({"ok":True})
+
+@app.route('/api/friend/decline', methods=['POST'])
+def api_friend_decline():
+    me=session.get('username'); data=request.json; frm=data.get('from')
+    conn=get_conn(); c=conn.cursor()
+    c.execute("DELETE FROM friends WHERE sender=%s AND receiver=%s AND status='pending'" if USE_POSTGRES else "DELETE FROM friends WHERE sender=? AND receiver=? AND status='pending'", (frm,me))
+    conn.commit(); conn.close(); return jsonify({"ok":True})
+
+@app.route('/api/friend/requests')
+def api_friend_requests():
+    me=session.get('username'); conn=get_conn(); c=conn.cursor()
+    c.execute("SELECT sender,created_at FROM friends WHERE receiver=%s AND status='pending'" if USE_POSTGRES else "SELECT sender,created_at FROM friends WHERE receiver=? AND status='pending'", (me,))
+    rows=c.fetchall(); conn.close()
+    return jsonify([{"sender":r[0],"created_at":r[1]} for r in rows])
+
+@app.route('/api/friends/list')
+def api_friends_list():
+    me=session.get('username'); conn=get_conn(); c=conn.cursor()
+    c.execute("SELECT sender,receiver FROM friends WHERE (sender=%s OR receiver=%s) AND status='accepted'" if USE_POSTGRES else "SELECT sender,receiver FROM friends WHERE (sender=? OR receiver=?) AND status='accepted'", (me,me))
+    rows=c.fetchall(); conn.close()
+    out=[]
+    for s,r in rows:
+        friend = r if s==me else s
+        out.append({"friend":friend})
+    return jsonify(out)
+
 @app.route('/api/posts')
 def api_posts():
     me=session.get('username'); conn=get_conn(); c=conn.cursor()
-    c.execute("SELECT id,username,text,media_url,created_at FROM posts ORDER BY id DESC LIMIT 50"); rows=c.fetchall(); out=[]
+    try:
+        c.execute("SELECT id,username,text,media_url,created_at FROM posts ORDER BY id DESC LIMIT 50")
+    except Exception as e:
+        conn.rollback()
+        # try repair and retry
+        try:
+            c.execute("ALTER TABLE posts ADD COLUMN IF NOT EXISTS text TEXT")
+            c.execute("ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_url TEXT")
+            conn.commit()
+            c.execute("SELECT id,username,text,media_url,created_at FROM posts ORDER BY id DESC LIMIT 50")
+        except Exception as e2:
+            conn.close(); return jsonify([])
+
+    rows=c.fetchall(); out=[]
     for r in rows:
         pid=r[0]; lc=0; liked=False
         try:
@@ -393,35 +607,31 @@ def api_posts():
 @app.route('/api/post', methods=['POST'])
 def api_post():
     me=session.get('username')
-    if not me:
-        return jsonify({"ok":False,"error":"not logged in"}), 401
+    if not me: return jsonify({"ok":False,"error":"not login"}),401
     try:
         txt=request.form.get('text','')[:500]
-        f=request.files.get('media')
-        url=''
+        f=request.files.get('media'); url=''
         if f and f.filename and f.filename!='':
-            import uuid
-            # safe ext
-            ext = f.filename.rsplit('.',1)[-1].lower() if '.' in f.filename else 'jpg'
-            ext = ext[:10] # prevent long ext
-            name=str(uuid.uuid4())[:8]+'.'+ext
-            os.makedirs('static/uploads', exist_ok=True)
-            path=os.path.join('static/uploads', name)
-            f.save(path)
-            url='/'+path
-            print(f"Post saved file to {path}")
-        if not txt and not url:
-            return jsonify({"ok":False,"error":"empty - add text or tap 📎"}), 400
+            import uuid; ext=f.filename.rsplit('.',1)[-1].lower() if '.' in f.filename else 'jpg'; ext=ext[:8]
+            name=str(uuid.uuid4())[:8]+'.'+ext; os.makedirs('static/uploads',exist_ok=True); path=os.path.join('static/uploads',name); f.save(path); url='/'+path
+        if not txt and not url: return jsonify({"ok":False,"error":"empty"}),400
         conn=get_conn(); c=conn.cursor()
-        if USE_POSTGRES:
-            c.execute("INSERT INTO posts (username,text,media_url,created_at) VALUES (%s,%s,%s,%s)", (me,txt,url,datetime.now().isoformat()))
-        else:
-            c.execute("INSERT INTO posts (username,text,media_url,created_at) VALUES (?,?,?,?)", (me,txt,url,datetime.now().isoformat()))
+        c.execute("INSERT INTO posts (username,text,media_url,created_at) VALUES (%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO posts (username,text,media_url,created_at) VALUES (?,?,?,?)",(me,txt,url,datetime.now().isoformat()))
         conn.commit(); conn.close()
         return jsonify({"ok":True})
     except Exception as e:
         traceback.print_exc()
-        return jsonify({"ok":False,"error": f"Server save failed: {str(e)}"}), 500
+        # auto repair
+        try:
+            run_alter("ALTER TABLE posts ADD COLUMN IF NOT EXISTS text TEXT" if USE_POSTGRES else "ALTER TABLE posts ADD COLUMN text TEXT")
+            run_alter("ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_url TEXT" if USE_POSTGRES else "ALTER TABLE posts ADD COLUMN media_url TEXT")
+            # retry once
+            conn=get_conn(); c=conn.cursor()
+            c.execute("INSERT INTO posts (username,text,media_url,created_at) VALUES (%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO posts (username,text,media_url,created_at) VALUES (?,?,?,?)",(me,txt,url,datetime.now().isoformat()))
+            conn.commit(); conn.close()
+            return jsonify({"ok":True})
+        except Exception as e2:
+            return jsonify({"ok":False,"error":f"Server save failed: {str(e)} | repair {str(e2)}"}),500
 
 @app.route('/api/post/delete', methods=['POST'])
 def api_post_delete():
@@ -435,7 +645,13 @@ def api_like():
     try:
         c.execute("SELECT 1 FROM post_likes WHERE post_id=%s AND username=%s" if USE_POSTGRES else "SELECT 1 FROM post_likes WHERE post_id=? AND username=?", (pid,me))
         if c.fetchone(): c.execute("DELETE FROM post_likes WHERE post_id=%s AND username=%s" if USE_POSTGRES else "DELETE FROM post_likes WHERE post_id=? AND username=?", (pid,me))
-        else: c.execute("INSERT INTO post_likes VALUES (%s,%s)" if USE_POSTGRES else "INSERT INTO post_likes VALUES (?,?)", (pid,me))
+        else:
+            c.execute("INSERT INTO post_likes VALUES (%s,%s)" if USE_POSTGRES else "INSERT INTO post_likes VALUES (?,?)", (pid,me))
+            # notify
+            c.execute("SELECT username FROM posts WHERE id=%s" if USE_POSTGRES else "SELECT username FROM posts WHERE id=?", (pid,))
+            row=c.fetchone()
+            if row and row[0]!=me:
+                c.execute("INSERT INTO notifications (username,type,from_user,text,created_at) VALUES (%s,%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO notifications (username,type,from_user,text,created_at) VALUES (?,?,?,?,?)", (row[0],'like',me,f'{me} liked your post',datetime.now().isoformat()))
         conn.commit()
     except: pass
     conn.close(); return jsonify({"ok":True})
@@ -449,16 +665,35 @@ def api_comment():
 
 @app.route('/api/stories')
 def api_stories():
-    conn=get_conn(); c=conn.cursor(); now=datetime.now().isoformat()
+    me=session.get('username')
+    conn=get_conn(); c=conn.cursor()
+    now=datetime.now().isoformat()
+    # get friends list
+    try:
+        c.execute("SELECT sender,receiver FROM friends WHERE (sender=%s OR receiver=%s) AND status='accepted'" if USE_POSTGRES else "SELECT sender,receiver FROM friends WHERE (sender=? OR receiver=?) AND status='accepted'", (me,me))
+        fr=c.fetchall()
+        friends=set()
+        for s,r in fr:
+            friends.add(r if s==me else s)
+        friends.add(me) # own stories
+    except: friends=set([me])
+
     try:
         c.execute("SELECT id,username,media_url,text,created_at FROM stories WHERE expires_at>%s ORDER BY id DESC" if USE_POSTGRES else "SELECT id,username,media_url,text,created_at FROM stories WHERE expires_at>? ORDER BY id DESC", (now,))
-    except: conn.rollback(); c.execute("SELECT id,username,media_url,text,created_at FROM stories ORDER BY id DESC")
+    except:
+        conn.rollback()
+        c.execute("SELECT id,username,media_url,text,created_at FROM stories ORDER BY id DESC")
+
     rows=c.fetchall(); out=[]
     for r in rows:
+        uname=r[1]
+        # private check: only friends + me can see
+        if uname not in friends:
+            continue
         cnt=0
         try: c.execute("SELECT COUNT(*) FROM story_views WHERE story_id=%s" if USE_POSTGRES else "SELECT COUNT(*) FROM story_views WHERE story_id=?", (r[0],)); cnt=c.fetchone()[0]
         except: pass
-        out.append({"id":r[0],"username":r[1],"media_url":r[2],"text":r[3],"created_at":r[4],"view_count":cnt})
+        out.append({"id":r[0],"username":uname,"media_url":r[2],"text":r[3],"created_at":r[4],"view_count":cnt})
     conn.close(); return jsonify(out)
 
 @app.route('/api/story', methods=['POST'])
@@ -466,14 +701,14 @@ def api_story():
     me=session.get('username')
     try:
         f=request.files.get('media'); txt=request.form.get('text','')[:200]
-        if not f or not f.filename: return jsonify({"ok":False,"error":"no file"}), 400
+        if not f or not f.filename: return jsonify({"ok":False,"error":"no file"}),400
         import uuid; ext=f.filename.rsplit('.',1)[-1].lower() if '.' in f.filename else 'jpg'; name=str(uuid.uuid4())[:8]+'.'+ext; os.makedirs('static/uploads',exist_ok=True); path=os.path.join('static/uploads',name); f.save(path); url='/'+path
         conn=get_conn(); c=conn.cursor(); now=datetime.now(); exp=now+timedelta(hours=24)
         c.execute("INSERT INTO stories (username,media_url,text,created_at,expires_at) VALUES (%s,%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO stories (username,media_url,text,created_at,expires_at) VALUES (?,?,?,?,?)", (me,url,txt,now.isoformat(),exp.isoformat()))
         conn.commit(); conn.close(); return jsonify({"ok":True})
     except Exception as e:
         traceback.print_exc()
-        return jsonify({"ok":False,"error":str(e)}), 500
+        return jsonify({"ok":False,"error":str(e)}),500
 
 @app.route('/api/story/delete', methods=['POST'])
 def api_story_delete():
@@ -496,18 +731,26 @@ def api_story_view():
     except: pass
     conn.close(); return jsonify({"ok":True})
 
+@app.route('/api/story/reply', methods=['POST'])
+def api_story_reply():
+    me=session.get('username'); data=request.json; to=data.get('to'); txt=data.get('text','')[:200]
+    if not to: return jsonify({"ok":False})
+    conn=get_conn(); c=conn.cursor()
+    c.execute("INSERT INTO notifications (username,type,from_user,text,created_at) VALUES (%s,%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO notifications (username,type,from_user,text,created_at) VALUES (?,?,?,?,?)", (to,'story_reply',me,f'Replied to your story: {txt}',datetime.now().isoformat()))
+    conn.commit(); conn.close(); return jsonify({"ok":True})
+
 @app.route('/api/profile/pic', methods=['POST'])
 def api_profile_pic():
     me=session.get('username')
     try:
         f=request.files.get('media')
-        if not f or not f.filename: return jsonify({"ok":False,"error":"no file"}), 400
+        if not f or not f.filename: return jsonify({"ok":False,"error":"no file"}),400
         import uuid; ext=f.filename.rsplit('.',1)[-1].lower() if '.' in f.filename else 'jpg'; name='pic_'+me+'_'+str(uuid.uuid4())[:6]+'.'+ext; os.makedirs('static/uploads',exist_ok=True); path=os.path.join('static/uploads',name); f.save(path); url='/'+path
         conn=get_conn(); c=conn.cursor()
         c.execute("UPDATE profiles SET pic_url=%s WHERE username=%s" if USE_POSTGRES else "UPDATE profiles SET pic_url=? WHERE username=?", (url,me)); conn.commit(); conn.close(); return jsonify({"ok":True,"url":url})
     except Exception as e:
         traceback.print_exc()
-        return jsonify({"ok":False,"error":str(e)}), 500
+        return jsonify({"ok":False,"error":str(e)}),500
 
 @app.route('/api/messages')
 def api_messages():
@@ -523,19 +766,38 @@ def api_send():
         other=request.form.get('receiver',''); txt=request.form.get('text','')[:500]; f=request.files.get('media'); url=''
         if f and f.filename and f.filename!='':
             import uuid; ext=f.filename.rsplit('.',1)[-1].lower() if '.' in f.filename else 'jpg'; name=str(uuid.uuid4())[:8]+'.'+ext; os.makedirs('static/uploads',exist_ok=True); path=os.path.join('static/uploads',name); f.save(path); url='/'+path
-        if not txt and not url: return jsonify({"ok":False,"error":"empty"}), 400
+        if not txt and not url: return jsonify({"ok":False,"error":"empty"}),400
         conn=get_conn(); c=conn.cursor()
         c.execute("INSERT INTO messages (sender,receiver,text,media_url,created_at) VALUES (%s,%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO messages (sender,receiver,text,media_url,created_at) VALUES (?,?,?,?,?)", (me,other,txt,url,datetime.now().isoformat()))
+        c.execute("INSERT INTO notifications (username,type,from_user,text,created_at) VALUES (%s,%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO notifications (username,type,from_user,text,created_at) VALUES (?,?,?,?,?)", (other,'message',me,f'Message: {txt[:30] or "photo/video"}',datetime.now().isoformat()))
         conn.commit(); conn.close(); return jsonify({"ok":True})
     except Exception as e:
         traceback.print_exc()
-        return jsonify({"ok":False,"error":str(e)}), 500
+        return jsonify({"ok":False,"error":str(e)}),500
 
 @app.route('/api/message/delete', methods=['POST'])
 def api_message_delete():
     me=session.get('username'); data=request.json; mid=data.get('id')
     conn=get_conn(); c=conn.cursor()
     c.execute("DELETE FROM messages WHERE id=%s AND sender=%s" if USE_POSTGRES else "DELETE FROM messages WHERE id=? AND sender=?", (mid,me)); conn.commit(); conn.close(); return jsonify({"ok":True})
+
+@app.route('/api/notifications')
+def api_notifications():
+    me=session.get('username'); conn=get_conn(); c=conn.cursor()
+    c.execute("SELECT id,type,from_user,text,created_at FROM notifications WHERE username=%s ORDER BY id DESC LIMIT 50" if USE_POSTGRES else "SELECT id,type,from_user,text,created_at FROM notifications WHERE username=? ORDER BY id DESC LIMIT 50", (me,))
+    rows=c.fetchall(); conn.close()
+    return jsonify([{"id":r[0],"type":r[1],"from_user":r[2],"text":r[3],"created_at":r[4]} for r in rows])
+
+@app.route('/api/notifications/count')
+def api_notifications_count():
+    me=session.get('username'); conn=get_conn(); c=conn.cursor()
+    c.execute("SELECT COUNT(*) FROM notifications WHERE username=%s AND is_read=0" if USE_POSTGRES else "SELECT COUNT(*) FROM notifications WHERE username=? AND is_read=0", (me,))
+    cnt=c.fetchone()[0]; conn.close(); return jsonify({"count":cnt})
+
+@app.route('/api/notifications/clear', methods=['POST'])
+def api_notifications_clear():
+    me=session.get('username'); conn=get_conn(); c=conn.cursor()
+    c.execute("DELETE FROM notifications WHERE username=%s" if USE_POSTGRES else "DELETE FROM notifications WHERE username=?", (me,)); conn.commit(); conn.close(); return jsonify({"ok":True})
 
 @app.route('/static/uploads/<path:filename>')
 def uploads(filename): return send_from_directory('static/uploads', filename)
