@@ -6,7 +6,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import cloudinary, cloudinary.uploader
 
 app = Flask(__name__)
-app.secret_key = "proveam-v17-fast"
+app.secret_key = "proveam-v17-fast-final"
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
 DB_URL = os.environ.get("DATABASE_URL")
 USE_POSTGRES = bool(DB_URL)
@@ -18,7 +18,6 @@ USE_CLOUD = bool(CLOUD_NAME and API_KEY and API_SECRET)
 if USE_CLOUD:
     cloudinary.config(cloud_name=CLOUD_NAME, api_key=API_KEY, api_secret=API_SECRET, secure=True)
 
-# Cache
 AVATAR_CACHE = {}
 AVATAR_CACHE_TIME = None
 
@@ -28,22 +27,25 @@ def save_media(data_url, mtype="image"):
     if mtype == "text": return data_url
     if not USE_CLOUD: return data_url
     try:
-        # Faster upload - eager async
-        res = cloudinary.uploader.upload(data_url, resource_type="auto", folder="proveam", eager_async=True, quality="auto:low")
+        res = cloudinary.uploader.upload(data_url, resource_type="auto", folder="proveam", quality="auto:low")
         return res.get("secure_url")
     except:
         return data_url
 
 def get_conn():
     if USE_POSTGRES:
-        import psycopg2
-        conn = psycopg2.connect(DB_URL)
-        conn.autocommit = False
-        return conn
+        try:
+            import psycopg
+            return psycopg.connect(DB_URL)
+        except:
+            import psycopg2
+            return psycopg2.connect(DB_URL)
     conn = sqlite3.connect("proveam.db", check_same_thread=False, isolation_level=None)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL;")
-    conn.execute("PRAGMA synchronous=NORMAL;")
+    try:
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
+    except: pass
     return conn
 
 def init_db():
@@ -60,9 +62,8 @@ def init_db():
     c.execute(q("CREATE TABLE IF NOT EXISTS chats (id SERIAL PRIMARY KEY, sender TEXT, receiver TEXT, text TEXT, media TEXT, media_type TEXT, reply_to TEXT, created_at TEXT, viewed INT DEFAULT 0)","CREATE TABLE IF NOT EXISTS chats (id INTEGER PRIMARY KEY AUTOINCREMENT, sender TEXT, receiver TEXT, text TEXT, media TEXT, media_type TEXT, reply_to TEXT, created_at TEXT, viewed INTEGER DEFAULT 0)"))
     c.execute(q("CREATE TABLE IF NOT EXISTS streaks (id SERIAL PRIMARY KEY, user1 TEXT, user2 TEXT, count INT DEFAULT 0, last_date TEXT)","CREATE TABLE IF NOT EXISTS streaks (id INTEGER PRIMARY KEY AUTOINCREMENT, user1 TEXT, user2 TEXT, count INTEGER DEFAULT 0, last_date TEXT)"))
     c.execute(q("CREATE TABLE IF NOT EXISTS notifs (id SERIAL PRIMARY KEY, to_user TEXT, from_user TEXT, type TEXT, text TEXT, post_id INT DEFAULT 0, is_read INT DEFAULT 0, created_at TEXT)","CREATE TABLE IF NOT EXISTS notifs (id INTEGER PRIMARY KEY AUTOINCREMENT, to_user TEXT, from_user TEXT, type TEXT, text TEXT, post_id INTEGER DEFAULT 0, is_read INTEGER DEFAULT 0, created_at TEXT)"))
-    # SPEED INDEXES
     try:
-        c.execute("CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at DESC)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(id DESC)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_chats_users ON chats(sender, receiver, id DESC)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_stories_exp ON stories(expires_at)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_likes_post ON likes(post_id)")
@@ -70,14 +71,6 @@ def init_db():
     except: pass
     conn.commit(); conn.close()
 init_db()
-
-def get_avatar_fast(username):
-    # Cache 60 sec
-    global AVATAR_CACHE, AVATAR_CACHE_TIME
-    now = datetime.now()
-    if AVATAR_CACHE_TIME and (now - AVATAR_CACHE_TIME).seconds < 60 and username in AVATAR_CACHE:
-        return AVATAR_CACHE[username]
-    return f"https://i.pravatar.cc/100?u={username}"
 
 def add_notif(to_user, from_user, typ, text, post_id=0):
     if to_user==from_user: return
@@ -108,12 +101,11 @@ if(localStorage.getItem('theme')=='light'){document.body.classList.add('light');
 async function compressImage(file){return new Promise(res=>{let img=new Image();let url=URL.createObjectURL(file);img.onload=()=>{let max=700;let w=img.width,h=img.height;if(w>max||h>max){if(w>h){h=h*max/w;w=max;}else{w=w*max/h;h=max;}}let c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);res(c.toDataURL('image/jpeg',0.4));URL.revokeObjectURL(url);};img.src=url;});}
 document.getElementById('fileIn').addEventListener('change', async e=>{
  let files=[...e.target.files]; if(!files.length)return;
- // OPTIMISTIC UI - show instantly
  let tempUrls = [];
  for(let f of files){
    let localUrl = URL.createObjectURL(f);
    tempUrls.push(localUrl);
-   let fakePost = {id:Date.now(),username:currentUser,media:localUrl,media_type:f.type.startsWith('video')?'video':'image',likes:0,liked:false};
+   let fakePost = {id:Date.now()+Math.random(),username:currentUser,media:localUrl,media_type:f.type.startsWith('video')?'video':'image',likes:0,liked:false};
    allPosts.unshift(fakePost);
  }
  renderFeed();
@@ -144,10 +136,7 @@ async function loadFeed(){
   renderFeed();
  }catch(e){console.log(e);}
 }
-async function likePost(id){ // optimistic
- let p=allPosts.find(x=>x.id==id); if(p){p.liked=!p.liked; p.likes+=p.liked?1:-1; renderFeed();}
- await fetch('/like/'+id,{method:'POST'});
-}
+async function likePost(id){let p=allPosts.find(x=>x.id==id); if(p){p.liked=!p.liked; p.likes+=p.liked?1:-1; renderFeed();} await fetch('/like/'+id,{method:'POST'});}
 async function deletePost(id){if(!confirm('Delete?'))return;allPosts=allPosts.filter(p=>p.id!=id);renderFeed();let r=await fetch('/delete/'+id,{method:'POST'});let d=await r.json();if(!d.ok)loadFeed();}
 async function toggleReplies(id){activePostId=id;document.getElementById('sheetWrap').style.display='block';loadComments(id);}
 async function loadComments(id){let r=await fetch('/replies/'+id);let reps=await r.json();document.getElementById('commentList').innerHTML=reps.map(c=>`<div style="padding:8px 0"><b>${c.username}</b> ${c.text}</div>`).join('')||'<div style="color:var(--sub)">No comments</div>';}
@@ -156,7 +145,7 @@ async function sharePost(id){let url=location.origin+'/post/'+id;await navigator
 loadFeed();
 </script></body></html>"""
 
-STORIES_HTML = """<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"><style>:root{--bg:#000;--card:#111;--text:#fff;--border:#222;--sub:#888}body.light{--bg:#f5f5f5;--card:#fff;--text:#000;--border:#ddd;--sub:#666}*{margin:0;padding:0;box-sizing:border-box;font-family:system-ui}body{background:var(--bg);color:var(--text)}::-webkit-scrollbar{display:none}.header{position:sticky;top:0;background:var(--bg);z-index:10;border-bottom:1px solid var(--border)}.top-tabs{display:flex;justify-content:space-around;border-bottom:1px solid var(--border)}.top-tabs a{color:var(--sub);text-decoration:none;font-weight:800;font-size:14px;padding:12px 0;border-bottom:2px solid transparent;width:33%;text-align:center}.top-tabs a.active{color:var(--text);border-bottom:2px solid var(--text)}.friends-row{display:flex;gap:14px;overflow-x:auto;padding:12px 16px}.story-circle{flex:0 0 72px;text-align:center;cursor:pointer;position:relative}.ring{width:66px;height:66px;border-radius:50%;border:3px solid #A259FF;overflow:hidden}.ring img{width:100%;height:100%;object-fit:cover}.badge{position:absolute;top:-2px;right:2px;background:#A259FF;color:#fff;font-size:10px;padding:2px 5px;border-radius:10px}.viewer{position:fixed;inset:0;background:#000;z-index:99;display:none;flex-direction:column}.progress{display:flex;gap:4px;padding:8px;position:absolute;top:0;left:0;right:0;z-index:3}.progress span{flex:1;height:3px;background:#ffffff66}.progress span.active{background:#fff}}</style></head><body id="body"><div class="header">""" + BASE_HEADER + """<div class="top-tabs"><a href="/stories-page" class="active">Stories</a><a href="/">Post</a><a href="/chats">Chat</a></div></div><div class="friends-row" id="friendsRow"><div class="story-circle"><div class="ring skeleton" style="background:var(--card)"></div></div></div><div style="margin:16px;background:var(--card);border-radius:16px;padding:14px;border:1px solid var(--border)"><b>Stories</b><input type="file" id="fileStory" accept="image/*,video/*" multiple style="display:none"><div style="display:flex;gap:8px;margin-top:10px"><button style="flex:1;background:var(--text);color:var(--bg);border:none;border-radius:12px;padding:12px;font-weight:800" onclick="document.getElementById('fileStory').click()">📷 Multi</button><button style="flex:1;background:#A259FF;color:#fff;border:none;border-radius:12px;padding:12px;font-weight:800" onclick="postTextStory()">Text</button></div><textarea id="textStory" style="display:none;width:100%;padding:10px;border-radius:10px;margin-top:8px;background:var(--bg);color:var(--text)"></textarea><button id="sendTextBtn" style="display:none;width:100%;background:#A259FF;color:#fff;border:none;border-radius:12px;padding:12px;margin-top:8px" onclick="sendTextStory()">Post</button></div><div class="viewer" id="storyViewer"><div class="progress" id="progress"></div><div style="position:absolute;top:14px;left:14px;right:14px;color:#fff;display:flex;gap:8px;align-items:center;z-index:3"><a onclick="closeViewer()" style="color:#fff"><i class="fa fa-arrow-left"></i></a><img id="vAvatar" style="width:32px;height:32px;border-radius:50%"><b id="vName"></b><span style="margin-left:auto;display:flex;gap:12px;align-items:center"><span id="vViews" style="font-size:13px">👁️ 0</span><button onclick="saveStory()" style="background:var(--card);border:none;color:#fff;padding:6px 10px;border-radius:8px"><i class="fa fa-download"></i> Save</button></span></div><div style="flex:1;display:flex;align-items:center;justify-content:center" id="tapArea"><img id="vImg" style="max-width:100%;max-height:85vh;display:none"><video id="vVid" controls autoplay playsinline style="max-width:100%;max-height:85vh;display:none"></video><div id="vText" style="color:#fff;font-size:28px;font-weight:800;padding:20px;text-align:center;display:none"></div></div><div style="padding:10px;display:flex;gap:8px;background:linear-gradient(transparent, #000)"><input id="replyInput" placeholder="Reply to story..." style="flex:1;background:#222;border:none;border-radius:20px;padding:12px 16px;color:#fff;outline:none"><button onclick="sendStoryReply()" style="background:#A259FF;border:none;color:#fff;width:44px;height:44px;border-radius:50%"><i class="fa fa-paper-plane"></i></button></div></div>""" + NOTIF_HTML + """<script>
+STORIES_HTML = """<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"><style>:root{--bg:#000;--card:#111;--text:#fff;--border:#222;--sub:#888}body.light{--bg:#f5f5f5;--card:#fff;--text:#000;--border:#ddd;--sub:#666}*{margin:0;padding:0;box-sizing:border-box;font-family:system-ui}body{background:var(--bg);color:var(--text)}::-webkit-scrollbar{display:none}.header{position:sticky;top:0;background:var(--bg);z-index:10;border-bottom:1px solid var(--border)}.top-tabs{display:flex;justify-content:space-around;border-bottom:1px solid var(--border)}.top-tabs a{color:var(--sub);text-decoration:none;font-weight:800;font-size:14px;padding:12px 0;border-bottom:2px solid transparent;width:33%;text-align:center}.top-tabs a.active{color:var(--text);border-bottom:2px solid var(--text)}.friends-row{display:flex;gap:14px;overflow-x:auto;padding:12px 16px}.story-circle{flex:0 0 72px;text-align:center;cursor:pointer;position:relative}.ring{width:66px;height:66px;border-radius:50%;border:3px solid #A259FF;overflow:hidden}.ring img{width:100%;height:100%;object-fit:cover}.badge{position:absolute;top:-2px;right:2px;background:#A259FF;color:#fff;font-size:10px;padding:2px 5px;border-radius:10px}.viewer{position:fixed;inset:0;background:#000;z-index:99;display:none;flex-direction:column}.progress{display:flex;gap:4px;padding:8px;position:absolute;top:0;left:0;right:0;z-index:3}.progress span{flex:1;height:3px;background:#ffffff66}.progress span.active{background:#fff}}</style></head><body id="body"><div class="header">""" + BASE_HEADER + """<div class="top-tabs"><a href="/stories-page" class="active">Stories</a><a href="/">Post</a><a href="/chats">Chat</a></div></div><div class="friends-row" id="friendsRow"><div class="story-circle"><div class="ring" style="background:var(--card)"></div></div></div><div style="margin:16px;background:var(--card);border-radius:16px;padding:14px;border:1px solid var(--border)"><b>Stories</b><input type="file" id="fileStory" accept="image/*,video/*" multiple style="display:none"><div style="display:flex;gap:8px;margin-top:10px"><button style="flex:1;background:var(--text);color:var(--bg);border:none;border-radius:12px;padding:12px;font-weight:800" onclick="document.getElementById('fileStory').click()">📷 Multi</button><button style="flex:1;background:#A259FF;color:#fff;border:none;border-radius:12px;padding:12px;font-weight:800" onclick="postTextStory()">Text</button></div><textarea id="textStory" style="display:none;width:100%;padding:10px;border-radius:10px;margin-top:8px;background:var(--bg);color:var(--text)"></textarea><button id="sendTextBtn" style="display:none;width:100%;background:#A259FF;color:#fff;border:none;border-radius:12px;padding:12px;margin-top:8px" onclick="sendTextStory()">Post</button></div><div class="viewer" id="storyViewer"><div class="progress" id="progress"></div><div style="position:absolute;top:14px;left:14px;right:14px;color:#fff;display:flex;gap:8px;align-items:center;z-index:3"><a onclick="closeViewer()" style="color:#fff"><i class="fa fa-arrow-left"></i></a><img id="vAvatar" style="width:32px;height:32px;border-radius:50%"><b id="vName"></b><span style="margin-left:auto;display:flex;gap:12px;align-items:center"><span id="vViews" style="font-size:13px">👁️ 0</span><button onclick="saveStory()" style="background:var(--card);border:none;color:#fff;padding:6px 10px;border-radius:8px"><i class="fa fa-download"></i> Save</button></span></div><div style="flex:1;display:flex;align-items:center;justify-content:center" id="tapArea"><img id="vImg" style="max-width:100%;max-height:85vh;display:none"><video id="vVid" controls autoplay playsinline style="max-width:100%;max-height:85vh;display:none"></video><div id="vText" style="color:#fff;font-size:28px;font-weight:800;padding:20px;text-align:center;display:none"></div></div><div style="padding:10px;display:flex;gap:8px;background:linear-gradient(transparent, #000)"><input id="replyInput" placeholder="Reply to story..." style="flex:1;background:#222;border:none;border-radius:20px;padding:12px 16px;color:#fff;outline:none"><button onclick="sendStoryReply()" style="background:#A259FF;border:none;color:#fff;width:44px;height:44px;border-radius:50%"><i class="fa fa-paper-plane"></i></button></div></div>""" + NOTIF_HTML + """<script>
 let allStories=[];let grouped={};let currentList=[];let currentIndex=0;let timer=null;let avatars={};let currentStory=null;let lowData=localStorage.getItem('lowData')!=='off';
 function toggleLowData(){lowData=!lowData;localStorage.setItem('lowData',lowData?'on':'off');updateLowBtn();}
 function updateLowBtn(){let b=document.getElementById('lowBtn');if(b)b.innerText=lowData?'LOW: ON':'LOW: OFF';}
@@ -171,7 +160,6 @@ document.getElementById('fileStory').addEventListener('change', async e=>{
   let type=f.type.startsWith('video')?'video':'image';
   fetch('/story/upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({media:r,media_type:type})});
  }
- // optimistic
  setTimeout(load,500);
 });
 async function sendTextStory(){let t=document.getElementById('textStory').value;if(!t.trim())return;document.getElementById('textStory').value='';postTextStory();fetch('/story/upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({media:t,media_type:'text'})});load();}
@@ -221,7 +209,6 @@ async function load(silent=false){
 }
 async function sendText(){
  let t=document.getElementById('txt').value;if(!t.trim())return;
- // OPTIMISTIC - show instantly
  let el=document.getElementById('msgs');
  el.innerHTML+=`<div class="msg me"><div>${t}</div><span class="time">now ⏳</span></div>`;
  el.scrollTop=el.scrollHeight;
@@ -379,7 +366,6 @@ def feed():
     if 'username' not in session: return jsonify([])
     me=session['username']
     conn=get_conn(); c=conn.cursor()
-    # Fast feed with LEFT JOIN for liked
     c.execute("SELECT p.id,p.username,p.media,p.media_type,p.likes,p.created_at, CASE WHEN l.username IS NOT NULL THEN 1 ELSE 0 END as liked FROM posts p LEFT JOIN likes l ON l.post_id=p.id AND l.username=%s ORDER BY p.id DESC LIMIT 30" if USE_POSTGRES else "SELECT p.id,p.username,p.media,p.media_type,p.likes,p.created_at, CASE WHEN l.username IS NOT NULL THEN 1 ELSE 0 END as liked FROM posts p LEFT JOIN likes l ON l.post_id=p.id AND l.username=? ORDER BY p.id DESC LIMIT 30", (me,))
     rows=c.fetchall(); conn.close()
     return jsonify([{"id":r[0],"username":r[1],"media":r[2],"media_type":r[3],"likes":r[4],"created_at":r[5][:16] if r[5] else "", "liked": bool(r[6])} for r in rows])
@@ -421,7 +407,7 @@ def story_reply(id):
     owner=row[0]
     c.execute("INSERT INTO chats (sender,receiver,text,media,media_type,reply_to,created_at,viewed) VALUES (%s,%s,%s,%s,%s,%s,%s,0)" if USE_POSTGRES else "INSERT INTO chats (sender,receiver,text,media,media_type,reply_to,created_at,viewed) VALUES (?,?,?,?,?,?,?,0)", (me,owner,f"Replied to your story: {txt}",None,None,f"Story reply",datetime.now().isoformat()))
     conn.commit(); conn.close()
-    add_notif(owner, me, "story_reply", f"replied to your story: {txt[:20]} 👀")
+    add_notif(owner, me, "story_reply", f"replied to your story: {txt[:20]}")
     return jsonify({"ok":True})
 
 @app.route('/like/<int:id>', methods=['POST'])
@@ -437,7 +423,7 @@ def like(id):
     else:
         c.execute("INSERT INTO likes (post_id,username) VALUES (%s,%s)" if USE_POSTGRES else "INSERT INTO likes (post_id,username) VALUES (?,?)", (id,session['username']))
         c.execute("UPDATE posts SET likes=likes+1 WHERE id=%s" if USE_POSTGRES else "UPDATE posts SET likes=likes+1 WHERE id=?", (id,))
-        if owner: add_notif(owner[0], session['username'], "like", "liked your post ❤️", id)
+        if owner: add_notif(owner[0], session['username'], "like", "liked your post", id)
     conn.commit(); conn.close(); return jsonify({"ok":True})
 
 @app.route('/reply/<int:id>', methods=['POST'])
@@ -449,7 +435,7 @@ def reply(id):
     owner=c.fetchone()
     c.execute("INSERT INTO replies (post_id,username,text,created_at) VALUES (%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO replies (post_id,username,text,created_at) VALUES (?,?,?,?)", (id,session['username'],txt,datetime.now().isoformat()))
     conn.commit(); conn.close()
-    if owner: add_notif(owner[0], session['username'], "comment", f"commented: {txt[:20]} 💬", id)
+    if owner: add_notif(owner[0], session['username'], "comment", f"commented: {txt[:20]}", id)
     return jsonify({"ok":True})
 
 @app.route('/replies/<int:id>')
@@ -492,7 +478,6 @@ def get_streak(other):
 def chats_list():
     if 'username' not in session: return jsonify([])
     conn=get_conn(); c=conn.cursor(); me=session['username']
-    # One fast query instead of N
     c.execute("SELECT DISTINCT CASE WHEN sender=%s THEN receiver ELSE sender END as other_user FROM chats WHERE sender=%s OR receiver=%s UNION SELECT user2 as other_user FROM friends WHERE user1=%s" if USE_POSTGRES else "SELECT DISTINCT CASE WHEN sender=? THEN receiver ELSE sender END as other_user FROM chats WHERE sender=? OR receiver=? UNION SELECT user2 as other_user FROM friends WHERE user1=?", (me,me,me,me))
     others=[r[0] for r in c.fetchall() if r[0]]
     out=[]
@@ -551,7 +536,7 @@ def chat_send(other):
             return new_cnt
     cnt1=update_streak(me,other); update_streak(other,me)
     conn.commit(); conn.close()
-    add_notif(other, me, "message", f"sent: {txt[:25]} ✉️")
+    add_notif(other, me, "message", f"sent: {txt[:25]}")
     return jsonify({"ok":True})
 
 if __name__=='__main__':
