@@ -11,12 +11,12 @@ USE_POSTGRES = bool(DB_URL)
 
 def get_conn():
     if USE_POSTGRES:
-        import psycopg2
-        import psycopg2.extras
-        return psycopg2.connect(DB_URL)
-    conn = sqlite3.connect("proveam.db")
-    conn.row_factory = sqlite3.Row
-    return conn
+        try:
+            import psycopg2
+            return psycopg2.connect(DB_URL, connect_timeout=10)
+        except:
+            import psycopg
+            return psycopg.connect(DB_URL)
 
 def init_db():
     conn = get_conn(); c = conn.cursor()
