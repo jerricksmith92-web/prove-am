@@ -695,48 +695,10 @@ def api_post_delete():
 @app.route('/api/stories', methods=['GET'])
 def api_stories():
     me = session.get('username')
-    if not me: return jsonify([]),401
+    if not me: return jsonify([]), 401
     import time
     conn = get_conn(); c = conn.cursor()
     cutoff = time.time() - 86400
-
-    # get friends list
-    try:
-        if USE_POSTGRES:
-            c.execute("SELECT sender,receiver FROM friends WHERE sender=%s OR receiver=%s", (me,me))
-        else:
-            c.execute("SELECT sender,receiver FROM friends WHERE sender=? OR receiver=?", (me,me))
-    except:
-        try:
-            if USE_POSTGRES:
-                c.execute("SELECT from_user,to_user FROM friends WHERE from_user=%s OR to_user=%s", (me,me))
-            else:
-                c.execute("SELECT from_user,to_user FROM friends WHERE from_user=? OR to_user=?", (me,me))
-        except:
-            friends = set([me])
-            fr = []
-        else:
-            fr = c.fetchall()
-    else:
-        fr = c.fetchall()
-
-    friends = set([me])
-    try:
-        for s,r in fr:
-            if s==me: friends.add(r)
-            elif r==me: friends.add(s)
-    except: pass
-
-    # auto-delete old stories (>24h)
-    try:
-        if USE_POSTGRES:
-            c.execute("DELETE FROM stories WHERE timestamp < %s", (cutoff,))
-        else:
-            c.execute("DELETE FROM stories WHERE timestamp <?", (cutoff,))
-        conn.commit()
-    except: pass
-
-    # get only last 24h stories from friends
     out=[]
     try:
         c.execute("SELECT id,username,media_url,created_at FROM stories")
@@ -752,6 +714,7 @@ def api_stories():
         print(f"STORIES ERR {e}")
     conn.close()
     return jsonify(out)
+
 
 @app.route('/api/story', methods=['POST'])
 def api_story():
