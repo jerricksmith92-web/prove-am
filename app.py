@@ -64,7 +64,19 @@ def init_db():
         c.execute("CREATE TABLE IF NOT EXISTS story_views (story_id INT, viewer TEXT, PRIMARY KEY(story_id,viewer))")
         c.execute("CREATE TABLE IF NOT EXISTS friends (id SERIAL PRIMARY KEY, sender TEXT, receiver TEXT, status TEXT, created_at TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS notifications (id SERIAL PRIMARY KEY, username TEXT, type TEXT, from_user TEXT, text TEXT, created_at TEXT, is_read INT DEFAULT 0)")
+            c.execute("CREATE TABLE IF NOT EXISTS friend_requests (id SERIAL PRIMARY KEY, from_user TEXT, to_user TEXT, status TEXT DEFAULT 'pending')")
+    c.execute("CREATE TABLE IF NOT EXISTS user_status (username TEXT PRIMARY KEY, online INTEGER, last_seen REAL)")
+    try: c.execute("ALTER TABLE messages ADD COLUMN read INTEGER DEFAULT 0")
+    except: pass
+    try: c.execute("ALTER TABLE messages ADD COLUMN reply_to INTEGER DEFAULT 0")
+    except: pass
     else:
+            c.execute("CREATE TABLE IF NOT EXISTS friend_requests (id SERIAL PRIMARY KEY, from_user TEXT, to_user TEXT, status TEXT DEFAULT 'pending')")
+    c.execute("CREATE TABLE IF NOT EXISTS user_status (username TEXT PRIMARY KEY, online INTEGER, last_seen REAL)")
+    try: c.execute("ALTER TABLE messages ADD COLUMN read INTEGER DEFAULT 0")
+    except: pass
+    try: c.execute("ALTER TABLE messages ADD COLUMN reply_to INTEGER DEFAULT 0")
+    except: pass
         c.execute("CREATE TABLE IF NOT EXISTS auth (username TEXT PRIMARY KEY, password TEXT, created_at TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS profiles (username TEXT PRIMARY KEY, pic_url TEXT, bio TEXT, last_seen TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, text TEXT, media_url TEXT, created_at TEXT)")
