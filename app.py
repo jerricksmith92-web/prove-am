@@ -666,62 +666,78 @@ def api_post_delete():
     conn=get_conn(); c=conn.cursor()
     c.execute("DELETE FROM posts WHERE id=%s AND username=%s" if USE_POSTGRES else "DELETE FROM posts WHERE id=? AND username=?", (pid,me)); conn.commit(); conn.close(); return jsonify({"ok":True})
 
-@app.route('/api/like', methods=['POST'])
-def api_like():
-    me=session.get('username'); data=request.json; pid=data.get('post_id'); conn=get_conn(); c=conn.cursor()
-    try:
-        c.execute("SELECT 1 FROM post_likes WHERE post_id=%s AND username=%s" if USE_POSTGRES else "SELECT 1 FROM post_likes WHERE post_id=? AND username=?", (pid,me))
-        if c.fetchone(): c.execute("DELETE FROM post_likes WHERE post_id=%s AND username=%s" if USE_POSTGRES else "DELETE FROM post_likes WHERE post_id=? AND username=?", (pid,me))
-        else:
-            c.execute("INSERT INTO post_likes VALUES (%s,%s)" if USE_POSTGRES else "INSERT INTO post_likes VALUES (?,?)", (pid,me))
-            # notify
-            c.execute("SELECT username FROM posts WHERE id=%s" if USE_POSTGRES else "SELECT username FROM posts WHERE id=?", (pid,))
-            row=c.fetchone()
-            if row and row[0]!=me:
-                c.execute("INSERT INTO notifications (username,type,from_user,text,created_at) VALUES (%s,%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO notifications (username,type,from_user,text,created_at) VALUES (?,?,?,?,?)", (row[0],'like',me,f'{me} liked your post',datetime.now().isoformat()))
-        conn.commit()
-    except: pass
-    conn.close(); return jsonify({"ok":True})
-
-@app.route('/api/comment', methods=['POST'])
-def api_comment():
-    me=session.get('username'); data=request.json; pid=data.get('post_id'); txt=data.get('text','')[:200]
-    conn=get_conn(); c=conn.cursor()
-    c.execute("INSERT INTO comments (post_id,username,text,created_at) VALUES (%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO comments (post_id,username,text,created_at) VALUES (?,?,?,?)",(pid,me,txt,datetime.now().isoformat()))
-    conn.commit(); conn.close(); return jsonify({"ok":True})
-
-@app.route('/api/stories')
+@app.route('/api/stories', methods=['GET'])
 def api_stories():
-    me=session.get('username')
-    conn=get_conn(); c=conn.cursor()
-    now=datetime.now().isoformat()
+    me = session.get('username')
+    if not me: return jsonify([]),401
+    import time
+    conn = get_conn(); c = conn.cursor()
+    cutoff = time.time() - 86400
+
     # get friends list
     try:
-        c.execute("SELECT sender,receiver FROM friends WHERE (sender=%s OR receiver=%s) AND status='accepted'" if USE_POSTGRES else "SELECT sender,receiver FROM friends WHERE (sender=? OR receiver=?) AND status='accepted'", (me,me))
-        fr=c.fetchall()
-        friends=set()
-        for s,r in fr:
-            friends.add(r if s==me else s)
-        friends.add(me) # own stories
-    except: friends=set([me])
-
-    try:
-        c.execute("SELECT id,username,media_url,text,created_at FROM stories WHERE expires_at>%s ORDER BY id DESC" if USE_POSTGRES else "SELECT id,username,media_url,text,created_at FROM stories WHERE expires_at>? ORDER BY id DESC", (now,))
+        if USE_POSTGRES:
+            c.execute("SELECT sender,receiver FROM friends WHERE sender=%s OR receiver=%s", (me,me))
+        else:
+            c.execute("SELECT sender,receiver FROM friends WHERE sender=? OR receiver=?", (me,me))
     except:
-        conn.rollback()
-        c.execute("SELECT id,username,media_url,text,created_at FROM stories ORDER BY id DESC")
+        try:
+            if USE_POSTGRES:
+                c.execute("SELECT from_user,to_user FROM friends WHERE from_user=%s OR to_user=%s", (me,me))
+            else:
+                c.execute("SELECT from_user,to_user FROM friends WHERE from_user=? OR to_user=?", (me,me))
+        except:
+            friends = set([me])
+            fr = []
+        else:
+            fr = c.fetchall()
+    else:
+        fr = c.fetchall()
 
-    rows=c.fetchall(); out=[]
-    for r in rows:
-        uname=r[1]
-        # private check: only friends + me can see
-        if uname not in friends:
-            continue
-        cnt=0
-        try: c.execute("SELECT COUNT(*) FROM story_views WHERE story_id=%s" if USE_POSTGRES else "SELECT COUNT(*) FROM story_views WHERE story_id=?", (r[0],)); cnt=c.fetchone()[0]
+    friends = set([me])
+    try:
+        for s,r in fr:
+            if s==me: friends.add(r)
+            elif r==me: friends.add(s)
+    except: pass
+
+    # auto-delete old stories (>24h)
+    try:
+        if USE_POSTGRES:
+            c.execute("DELETE FROM stories WHERE timestamp < %s", (cutoff,))
+        else:
+            c.execute("DELETE FROM stories WHERE timestamp <?", (cutoff,))
+        conn.commit()
+    except: pass
+
+    # get only last 24h stories from friends
+    out=[]
+    try:
+        if USE_POSTGRES:
+            c.execute("SELECT id,username,media_url,timestamp FROM stories WHERE username IN %s AND timestamp > %s ORDER BY timestamp DESC", (tuple(friends), cutoff))
+        else:
+            placeholders = ','.join(['?']*len(friends))
+            c.execute(f"SELECT id,username,media_url,timestamp FROM stories WHERE username IN ({placeholders}) AND timestamp >? ORDER BY timestamp DESC", (*list(friends), cutoff))
+        rows = c.fetchall()
+        for r in rows:
+            out.append({'id':r[0],'username':r[1],'media_url':r[2],'timestamp':r[3]})
+    except Exception as e:
+        try:
+            placeholders = ','.join(['?']*len(friends)) if not USE_POSTGRES else None
+            if USE_POSTGRES:
+                c.execute("SELECT id,username,media_url,timestamp FROM stories WHERE username IN %s ORDER BY timestamp DESC", (tuple(friends),))
+            else:
+                c.execute(f"SELECT id,username,media_url,timestamp FROM stories WHERE username IN ({placeholders}) ORDER BY timestamp DESC", tuple(friends))
+            rows = c.fetchall()
+            for r in rows:
+                try:
+                    if float(r[3]) < cutoff: continue
+                except: pass
+                out.append({'id':r[0],'username':r[1],'media_url':r[2],'timestamp':r[3]})
         except: pass
-        out.append({"id":r[0],"username":uname,"media_url":r[2],"text":r[3],"created_at":r[4],"view_count":cnt})
-    conn.close(); return jsonify(out)
+
+    conn.close()
+  return jsonify(out)
 
 @app.route('/api/story', methods=['POST'])
 def api_story():
