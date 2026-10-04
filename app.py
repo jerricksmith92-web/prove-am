@@ -21,6 +21,13 @@ def get_conn():
             import psycopg
             return psycopg.connect(DB_URL)
     return sqlite3.connect("app.db")
+def upload_to_cloud(file):
+    try:
+        r = cloudinary.uploader.upload(file, resource_type="auto")
+        return r.get('secure_url','')
+    except Exception as e:
+        print(f"CLOUD FAIL {e}")
+        return ''
 
 def run_alter(sql):
     conn=get_conn(); c=conn.cursor()
@@ -629,22 +636,15 @@ def api_posts():
 @app.route('/api/post', methods=['POST'])
 def api_post():
     me=session.get('username')
-    if not me: return jsonify({"ok":False,"error":"login"})
-    try:
-        txt=request.form.get('text','')[:500]
-        f=request.files.get('media'); url=''
-        if f and f.filename and f.filename!='':
-            try:
-                import cloudinary, cloudinary.uploader
-                cloudinary.config(cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME'), api_key=os.environ.get('CLOUDINARY_API_KEY'), api_secret=os.environ.get('CLOUDINARY_API_SECRET'))
-                r=cloudinary.uploader.upload(f, resource_type="auto")
-                url=r.get('secure_url','')
-            except Exception as e:
-                print(f"CLOUD FAIL {e}"); url=''
-        conn=sqlite3.connect(DB); c=conn.cursor()
-        c.execute("INSERT INTO posts(username,text,image,created) VALUES(?,?,?,?)",(me,txt,url,time.time()))
-        conn.commit(); conn.close()
-        return jsonify({"ok":True})
+    if not me: return jsonify({"ok":False})
+    txt=request.form.get('text','')[:500]
+    f=request.files.get('media'); url=''
+    if f and f.filename: url = upload_to_cloud(f)
+    conn=get_conn(); c=conn.cursor()
+    c.execute("INSERT INTO posts(username,text,image,created) VALUES(?,?,?,?)",(me,txt,url,time.time()))
+    conn.commit(); conn.close()
+    return jsonify({"ok":True})
+
     except Exception as e:
         print(f"POST ERR {e}"); return jsonify({"ok":False,"error":str(e)})
 
@@ -714,16 +714,12 @@ def api_stories():
 @app.route('/api/story', methods=['POST'])
 def api_story():
     me=session.get('username')
-    try:
-        f=request.files.get('media'); txt=request.form.get('text','')[:200]
-        if not f or not f.filename: return jsonify({"ok":False,"error":"no file"}),400
-        import uuid; ext=f.filename.rsplit('.',1)[-1].lower() if '.' in f.filename else 'jpg'; name=str(uuid.uuid4())[:8]+'.'+ext; os.makedirs('static/uploads',exist_ok=True); path=os.path.join('static/uploads',name); f.save(path); url='/'+path
-        conn=get_conn(); c=conn.cursor(); now=datetime.now(); exp=now+timedelta(hours=24)
-        c.execute("INSERT INTO stories (username,media_url,text,created_at,expires_at) VALUES (%s,%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO stories (username,media_url,text,created_at,expires_at) VALUES (?,?,?,?,?)", (me,url,txt,now.isoformat(),exp.isoformat()))
-        conn.commit(); conn.close(); return jsonify({"ok":True})
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"ok":False,"error":str(e)}),500
+    f=request.files.get('media'); url=''
+    if f and f.filename: url = upload_to_cloud(f)
+    conn=get_conn(); c=conn.cursor()
+    c.execute("INSERT INTO stories(username,image,created) VALUES(?,?,?)",(me,url,time.time()))
+    conn.commit(); conn.close()
+    return jsonify({"ok":True})
 
 @app.route('/api/story/delete', methods=['POST'])
 def api_story_delete():
@@ -754,18 +750,16 @@ def api_story_reply():
     c.execute("INSERT INTO notifications (username,type,from_user,text,created_at) VALUES (%s,%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO notifications (username,type,from_user,text,created_at) VALUES (?,?,?,?,?)", (to,'story_reply',me,f'Replied to your story: {txt}',datetime.now().isoformat()))
     conn.commit(); conn.close(); return jsonify({"ok":True})
 
-@app.route('/api/profile/pic', methods=['POST'])
-def api_profile_pic():
+@app.route('/api/avatar', methods=['POST'])
+def api_avatar():
     me=session.get('username')
-    try:
-        f=request.files.get('media')
-        if not f or not f.filename: return jsonify({"ok":False,"error":"no file"}),400
-        import uuid; ext=f.filename.rsplit('.',1)[-1].lower() if '.' in f.filename else 'jpg'; name='pic_'+me+'_'+str(uuid.uuid4())[:6]+'.'+ext; os.makedirs('static/uploads',exist_ok=True); path=os.path.join('static/uploads',name); f.save(path); url='/'+path
+    f=request.files.get('media')
+    if f and f.filename:
+        url = upload_to_cloud(f)
         conn=get_conn(); c=conn.cursor()
-        c.execute("UPDATE profiles SET pic_url=%s WHERE username=%s" if USE_POSTGRES else "UPDATE profiles SET pic_url=? WHERE username=?", (url,me)); conn.commit(); conn.close(); return jsonify({"ok":True,"url":url})
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"ok":False,"error":str(e)}),500
+        c.execute("UPDATE users SET avatar=? WHERE username=?",(url,me))
+        conn.commit(); conn.close()
+    return jsonify({"ok":True})
 
 @app.route('/api/messages')
 def api_messages():
