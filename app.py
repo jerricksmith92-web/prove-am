@@ -1,8 +1,23 @@
-import os
-from flask import Flask, request, jsonify, session, render_template_string, redirect, send_from_directory
-from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime, timedelta
-import sqlite3, traceback
+import os, uuid
+UPLOAD_FOLDER = "static/uploads"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+def upload_to_cloud(file_storage):
+    try:
+        import cloudinary.uploader
+        if os.getenv("CLOUDINARY_CLOUD_NAME"):
+            r = cloudinary.uploader.upload(file_storage, resource_type="auto", folder="proveam")
+            return r.get("secure_url")
+    except Exception as e:
+        print(f"Cloud err {e}")
+    try:
+        fname = f"{uuid.uuid4().hex}_{file_storage.filename}"
+        path = os.path.join(UPLOAD_FOLDER, fname)
+        file_storage.save(path)
+        return f"/static/uploads/{fname}"
+    except Exception as e:
+        print(f"Local err {e}")
+        return None
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET","prove-am-v35-all-in-one")
