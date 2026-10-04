@@ -1,4 +1,9 @@
 import os, uuid
+from flask import Flask, request, jsonify, session, redirect, url_for, render_template
+from flask_cors import CORS
+import psycopg2
+from werkzeug.security import generate_password_hash, check_password_hash
+
 UPLOAD_FOLDER = "static/uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
