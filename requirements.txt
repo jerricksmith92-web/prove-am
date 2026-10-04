@@ -1,5 +1,6 @@
 Flask
-psycopg2-binary==2.9.10
-Werkzeug
-gunicorn
+flask-cors
+psycopg2-binary
 cloudinary
+gunicorn
+Werkzeug
