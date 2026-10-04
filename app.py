@@ -769,44 +769,32 @@ def api_avatar():
 @app.route('/api/friend/request', methods=['POST'])
 def api_friend_request():
     me = session.get('username')
-    if not me: return jsonify({'error':'not logged'}),401
-    to_user = request.json.get('to_user')
-    if not to_user or to_user == me: return jsonify({'error':'invalid'}),400
+    if not me:
+        return jsonify({'error': 'not logged in'}), 401
+    data = request.get_json() or {}
+    to_user = data.get('to_user')
+    if not to_user or to_user == me:
+        return jsonify({'error': 'invalid user'}), 400
     conn = get_conn(); c = conn.cursor()
     if USE_POSTGRES:
-        c.execute("SELECT id FROM friend_requests WHERE (from_user=%s AND to_user=%s) OR (from_user=%s AND to_user=%s)", (me,to_user,to_user,me))
+        c.execute("SELECT id FROM friend_requests WHERE from_user=%s AND to_user=%s", (me, to_user))
     else:
-        c.execute("SELECT id FROM friend_requests WHERE (from_user=? AND to_user=?) OR (from_user=? AND to_user=?)", (me,to_user,to_user,me))
+        c.execute("SELECT id FROM friend_requests WHERE from_user=? AND to_user=?", (me, to_user))
     if c.fetchone():
         conn.close()
-        return jsonify({'status':'already exists'})
+        return jsonify({'status': 'already exists'})
     if USE_POSTGRES:
-        c.execute("INSERT INTO friend_requests (from_user,to_user,status) VALUES (%s,%s,'pending')", (me,to_user))
+        c.execute("INSERT INTO friend_requests (from_user,to_user,status) VALUES (%s,%s,'pending')", (me, to_user))
     else:
-        c.execute("INSERT INTO friend_requests (from_user,to_user,status) VALUES (?,'pending')", (me,to_user)) # if 3 cols use this
-        # If above fails, use: INSERT INTO friend_requests (from_user,to_user,status) VALUES (?,?,?)
-    try:
-        if USE_POSTGRES:
-            pass
-        else:
-            c.execute("INSERT INTO friend_requests (from_user,to_user,status) VALUES (?,?,?)", (me,to_user,'pending'))
-    except:
-        pass
-    # Final safe insert for both DBs
-    try:
-        if USE_POSTGRES:
-            c.execute("INSERT INTO friend_requests (from_user,to_user,status) VALUES (%s,%s,%s) ON CONFLICT DO NOTHING", (me,to_user,'pending'))
-        else:
-            c.execute("INSERT OR IGNORE INTO friend_requests (from_user,to_user,status) VALUES (?,?,?)", (me,to_user,'pending'))
-    except:
-        pass
+        c.execute("INSERT INTO friend_requests (from_user,to_user,status) VALUES (?,?, 'pending')", (me, to_user))
     conn.commit(); conn.close()
-    return jsonify({'status':'sent'})
+    return jsonify({'status': 'sent'})
 
 @app.route('/api/friend/list_requests', methods=['GET'])
 def api_friend_list_requests():
     me = session.get('username')
-    if not me: return jsonify([]),401
+    if not me:
+        return jsonify([]), 401
     conn = get_conn(); c = conn.cursor()
     if USE_POSTGRES:
         c.execute("SELECT id,from_user FROM friend_requests WHERE to_user=%s AND status='pending'", (me,))
@@ -814,63 +802,70 @@ def api_friend_list_requests():
         c.execute("SELECT id,from_user FROM friend_requests WHERE to_user=? AND status='pending'", (me,))
     rows = c.fetchall()
     conn.close()
-    return jsonify([{'id':r[0],'from_user':r[1]} for r in rows])
+    return jsonify([{'id': r[0], 'from_user': r[1]} for r in rows])
 
 @app.route('/api/friend/approve', methods=['POST'])
 def api_friend_approve():
     me = session.get('username')
-    if not me: return jsonify({'error':'not logged'}),401
-    req_id = request.json.get('id')
+    if not me:
+        return jsonify({'error': 'not logged in'}), 401
+    data = request.get_json() or {}
+    req_id = data.get('id')
     conn = get_conn(); c = conn.cursor()
     if USE_POSTGRES:
         c.execute("UPDATE friend_requests SET status='accepted' WHERE id=%s AND to_user=%s", (req_id, me))
     else:
         c.execute("UPDATE friend_requests SET status='accepted' WHERE id=? AND to_user=?", (req_id, me))
     conn.commit(); conn.close()
-    return jsonify({'status':'accepted'})
+    return jsonify({'status': 'accepted'})
 
 @app.route('/api/friend/decline', methods=['POST'])
 def api_friend_decline():
     me = session.get('username')
-    if not me: return jsonify({'error':'not logged'}),401
-    req_id = request.json.get('id')
+    if not me:
+        return jsonify({'error': 'not logged in'}), 401
+    data = request.get_json() or {}
+    req_id = data.get('id')
     conn = get_conn(); c = conn.cursor()
     if USE_POSTGRES:
         c.execute("DELETE FROM friend_requests WHERE id=%s AND to_user=%s", (req_id, me))
     else:
         c.execute("DELETE FROM friend_requests WHERE id=? AND to_user=?", (req_id, me))
     conn.commit(); conn.close()
-    return jsonify({'status':'declined'})
+    return jsonify({'status': 'declined'})
 
 @app.route('/api/friend/my_friends', methods=['GET'])
 def api_my_friends():
     me = session.get('username')
-    if not me: return jsonify([]),401
+    if not me:
+        return jsonify([]), 401
     conn = get_conn(); c = conn.cursor()
     if USE_POSTGRES:
-        c.execute("SELECT from_user,to_user FROM friend_requests WHERE status='accepted' AND (from_user=%s OR to_user=%s)", (me,me))
+        c.execute("SELECT from_user,to_user FROM friend_requests WHERE status='accepted'")
     else:
-        c.execute("SELECT from_user,to_user FROM friend_requests WHERE status='accepted' AND (from_user=? OR to_user=?)", (me,me))
+        c.execute("SELECT from_user,to_user FROM friend_requests WHERE status='accepted'")
     rows = c.fetchall()
     friends = []
-    for f,t in rows:
-        friends.append(t if f==me else f)
+    for f, t in rows:
+        if f == me or t == me:
+            friends.append(t if f == me else f)
     conn.close()
     return jsonify(list(set(friends)))
-import time
 
 @app.route('/api/status/ping', methods=['POST'])
 def api_status_ping():
     me = session.get('username')
-    if not me: return jsonify({'ok':False}),401
+    if not me:
+        return jsonify({'ok': False}), 401
+    import time
     now = time.time()
     conn = get_conn(); c = conn.cursor()
     if USE_POSTGRES:
-        c.execute("INSERT INTO user_status (username,online,last_seen) VALUES (%s,1,%s) ON CONFLICT (username) DO UPDATE SET online=1, last_seen=%s", (me,now,now))
+        c.execute("INSERT INTO user_status (username,last_seen) VALUES (%s,%s) ON CONFLICT (username) DO UPDATE SET last_seen=%s", (me, now, now))
     else:
-        c.execute("INSERT OR REPLACE INTO user_status (username,online,last_seen) VALUES (?,?,?)", (me,1,now))
+        c.execute("INSERT OR REPLACE INTO user_status (username,last_seen) VALUES (?,?)", (me, now))
     conn.commit(); conn.close()
-    return jsonify({'ok':True})
+    return jsonify({'ok': True})
 
 @app.route('/api/status/offline', methods=['POST'])
 def api_status_offline():
