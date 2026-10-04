@@ -634,21 +634,13 @@ def api_post():
         txt=request.form.get('text','')[:500]
         f=request.files.get('media'); url=''
         if f and f.filename and f.filename!='':
-            ext=f.filename.rsplit('.',1)[-1].lower()
             try:
                 import cloudinary, cloudinary.uploader
                 cloudinary.config(cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME'), api_key=os.environ.get('CLOUDINARY_API_KEY'), api_secret=os.environ.get('CLOUDINARY_API_SECRET'))
                 r=cloudinary.uploader.upload(f, resource_type="auto")
                 url=r.get('secure_url','')
             except Exception as e:
-                print(f"CLOUD FAIL {e}")
-                import uuid, os
-                from werkzeug.utils import secure_filename
-                name=str(uuid.uuid4())[:8]+'.'+ext
-                lp=os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(name))
-                os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-                f.seek(0); f.save(lp)
-                url=f"static/uploads/{name}"
+                print(f"CLOUD FAIL {e}"); url=''
         conn=sqlite3.connect(DB); c=conn.cursor()
         c.execute("INSERT INTO posts(username,text,image,created) VALUES(?,?,?,?)",(me,txt,url,time.time()))
         conn.commit(); conn.close()
