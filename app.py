@@ -950,12 +950,74 @@ def api_unread_count():
     conn.close()
     return jsonify({r[0]:r[1] for r in rows})
 
-@app.route('/api/messages')
+@app.route('/api/messages', methods=['GET','POST'])
 def api_messages():
-    me=session.get('username'); other=request.args.get('with',''); conn=get_conn(); c=conn.cursor()
-    c.execute("SELECT id,sender,text,media_url FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s) ORDER BY id ASC" if USE_POSTGRES else "SELECT id,sender,text,media_url FROM messages WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?) ORDER BY id ASC", (me,other,other,me))
-    rows=c.fetchall(); conn.close()
-    return jsonify([{"id":r[0],"sender":r[1],"text":r[2],"media_url":r[3]} for r in rows])
+    me = session.get('username')
+    if not me:
+        return jsonify({'error':'not logged'}),401
+    conn = get_conn(); c = conn.cursor()
+
+    if request.method == 'GET':
+        other = request.args.get('user')
+        if not other:
+            conn.close()
+            return jsonify([])
+        if USE_POSTGRES:
+            try:
+                c.execute("SELECT id,sender,to_user,message,media_url,reply_to,read, timestamp FROM messages WHERE (sender=%s AND to_user=%s) OR (sender=%s AND to_user=%s) ORDER BY id ASC", (me,other,other,me))
+            except:
+                c.execute("SELECT id,sender,to_user,message,media_url,reply_to,read FROM messages WHERE (sender=%s AND to_user=%s) OR (sender=%s AND to_user=%s) ORDER BY id ASC", (me,other,other,me))
+        else:
+            try:
+                c.execute("SELECT id,sender,to_user,message,media_url,reply_to,read,timestamp FROM messages WHERE (sender=? AND to_user=?) OR (sender=? AND to_user=?) ORDER BY id ASC", (me,other,other,me))
+            except:
+                c.execute("SELECT id,sender,to_user,message,media_url,reply_to,read FROM messages WHERE (sender=? AND to_user=?) OR (sender=? AND to_user=?) ORDER BY id ASC", (me,other,other,me))
+        rows = c.fetchall()
+        conn.close()
+        out = []
+        for r in rows:
+            # r = id, sender, to_user, message, media_url, reply_to, read, [timestamp]
+            out.append({
+                'id': r[0],
+                'sender': r[1],
+                'to_user': r[2],
+                'message': r[3] if len(r)>3 else '',
+                'media_url': r[4] if len(r)>4 else None,
+                'reply_to': r[5] if len(r)>5 else None,
+                'read': r[6] if len(r)>6 else 0,
+                'timestamp': r[7] if len(r)>7 else None
+            })
+        return jsonify(out)
+
+    else: # POST - send message
+        data = request.get_json() or {}
+        to_user = data.get('to_user')
+        msg = data.get('message','')
+        media_url = data.get('media_url')
+        reply_to = data.get('reply_to') # <-- swipe reply id
+        if not to_user:
+            conn.close()
+            return jsonify({'error':'no to_user'}),400
+
+        if USE_POSTGRES:
+            try:
+                c.execute("INSERT INTO messages (sender,to_user,message,media_url,reply_to,read) VALUES (%s,%s,%s,%s,%s,0)", (me,to_user,msg,media_url,reply_to))
+            except Exception as e:
+                # fallback if columns missing
+                try:
+                    c.execute("INSERT INTO messages (sender,to_user,message,media_url,reply_to,read,timestamp) VALUES (%s,%s,%s,%s,%s,0,%s)", (me,to_user,msg,media_url,reply_to,time.time()))
+                except:
+                    c.execute("INSERT INTO messages (sender,to_user,message) VALUES (%s,%s,%s)", (me,to_user,msg))
+        else:
+            try:
+                c.execute("INSERT INTO messages (sender,to_user,message,media_url,reply_to,read) VALUES (?,?,?,?,?,0)", (me,to_user,msg,media_url,reply_to))
+            except:
+                try:
+                    c.execute("INSERT INTO messages (sender,to_user,message,media_url,reply_to,read,timestamp) VALUES (?,?,?,?,?,0,?)", (me,to_user,msg,media_url,reply_to,time.time()))
+                except:
+                    c.execute("INSERT INTO messages (sender,to_user,message) VALUES (?,?,?)", (me,to_user,msg))
+        conn.commit(); conn.close()
+        return jsonify({'status':'sent'})
 
 @app.route('/api/send', methods=['POST'])
 def api_send():
