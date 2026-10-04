@@ -673,6 +673,7 @@ def api_posts():
 
 @app.route('/api/post', methods=['POST'])
 def api_post():
+    try:
     me=session.get('username')
     if not me: return jsonify({"ok":False})
     txt=request.form.get('text','')[:500]
