@@ -64,25 +64,29 @@ def init_db():
         c.execute("CREATE TABLE IF NOT EXISTS story_views (story_id INT, viewer TEXT, PRIMARY KEY(story_id,viewer))")
         c.execute("CREATE TABLE IF NOT EXISTS friends (id SERIAL PRIMARY KEY, sender TEXT, receiver TEXT, status TEXT, created_at TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS notifications (id SERIAL PRIMARY KEY, username TEXT, type TEXT, from_user TEXT, text TEXT, created_at TEXT, is_read INT DEFAULT 0)")
-        c.execute("CREATE TABLE IF NOT EXISTS friend_requests (id SERIAL PRIMARY KEY, from_user TEXT, to_user TEXT, status TEXT DEFAULT 'pending')")
-        c.execute("CREATE TABLE IF NOT EXISTS user_status (username TEXT PRIMARY KEY, online INTEGER, last_seen REAL)")
-    try: 
-        c.execute("ALTER TABLE messages ADD COLUMN read INTEGER DEFAULT 0")
-    except: pass
-    try: 
-        c.execute("ALTER TABLE messages ADD COLUMN reply_to INTEGER DEFAULT 0")
-    except: pass
-
-        c.execute("CREATE TABLE IF NOT EXISTS friend_requests (id SERIAL PRIMARY KEY, from_user TEXT, to_user TEXT, status TEXT DEFAULT 'pending')")
-        c.execute("CREATE TABLE IF NOT EXISTS user_status (username TEXT PRIMARY KEY, online INTEGER, last_seen REAL)")
-    try: 
-        c.execute("ALTER TABLE messages ADD COLUMN read INTEGER DEFAULT 0")
-    except: pass
-    try: 
-        c.execute("ALTER TABLE messages ADD COLUMN reply_to INTEGER DEFAULT 0")
-    except: pass
-        c.execute("CREATE TABLE IF NOT EXISTS auth (username TEXT PRIMARY KEY, password TEXT, created_at TEXT)")
-        c.execute("CREATE TABLE IF NOT EXISTS profiles (username TEXT PRIMARY KEY, pic_url TEXT, bio TEXT, last_seen TEXT)")
+    c.execute("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, password TEXT)")
+    c.execute("CREATE TABLE IF NOT EXISTS friend_requests (id SERIAL PRIMARY KEY, from_user TEXT, to_user TEXT, status TEXT DEFAULT 'pending')")
+    try:
+        c.execute("ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_url TEXT")
+    except:
+        pass
+    try:
+        c.execute("ALTER TABLE messages ADD COLUMN IF NOT EXISTS receiver TEXT")
+    except:
+        pass
+    try:
+        c.execute("ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender TEXT")
+    except:
+        pass
+    try:
+        c.execute("ALTER TABLE messages ADD COLUMN IF NOT EXISTS created_at TEXT")
+    except:
+        pass
+    try:
+        c.execute("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS pic_url TEXT")
+    except:
+        pass
+    c.execute("CREATE TABLE IF NOT EXISTS stories (id SERIAL PRIMARY KEY, user_id TEXT, media_url TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
         c.execute("CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, text TEXT, media_url TEXT, created_at TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS post_likes (post_id INT, username TEXT, PRIMARY KEY(post_id,username))")
         c.execute("CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INT, username TEXT, text TEXT, created_at TEXT)")
