@@ -674,18 +674,17 @@ def api_posts():
 @app.route('/api/post', methods=['POST'])
 def api_post():
     try:
-    me=session.get('username')
-    if not me: return jsonify({"ok":False})
-    txt=request.form.get('text','')[:500]
-    f=request.files.get('media'); url=''
-    if f and f.filename: url = upload_to_cloud(f)
-    conn=get_conn(); c=conn.cursor()
-    c.execute("INSERT INTO posts(username,text,image,created) VALUES(?,?,?,?)",(me,txt,url,time.time()))
-    conn.commit(); conn.close()
-    return jsonify({"ok":True})
-
+        me=session.get('username')
+        if not me: return jsonify({"ok":False})
+        txt=request.form.get('text','')[:500]
+        f=request.files.get('media'); url=''
+        if f and f.filename: url = upload_to_cloudinary(f)
+        conn=get_conn(); c=conn.cursor()
+        c.execute("INSERT INTO posts(username, text, media_url) VALUES (?,?,?)",(me, txt, url))
+        conn.commit(); conn.close()
+        return jsonify({"ok":True})
     except Exception as e:
-        print(f"POST ERR {e}"); return jsonify({"ok":False,"error":str(e)})
+        print(f"POST ERR {e}"); return jsonify({"ok":False, "err":str(e)}), 500
 
 @app.route('/api/post/delete', methods=['POST'])
 def api_post_delete():
