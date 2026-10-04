@@ -51,6 +51,32 @@ def nuclear_repair():
     print("REPAIR DONE")
 
 def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    
+    c.execute("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, password TEXT)")
+    c.execute("CREATE TABLE IF NOT EXISTS friend_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, from_user TEXT, to_user TEXT, status TEXT DEFAULT 'pending')")
+    c.execute("CREATE TABLE IF NOT EXISTS user_status (username TEXT PRIMARY KEY, online INTEGER, last_seen REAL)")
+    c.execute("CREATE TABLE IF NOT EXISTS profiles (username TEXT PRIMARY KEY, pic_url TEXT, bio TEXT, last_seen TEXT)")
+    c.execute("CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, text TEXT, media_url TEXT, created_at TEXT)")
+    c.execute("CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, sender TEXT, receiver TEXT, message TEXT, timestamp REAL, read INTEGER DEFAULT 0, reply_to INTEGER DEFAULT 0, media_url TEXT)")
+
+    # Safe column upgrades - DO NOT use IF NOT EXISTS here
+    for sql in [
+        "ALTER TABLE messages ADD COLUMN read INTEGER DEFAULT 0",
+        "ALTER TABLE messages ADD COLUMN reply_to INTEGER DEFAULT 0",
+        "ALTER TABLE messages ADD COLUMN media_url TEXT",
+        "ALTER TABLE messages ADD COLUMN receiver TEXT"
+    ]:
+        try:
+            c.execute(sql)
+        except:
+            pass
+
+    conn.commit()
+    conn.close()
+    
+def init_db():
     nuclear_repair()
     conn=get_conn(); c=conn.cursor()
     if USE_POSTGRES:
