@@ -772,6 +772,7 @@ def api_avatar():
         c.execute("UPDATE users SET avatar=? WHERE username=?",(url,me))
         conn.commit(); conn.close()
     return jsonify({"ok":True})
+
 @app.route('/api/friend/request', methods=['POST'])
 def api_friend_request():
     me = session.get('username')
@@ -863,6 +864,64 @@ def api_my_friends():
         friends.append(t if f==me else f)
     conn.close()
     return jsonify(list(set(friends)))
+import time
+
+@app.route('/api/status/ping', methods=['POST'])
+def api_status_ping():
+    me = session.get('username')
+    if not me: return jsonify({'ok':False}),401
+    now = time.time()
+    conn = get_conn(); c = conn.cursor()
+    if USE_POSTGRES:
+        c.execute("INSERT INTO user_status (username,online,last_seen) VALUES (%s,1,%s) ON CONFLICT (username) DO UPDATE SET online=1, last_seen=%s", (me,now,now))
+    else:
+        c.execute("INSERT OR REPLACE INTO user_status (username,online,last_seen) VALUES (?,?,?)", (me,1,now))
+    conn.commit(); conn.close()
+    return jsonify({'ok':True})
+
+@app.route('/api/status/offline', methods=['POST'])
+def api_status_offline():
+    me = session.get('username')
+    if not me: return jsonify({'ok':False}),401
+    now = time.time()
+    conn = get_conn(); c = conn.cursor()
+    if USE_POSTGRES:
+        c.execute("UPDATE user_status SET online=0, last_seen=%s WHERE username=%s", (now,me))
+    else:
+        c.execute("UPDATE user_status SET online=0, last_seen=? WHERE username=?", (now,me))
+    conn.commit(); conn.close()
+    return jsonify({'ok':True})
+
+@app.route('/api/status/get', methods=['GET'])
+def api_status_get():
+    me = session.get('username')
+    if not me: return jsonify({}),401
+    other = request.args.get('user')
+    conn = get_conn(); c = conn.cursor()
+    now = time.time()
+    # Auto set offline if last_seen > 60 seconds ago
+    if USE_POSTGRES:
+        c.execute("UPDATE user_status SET online=0 WHERE last_seen < %s", (now-60,))
+        if other:
+            c.execute("SELECT online,last_seen FROM user_status WHERE username=%s", (other,))
+            r = c.fetchone()
+        else:
+            c.execute("SELECT username,online,last_seen FROM user_status")
+            r = c.fetchall()
+    else:
+        c.execute("UPDATE user_status SET online=0 WHERE last_seen <?", (now-60,))
+        if other:
+            c.execute("SELECT online,last_seen FROM user_status WHERE username=?", (other,))
+            r = c.fetchone()
+        else:
+            c.execute("SELECT username,online,last_seen FROM user_status")
+            r = c.fetchall()
+    conn.commit(); conn.close()
+    if other:
+        if not r: return jsonify({'online':0,'last_seen':0})
+        return jsonify({'online':r[0],'last_seen':r[1]})
+    else:
+        return jsonify({row[0]: {'online':row[1],'last_seen':row[2]} for row in r})
 @app.route('/api/messages')
 def api_messages():
     me=session.get('username'); other=request.args.get('with',''); conn=get_conn(); c=conn.cursor()
