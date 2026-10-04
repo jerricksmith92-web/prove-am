@@ -922,6 +922,34 @@ def api_status_get():
         return jsonify({'online':r[0],'last_seen':r[1]})
     else:
         return jsonify({row[0]: {'online':row[1],'last_seen':row[2]} for row in r})
+
+@app.route('/api/messages/read', methods=['POST'])
+def api_messages_read():
+    me = session.get('username')
+    if not me: return jsonify({'ok':False}),401
+    other = request.json.get('from_user')
+    if not other: return jsonify({'ok':False}),400
+    conn = get_conn(); c = conn.cursor()
+    if USE_POSTGRES:
+        c.execute("UPDATE messages SET read=1 WHERE sender=%s AND to_user=%s AND read=0", (other, me))
+    else:
+        c.execute("UPDATE messages SET read=1 WHERE sender=? AND to_user=? AND read=0", (other, me))
+    conn.commit(); conn.close()
+    return jsonify({'ok':True})
+
+@app.route('/api/messages/unread_count', methods=['GET'])
+def api_unread_count():
+    me = session.get('username')
+    if not me: return jsonify({}),401
+    conn = get_conn(); c = conn.cursor()
+    if USE_POSTGRES:
+        c.execute("SELECT sender, COUNT(*) FROM messages WHERE to_user=%s AND read=0 GROUP BY sender", (me,))
+    else:
+        c.execute("SELECT sender, COUNT(*) FROM messages WHERE to_user=? AND read=0 GROUP BY sender", (me,))
+    rows = c.fetchall()
+    conn.close()
+    return jsonify({r[0]:r[1] for r in rows})
+
 @app.route('/api/messages')
 def api_messages():
     me=session.get('username'); other=request.args.get('with',''); conn=get_conn(); c=conn.cursor()
