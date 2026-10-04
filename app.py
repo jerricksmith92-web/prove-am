@@ -739,31 +739,19 @@ def api_stories():
     # get only last 24h stories from friends
     out=[]
     try:
-        if USE_POSTGRES:
-            c.execute("SELECT id,username,media_url,timestamp FROM stories WHERE username IN %s AND timestamp > %s ORDER BY timestamp DESC", (tuple(friends), cutoff))
-        else:
-            placeholders = ','.join(['?']*len(friends))
-            c.execute(f"SELECT id,username,media_url,timestamp FROM stories WHERE username IN ({placeholders}) AND timestamp >? ORDER BY timestamp DESC", (*list(friends), cutoff))
-        rows = c.fetchall()
+        c.execute("SELECT id,username,media_url,created_at FROM stories")
+        rows=c.fetchall()
         for r in rows:
-            out.append({'id':r[0],'username':r[1],'media_url':r[2],'timestamp':r[3]})
+            try:
+                if float(r[3]) < cutoff:
+                    continue
+            except:
+                pass
+            out.append({'id':r[0], 'username':r[1], 'media_url':r[2], 'created_at':r[3]})
     except Exception as e:
-        try:
-            placeholders = ','.join(['?']*len(friends)) if not USE_POSTGRES else None
-            if USE_POSTGRES:
-                c.execute("SELECT id,username,media_url,timestamp FROM stories WHERE username IN %s ORDER BY timestamp DESC", (tuple(friends),))
-            else:
-                c.execute(f"SELECT id,username,media_url,timestamp FROM stories WHERE username IN ({placeholders}) ORDER BY timestamp DESC", tuple(friends))
-            rows = c.fetchall()
-            for r in rows:
-                try:
-                    if float(r[3]) < cutoff: continue
-                except: pass
-                out.append({'id':r[0],'username':r[1],'media_url':r[2],'timestamp':r[3]})
-        except: pass
-
+        print(f"STORIES ERR {e}")
     conn.close()
-  return jsonify(out)
+    return jsonify(out)
 
 @app.route('/api/story', methods=['POST'])
 def api_story():
