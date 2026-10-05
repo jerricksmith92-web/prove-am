@@ -8,17 +8,24 @@ UPLOAD_FOLDER = "static/uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def upload_to_cloud(file_storage):
+    # Try Cloudinary first
     try:
         import cloudinary.uploader
         if os.getenv("CLOUDINARY_CLOUD_NAME"):
-            r = cloudinary.uploader.upload(file_storage, resource_type="auto", folder="proveam")
+            file_storage.stream.seek(0)
+            r = cloudinary.uploader.upload(file_storage)
+            print(f"Cloudinary OK: {r.get('secure_url')}")
             return r.get("secure_url")
     except Exception as e:
         print(f"Cloud err {e}")
+
+    # Fallback to local - THIS IS THE FIX
     try:
+        file_storage.stream.seek(0)  # <-- This line was missing!
         fname = uuid.uuid4().hex + ".jpg"
         path = os.path.join(UPLOAD_FOLDER, fname)
         file_storage.save(path)
+        print(f"Local OK: {path}")
         return "/static/uploads/" + fname
     except Exception as e:
         print(f"Local err {e}")
