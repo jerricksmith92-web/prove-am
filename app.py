@@ -247,7 +247,22 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,sans-serif
 .tabs{position:fixed;top:50px;left:0;right:0;background:var(--card);display:flex;z-index:99;border-bottom:1px solid var(--border);height:50px}
 .tab{flex:1;display:flex;align-items:center;justify-content:center;font-weight:bold;color:#888;cursor:pointer;border-bottom:3px solid transparent;font-size:13px}
 .tab.active{color:var(--text);border-color:var(--text)}
-.content{margin-top:100px;padding-bottom:160px}
+.content{margin-top:100px;padding-bottom:160px}/* Stable chat screen: only the messages scroll; the Back button/header stays visible. */
+.chat-page{touch-action:pan-y}
+.chat-screen{position:fixed;top:100px;left:0;right:0;bottom:0;background:var(--bg);z-index:98;display:flex;flex-direction:column;overflow:hidden}
+.chat-screen .chat-header{position:sticky;top:0;flex:0 0 auto;background:var(--card);border-bottom:1px solid var(--border);padding:10px;z-index:10;display:flex;align-items:center;gap:8px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.chat-screen .chat-header .chat-back{flex:1;text-align:left;background:var(--sec);padding:9px 10px;border-radius:10px;border:1px solid var(--border);font-weight:800;color:var(--text);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-screen .chat-header .chat-search-btn{flex:0 0 auto}
+.chat-screen #msgs{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:10px 10px 130px!important}
+.chat-screen .chat-bar{position:absolute;bottom:0;z-index:20}
+.chat-page.swiping{overflow:hidden}
+@media (max-width:600px){
+  .chat-screen{top:100px}
+  .chat-screen .chat-header{padding:8px}
+  .chat-screen .chat-header .chat-back{font-size:14px}
+}
+/* Main page swipe navigation */
+body{overscroll-behavior-x:none}
 .story-bar{display:flex;gap:12px;overflow-x:auto;padding:12px;background:var(--card);min-height:80px}
 .s-item{text-align:center;min-width:68px;cursor:pointer}
 .s-ring{width:62px;height:62px;border-radius:50%;background:#000;display:flex;align-items:center;justify-content:center;color:#fff;border:3px solid #ffcc00;overflow:hidden;position:relative}
@@ -331,7 +346,11 @@ input,textarea{width:100%;background:var(--sec);border:none;border-radius:12px;p
 </div>
 <div id=postsList></div>
 </div>
-<div id=chatDiv style=display:none><input id=searchChat placeholder="Search friends..." oninput=filterChat()><div id=chatUsers></div><div id=chatBox style=display:none></div></div>
+<div id=chatDiv style="display:none" class="chat-page">
+<input id=searchChat placeholder="Search friends..." oninput=filterChat()>
+<div id=chatUsers></div>
+<div id=chatBox style="display:none" class="chat-screen"></div>
+</div>
 <div id=searchDiv style=display:none class=card>
 <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
 <h3 style="margin:0">🔍 Search Users</h3>
@@ -538,14 +557,22 @@ async function openChat(username){
   fetch('/api/messages/mark_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({with:username})});
   let statusRes=await fetch('/api/status/get?user='+username); let st=await statusRes.json();
   let online=st.online?'<span class=onlineDot></span> online':'<span class=offlineDot></span> offline';
-  box.innerHTML=`<div style="padding:10px"><button onclick="backChat()" style="background:var(--sec);padding:8px;border-radius:8px;border:1px solid var(--border)">← ${username} ${online}</button><button onclick="searchConversation()" class=small-btn style="float:right">🔎 Search</button></div><div id=replyPreview style="display:none;background:#fff8e1;padding:8px;margin:8px;border-radius:10px;border-left:3px solid #ffcc00"></div><div id=typingStatus class=typing></div><div id=msgs style="padding:10px;padding-bottom:130px"></div><div class=chat-bar><input id=chatText class=pill placeholder="Write message..." /><input type=file id=chatFileHidden accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" multiple style="display:none"><button class=sticker onclick="startRecording()">🎤</button><div class=sticker onclick="document.getElementById('chatFileHidden').click()">📎</div><button class=yellow onclick=sendMsg()>Send</button></div>`;
+  box.innerHTML=`<div class="chat-header"><button onclick="backChat()" class="chat-back">← ${username} ${online}</button><button onclick="searchConversation()" class="small-btn chat-search-btn">🔎 Search</button></div><div id=replyPreview style="display:none;background:#fff8e1;padding:8px;margin:8px;border-radius:10px;border-left:3px solid #ffcc00;flex:0 0 auto"></div><div id=typingStatus class=typing style="flex:0 0 auto"></div><div id=msgs></div><div class=chat-bar><input id=chatText class=pill placeholder="Write message..." /><input type=file id=chatFileHidden accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" multiple style="display:none"><button class=sticker onclick="startRecording()">🎤</button><div class=sticker onclick="document.getElementById('chatFileHidden').click()">📎</div><button class=yellow onclick=sendMsg()>Send</button></div>`;
   document.getElementById('chatFileHidden').addEventListener('change',function(e){let f=e.target.files[0]; if(f)selectedChatFile=f;});
   let ci=document.getElementById('chatText'); ci.addEventListener('input',()=>sendTyping());
   if(window.typingTimer)clearInterval(window.typingTimer); window.typingTimer=setInterval(pollTyping,2500);
   loadMsgs();
 }
 async function searchConversation(){if(!chatWith)return;let q=prompt('Search this conversation:');if(!q)return;let r=await fetch('/api/messages/search?with='+encodeURIComponent(chatWith)+'&q='+encodeURIComponent(q));let d=await r.json();alert(d.map(m=>(m.sender===curUser?'You':m.sender)+': '+m.text).join('\\n')||'No matching messages');}
-function backChat(){chatWith='';document.getElementById('chatBox').style.display='none';document.getElementById('chatUsers').style.display='block';document.getElementById('searchChat').style.display='block';loadChatUsers();}
+function backChat(){
+  chatWith='';
+  if(window.typingTimer){clearInterval(window.typingTimer);window.typingTimer=null;}
+  let box=document.getElementById('chatBox');
+  if(box){box.style.display='none';box.innerHTML='';}
+  let users=document.getElementById('chatUsers');if(users)users.style.display='block';
+  let search=document.getElementById('searchChat');if(search)search.style.display='block';
+  loadChatUsers();
+}
 
 async function sendMsg(){
   if(!chatWith){ alert('Please select a user first.'); return; }
@@ -607,7 +634,44 @@ let typingSendTimer=0;function sendTyping(){if(!chatWith)return;clearTimeout(typ
 async function pollTyping(){if(!chatWith)return;try{let d=await (await fetch('/api/typing?peer='+encodeURIComponent(chatWith))).json();let el=document.getElementById('typingStatus');if(el)el.innerText=d.typing?chatWith+' is typing…':'';}catch(e){}}
 let mediaRecorder=null,recordChunks=[];
 async function startRecording(){if(mediaRecorder&&mediaRecorder.state==='recording'){mediaRecorder.stop();return;}if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){alert('Voice recording is not supported by this browser');return;}try{let stream=await navigator.mediaDevices.getUserMedia({audio:true});mediaRecorder=new MediaRecorder(stream);recordChunks=[];mediaRecorder.ondataavailable=e=>{if(e.data.size)recordChunks.push(e.data)};mediaRecorder.onstop=async()=>{stream.getTracks().forEach(t=>t.stop());let blob=new Blob(recordChunks,{type:mediaRecorder.mimeType||'audio/webm'});let file=new File([blob],'voice-'+Date.now()+'.webm',{type:blob.type});let fd=new FormData();fd.append('receiver',chatWith);fd.append('text','');fd.append('media',file);fd.append('media_type','audio');let r=await fetch('/api/send',{method:'POST',body:fd});let d=await r.json();if(!d.ok)alert(d.error||'Could not send voice message');else loadMsgs();};mediaRecorder.start();alert('Recording... tap 🎤 again to stop');}catch(e){alert('Microphone permission was denied or unavailable');}}
-let swipeX=0;document.addEventListener('touchstart',e=>{if(e.target.closest('#msgs'))swipeX=e.touches[0].clientX},{passive:true});document.addEventListener('touchend',e=>{let el=e.target.closest('#msgs [data-reply-text]');if(el&&swipeX-e.changedTouches[0].clientX>70)setReply(el.dataset.replyText||'');swipeX=0},{passive:true});
+let swipeX=0,swipeY=0,swipeTarget=null,swipeStartedInsideMessages=false;
+document.addEventListener('touchstart',e=>{
+  if(!e.touches||!e.touches[0])return;
+  let t=e.target;
+  swipeX=e.touches[0].clientX;
+  swipeY=e.touches[0].clientY;
+  swipeTarget=t;
+  swipeStartedInsideMessages=!!t.closest('#msgs');
+},{passive:true});
+document.addEventListener('touchend',e=>{
+  if(!e.changedTouches||!e.changedTouches[0])return;
+  let endX=e.changedTouches[0].clientX,endY=e.changedTouches[0].clientY;
+  let dx=endX-swipeX,dy=endY-swipeY;
+  let absX=Math.abs(dx),absY=Math.abs(dy);
+
+  /* Inside a conversation: keep the existing swipe-right-to-reply behavior. */
+  if(swipeStartedInsideMessages){
+    let el=swipeTarget&&swipeTarget.closest('#msgs [data-reply-text]');
+    if(el&&swipeX-endX>70&&absX>absY)setReply(el.dataset.replyText||'');
+    swipeX=swipeY=0;swipeTarget=null;swipeStartedInsideMessages=false;
+    return;
+  }
+
+  /* Do not change pages while interacting with inputs, buttons, modals,
+     story bars, viewers, or other horizontally-scrollable controls. */
+  let blocked=swipeTarget&&swipeTarget.closest('input,textarea,button,a,select,[contenteditable="true"],.story-bar,.viewer,.profile-modal,.chat-screen');
+  if(!blocked && absX>=70 && absX>absY*1.25){
+    let current=document.querySelector('.tab.active');
+    let order=['stories','post','chat','search'];
+    let currentId=current?current.id.replace(/^t/,'').toLowerCase():'stories';
+    let i=order.indexOf(currentId);
+    if(i<0)i=0;
+    /* Swipe left = next page; swipe right = previous page. */
+    let next=dx<0?Math.min(order.length-1,i+1):Math.max(0,i-1);
+    if(next!==i)switchTab(order[next]);
+  }
+  swipeX=swipeY=0;swipeTarget=null;swipeStartedInsideMessages=false;
+},{passive:true});
 function setReply(t){replyToText=t;let p=document.getElementById('replyPreview');p.style.display='block';p.innerHTML=`Replying to: ${t} <span onclick="cancelReply()" style="float:right;cursor:pointer;color:red">✕</span>`;}
 function cancelReply(){replyToText='';document.getElementById('replyPreview').style.display='none';}
 async function searchUsers(){
