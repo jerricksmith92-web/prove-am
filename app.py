@@ -658,7 +658,22 @@ def api_like():
     except: pass
     conn.close(); return jsonify({"ok":True})
 
-
+@app.route('/api/users/search')
+def api_search_users():
+    me = session.get('username')
+    if not me:
+        return jsonify({"error": "Not logged in"}), 401
+    q = request.args.get('q', '').strip()
+    if not q:
+        return jsonify([])
+    conn = get_db()
+    c = conn.cursor()
+    # Fixed: added space between LIKE and?
+    c.execute("SELECT username, profile_pic FROM users WHERE LOWER(username) LIKE? AND username!=? LIMIT 30", (f"%{q.lower()}%", me))
+    rows = c.fetchall()
+    conn.close()
+    result = [{"username": r[0], "profile_pic": r[1] if len(r) > 1 else None} for r in rows]
+    return jsonify(result)
  
    
 @app.route('/api/comment', methods=['POST'])
