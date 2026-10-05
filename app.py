@@ -658,7 +658,39 @@ def api_like():
     except: pass
     conn.close(); return jsonify({"ok":True})
 
-
+@app.route('/api/search')
+def api_search():
+    me = session.get('username')
+    if not me:
+        return jsonify({"error": "Not logged in"}), 401
+    q = request.args.get('q', '').strip()
+    if not q:
+        return jsonify([])
+    conn = get_conn()
+    c = conn.cursor()
+    like = f"%{q.lower()}%"
+    try:
+        c.execute("SELECT username,pic_url FROM profiles WHERE LOWER(username) LIKE %s AND username!=%s LIMIT 30" if USE_POSTGRES else "SELECT username,pic_url FROM profiles WHERE LOWER(username) LIKE? AND username!=? LIMIT 30", (like, me))
+        rows = c.fetchall()
+    except Exception as e:
+        rows=[]
+    result=[]
+    for r in rows:
+        uname=r[0]; pic=r[1] or ""
+        status="none"
+        try:
+            c2q="SELECT sender,receiver,status FROM friends WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s)" if USE_POSTGRES else "SELECT sender,receiver,status FROM friends WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?)"
+            c.execute(c2q,(me,uname,uname,me))
+            fr=c.fetchone()
+            if fr:
+                s,r2,st=fr
+                if st=="accepted": status="friends"
+                elif s==me: status="pending_sent"
+                else: status="pending_received"
+        except: pass
+        result.append({"username":uname,"pic_url":pic,"profile_pic":pic,"friend_status":status})
+    conn.close()
+    return jsonify(result)
    
 @app.route('/api/comment', methods=['POST'])
 def api_comment():
