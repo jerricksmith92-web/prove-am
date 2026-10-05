@@ -655,11 +655,7 @@ def api_like():
         if c.fetchone(): c.execute("DELETE FROM post_likes WHERE post_id=%s AND username=%s" if USE_POSTGRES else "DELETE FROM post_likes WHERE post_id=? AND username=?", (pid,me))
         else: c.execute("INSERT INTO post_likes VALUES (%s,%s)" if USE_POSTGRES else "INSERT INTO post_likes VALUES (?,?)", (pid,me))
         conn.commit()
-    except: pass
-    conn.close(); return jsonify({"ok":True})
-   
-    @app.route('/api/users/search')
-def api_search_users():
+
     me=session.get('username')
     q=request.args.get('q','').strip()
     if not me or not q:
