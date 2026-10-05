@@ -284,7 +284,13 @@ input,textarea{width:100%;background:var(--sec);border:none;border-radius:12px;p
 .replyBox{border-left:3px solid #ffcc00;background:#fff8e1;padding:6px;border-radius:8px;font-size:12px;margin-bottom:4px;color:#000}.voice-audio{width:145px;height:30px;max-width:145px;vertical-align:middle;margin-top:5px}
 </style></head><body>
 <div class=top>
-<div class=logo><img src="/app-icon.jpg" alt="PROVE AM"><span>PROVE AM</span></div>
+<div class=logo style="gap:8px">
+<img src="/app-icon.jpg" alt="PROVE AM">
+<div style="display:flex;flex-direction:column;line-height:1.05">
+<span>PROVE AM</span>
+<small style="font-size:9px;color:#888;font-weight:800;margin-top:3px">OWNED BY JERRICK SMITH</small>
+</div>
+</div>
 <div style="display:flex;gap:10px;align-items:center">
 <button onclick="toggleLow()" id=lowBtn style="padding:5px 8px;font-size:11px;border:1px solid var(--border);background:var(--sec);color:var(--text);border-radius:8px">📶 Low: OFF</button>
 <div style="position:relative;cursor:pointer" onclick="openNotifs()">🔔<span id=notifCount class=notif-dot style="display:none">0</span></div>
@@ -327,7 +333,10 @@ input,textarea{width:100%;background:var(--sec);border:none;border-radius:12px;p
 </div>
 <div id=chatDiv style=display:none><input id=searchChat placeholder="Search friends..." oninput=filterChat()><div id=chatUsers></div><div id=chatBox style=display:none></div></div>
 <div id=searchDiv style=display:none class=card>
-<h3>🔍 Search Users</h3>
+<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+<h3 style="margin:0">🔍 Search Users</h3>
+<span style="font-size:10px;font-weight:900;color:#a88400;background:#fff7cc;padding:6px 9px;border-radius:12px;white-space:nowrap">PROVE AM • JERRICK SMITH</span>
+</div>
 <input id=searchUsersInput placeholder="Search username..." oninput="searchUsers()" style="background:var(--sec)">
 <div id=searchResults style="margin-top:10px"></div><div id=globalSearchResults style="margin-top:10px"></div>
 <h4 style="margin-top:20px">Friend Requests <span id=reqCount style="background:#ff4444;color:#fff;padding:2px 8px;border-radius:12px;font-size:11px">0</span></h4>
@@ -603,28 +612,62 @@ function setReply(t){replyToText=t;let p=document.getElementById('replyPreview')
 function cancelReply(){replyToText='';document.getElementById('replyPreview').style.display='none';}
 async function searchUsers(){
   let inp=document.getElementById('searchUsersInput');
-  let q=inp ? inp.value : '';
+  let q=inp ? inp.value.trim() : '';
   let box=document.getElementById('searchResults');
   if(!box) return;
-  if(!q.trim()){ box.innerHTML=''; return; }
-  box.innerHTML='Searching...';
+
+  box.innerHTML='Loading users...';
   try{
-    let r=await fetch('/api/search?q='+encodeURIComponent(q));
+    let r=await fetch('/api/search?q='+encodeURIComponent(q), {credentials:'same-origin'});
     let users=await r.json();
-    let h='';
+    if(!r.ok || !Array.isArray(users)){
+      box.innerHTML='Could not load users';
+      return;
+    }
+
+    let h='<div style="font-weight:900;font-size:16px;margin:12px 0 8px">All Users <span style="color:#888;font-size:12px;font-weight:600">('+users.length+')</span></div>';
+
     users.forEach(function(u){
-      
-      if(typeof curUser!=='undefined' && u.username==curUser) return;
       let s=u.friend_status||'none';
+      let isMe=(typeof curUser!=='undefined' && u.username==curUser);
       let btn='';
-      if(s=='none') btn='<button data-u="'+u.username+'" onclick="sendFriendReq(this.dataset.u)">Add</button>';
-      else if(s=='pending_sent') btn='<span>Requested</span>';
-      else if(s=='pending_received') btn='<button data-u="'+u.username+'" onclick="acceptFriend(this.dataset.u)">Accept</button>';
-      else btn='<span>Friends</span>';
-      h+='<div style="padding:8px;border-bottom:1px solid #eee;display:flex;align-items:center;gap:8px"><span style="cursor:pointer" data-user="'+u.username+'" onclick="viewProfile(this.dataset.user)">'+u.username+'</span><span style="margin-left:auto">'+btn+'</span></div>';
+
+      if(isMe){
+        btn='<span style="background:#ffcc00;color:#000;padding:5px 10px;border-radius:14px;font-size:12px;font-weight:800">You</span>';
+      }else if(s=='none'){
+        btn='<button class="friend-btn f-add" data-u="'+u.username+'" onclick="sendFriendReq(this.dataset.u)">Add</button>';
+      }else if(s=='pending_sent'){
+        btn='<span class="friend-btn f-pending">Requested</span>';
+      }else if(s=='pending_received'){
+        btn='<button class="friend-btn f-add" data-u="'+u.username+'" onclick="acceptFriend(this.dataset.u)">Accept</button>';
+      }else{
+        btn='<span class="friend-btn f-friends">✓ Friends</span>';
+      }
+
+      let pic=u.pic_url||u.profile_pic||'';
+      let avatar=pic
+        ? '<img src="'+pic+'" style="width:100%;height:100%;object-fit:cover">'
+        : (u.username||'?').charAt(0).toUpperCase();
+
+      h+='<div style="padding:10px 4px;border-bottom:1px solid #eee;display:flex;align-items:center;gap:10px">'+
+         '<div class="pic" style="width:42px;height:42px;flex-shrink:0;cursor:pointer" data-user="'+u.username+'" onclick="viewProfile(this.dataset.user)">'+avatar+'</div>'+
+         '<span style="cursor:pointer;font-weight:800" data-user="'+u.username+'" onclick="viewProfile(this.dataset.user)">'+u.username+'</span>'+
+         '<span style="margin-left:auto">'+btn+'</span>'+
+         '</div>';
     });
-    box.innerHTML=h||'No users found'; globalSearch(q);
-  }catch(e){ box.innerHTML='Error: '+e; }
+
+    box.innerHTML=h+(users.length?'':'<div style="color:#888;padding:8px 0">No registered users found.</div>');
+
+    // Keep public-post search available when the user actually types something.
+    if(q) globalSearch(q);
+    else {
+      let g=document.getElementById('globalSearchResults');
+      if(g) g.innerHTML='';
+    }
+  }catch(e){
+    console.error(e);
+    box.innerHTML='Error loading users. Please try again.';
+  }
 }
 async function globalSearch(q){let box=document.getElementById('globalSearchResults');if(!box)return;let r=await fetch('/api/global-search?q='+encodeURIComponent(q));let d=await r.json();let h='<h4>Posts</h4>';d.posts.forEach(p=>{h+=`<div class=card><b>${p.username}</b><br>${p.text||''}<br><small>${p.created_at||''}</small></div>`});box.innerHTML=h+(d.posts.length?'':'<small style="color:#888">No matching posts</small>');}
 
@@ -1025,19 +1068,18 @@ def api_search():
         if q:
             like = f"%{q.lower()}%"
             c.execute(
-                "SELECT username,pic_url FROM profiles WHERE LOWER(username) LIKE %s AND username!=%s ORDER BY LOWER(username) LIMIT 100"
+                "SELECT username,pic_url FROM profiles WHERE LOWER(username) LIKE %s ORDER BY LOWER(username) LIMIT 100"
                 if USE_POSTGRES
                 else
-                "SELECT username,pic_url FROM profiles WHERE LOWER(username) LIKE ? AND username!=? ORDER BY LOWER(username) LIMIT 100",
-                (like, me)
+                "SELECT username,pic_url FROM profiles WHERE LOWER(username) LIKE ? ORDER BY LOWER(username) LIMIT 100",
+                (like,)
             )
         else:
             c.execute(
-                "SELECT username,pic_url FROM profiles WHERE username!=%s ORDER BY LOWER(username) LIMIT 100"
+                "SELECT username,pic_url FROM profiles ORDER BY LOWER(username) LIMIT 100"
                 if USE_POSTGRES
                 else
-                "SELECT username,pic_url FROM profiles WHERE username!=? ORDER BY LOWER(username) LIMIT 100",
-                (me,)
+                "SELECT username,pic_url FROM profiles ORDER BY LOWER(username) LIMIT 100"
             )
         rows = c.fetchall()
     except Exception as e:
