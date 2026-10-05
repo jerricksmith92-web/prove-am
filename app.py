@@ -16,12 +16,17 @@ def upload_to_cloud(file_storage):
     except Exception as e:
         print(f"Cloud err {e}")
     try:
-        fname = f"{uuid.uuid4().hex}_{file_storage.filename}"
+        orig = getattr(file_storage, 'filename', 'file.jpg') or 'file.jpg'
+        ext = orig.rsplit('.', 1)[-1] if '.' in orig else 'jpg'
+        if len(ext) > 5 or '/' in ext or '\\' in ext:
+            ext = 'jpg'
+        fname = f"{uuid.uuid4().hex}.{ext.lower()}"
         path = os.path.join(UPLOAD_FOLDER, fname)
         file_storage.save(path)
         return f"/static/uploads/{fname}"
     except Exception as e:
         print(f"Local err {e}")
+        import traceback; traceback.print_exc()
         return None
 
 app = Flask(__name__)
