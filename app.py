@@ -249,11 +249,22 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,sans-serif
 .tab.active{color:var(--text);border-color:var(--text)}
 .content{margin-top:100px;padding-bottom:160px}/* Stable chat screen: only the messages scroll; the Back button/header stays visible. */
 .chat-page{touch-action:pan-y}
-.chat-screen{position:fixed;top:100px;left:0;right:0;bottom:0;background:var(--bg);z-index:98;display:flex;flex-direction:column;overflow:hidden}
+.chat-screen{position:fixed;top:100px;left:0;right:0;bottom:0;background:var(--bg);z-index:98;display:flex;flex-direction:column;overflow:hidden;min-height:0}
 .chat-screen .chat-header{position:sticky;top:0;flex:0 0 auto;background:var(--card);border-bottom:1px solid var(--border);padding:10px;z-index:10;display:flex;align-items:center;gap:8px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
 .chat-screen .chat-header .chat-back{flex:1;text-align:left;background:var(--sec);padding:9px 10px;border-radius:10px;border:1px solid var(--border);font-weight:800;color:var(--text);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chat-screen .chat-header .chat-search-btn{flex:0 0 auto}
-.chat-screen #msgs{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:10px 10px 130px!important}
+.chat-screen #msgs{
+  flex:1 1 auto;
+  height:0;
+  min-height:0;
+  overflow-y:scroll;
+  overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior-y:contain;
+  touch-action:pan-y;
+  padding:10px 10px 130px!important;
+  box-sizing:border-box;
+}
 .chat-screen .chat-bar{position:absolute;bottom:0;z-index:20}
 .chat-page.swiping{overflow:hidden}
 @media (max-width:600px){
@@ -653,6 +664,7 @@ document.addEventListener('touchend',e=>{
   if(swipeStartedInsideMessages){
     let el=swipeTarget&&swipeTarget.closest('#msgs [data-reply-text]');
     if(el&&swipeX-endX>70&&absX>absY)setReply(el.dataset.replyText||'');
+    /* Vertical movement belongs entirely to the message scroller. */
     swipeX=swipeY=0;swipeTarget=null;swipeStartedInsideMessages=false;
     return;
   }
