@@ -221,6 +221,8 @@ def create_perf_indexes():
         "CREATE INDEX IF NOT EXISTS idx_shares_post ON post_shares(post_id)",
         "CREATE INDEX IF NOT EXISTS idx_post_media_post ON post_media(post_id)",
         "CREATE INDEX IF NOT EXISTS idx_messages_pair ON messages(sender,receiver,id)",
+        "CREATE INDEX IF NOT EXISTS idx_messages_pair_reverse ON messages(receiver,sender,id)",
+        "CREATE INDEX IF NOT EXISTS idx_messages_unread ON messages(receiver,sender,read,id)",
         "CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(username,is_read,id)",
         "CREATE INDEX IF NOT EXISTS idx_stories_expiry ON stories(expires_at,id)"
     ]
@@ -314,6 +316,27 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,sans-serif
   text-overflow:ellipsis;
 }
 .chat-screen .chat-header .chat-search-btn{flex:0 0 auto}
+.chat-screen{background:#070707!important}
+.chat-screen::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 20% 20%,rgba(255,204,0,.08),transparent 34%),radial-gradient(circle at 85% 75%,rgba(255,204,0,.06),transparent 35%);pointer-events:none}
+.chat-user-row{background:rgba(18,18,18,.96)!important;border:1px solid rgba(255,204,0,.10)!important}
+.chat-user-main{min-width:0;flex:1}.chat-user-meta{font-size:12px;color:#888}
+.chat-screen .chat-header{background:rgba(12,12,12,.98);border-bottom:1px solid rgba(255,204,0,.14)}
+.chat-screen .chat-header .chat-back{background:#171717;border-color:rgba(255,204,0,.18);color:#fff}
+.chat-screen #msgs{padding:14px 12px 28px!important;scrollbar-width:none}.chat-screen #msgs::-webkit-scrollbar{display:none}
+.message-row{display:flex;margin:8px 0}.message-row.me{justify-content:flex-end}.message-row.them{justify-content:flex-start}
+.message-bubble{display:inline-block;max-width:min(78%,420px);padding:10px 12px;border-radius:18px;word-break:break-word;box-shadow:0 3px 12px rgba(0,0,0,.12)}
+.message-bubble.them{background:#191919;color:#fff;border:1px solid #2b2b2b;border-bottom-left-radius:6px}.message-bubble.me{background:#ffcc00;color:#111;border:1px solid #e4b900;border-bottom-right-radius:6px}
+.msg-text{white-space:pre-wrap}.msg-meta{font-size:11px;text-align:right;margin-top:4px;opacity:.65}.msg-tick.read{color:#147cff}
+.chat-loading,.chat-empty{text-align:center;color:#888;padding:28px 10px}.pending-message{opacity:.65}.pending-meta{font-size:10px;text-align:right;margin-top:3px}.pending-media{font-size:12px;margin-top:5px;opacity:.8}
+.media-card video{display:block;width:min(280px,100%);max-height:240px;border-radius:14px;margin-top:7px;background:#000}.voice-audio{width:min(260px,100%);height:38px;margin-top:6px}
+.attachment-chip{display:inline-block;margin-top:7px;padding:8px 10px;border-radius:12px;background:rgba(0,0,0,.12);color:inherit;text-decoration:none}
+.composer-wrap{flex:1;display:flex;align-items:center;min-width:0;background:#181818;border:1px solid #2e2e2e;border-radius:26px;padding:4px 6px 4px 12px}
+.composer-wrap .pill{background:transparent;color:#fff;margin:0;padding:9px 6px;font-size:15px;min-width:0}.composer-actions{display:flex;gap:3px}
+.icon-btn{width:38px;height:38px;border:0;border-radius:50%;background:#232323;color:#ffcc00;font-size:18px;cursor:pointer}
+.chat-screen .chat-bar{background:rgba(8,8,8,.98);border-top:1px solid rgba(255,204,0,.12);padding:8px 10px}.chat-screen .yellow{height:44px;padding:0 16px;background:#ffcc00;color:#111;box-shadow:0 5px 16px rgba(255,204,0,.14)}
+.replyBox{border-left:3px solid #ffcc00;background:rgba(255,204,0,.10);padding:7px 9px;border-radius:9px;margin-bottom:6px;font-size:12px;color:#d8d8d8}
+.reply-preview{display:none;position:absolute;left:10px;right:10px;bottom:70px;background:#171717;color:#fff;border:1px solid rgba(255,204,0,.28);padding:9px 11px;border-radius:14px;z-index:45}
+
 .chat-screen #replyPreview,.chat-screen #typingStatus{position:absolute;left:8px;right:8px;z-index:25}
 .chat-screen #msgs{
   position:absolute;
@@ -378,6 +401,10 @@ input,textarea{width:100%;background:var(--sec);border:none;border-radius:12px;p
 .badge{background:red;color:#fff;border-radius:10px;padding:2px 6px;font-size:11px;margin-left:6px;font-weight:900}
 .replyBox{border-left:3px solid #ffcc00;background:#fff8e1;padding:6px;border-radius:8px;font-size:12px;margin-bottom:4px;color:#000}.voice-audio{width:145px;height:30px;max-width:145px;vertical-align:middle;margin-top:5px}
 </style></head><body>
+.viewer{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#000;z-index:999;flex-direction:column}
+.profile-modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center}
+.profile-sheet{background:var(--card);margin:20px;padding:20px;border-radius:16px;max-width:400px;width:90%;max-height:80vh;overflow-y:auto}
+#savedModal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center}
 <div class=top>
 <div class=logo style="gap:8px">
 <img src="/app-icon.jpg" alt="PROVE AM">
@@ -608,114 +635,128 @@ async function likePost(id){await fetch('/api/like',{method:'POST',headers:{'Con
 async function commentPost(id){let t=prompt('Comment:');if(!t)return;await fetch('/api/comment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id,text:t})});loadPosts();}
 function filterChat(){let q=document.getElementById('searchChat').value.toLowerCase();let filtered=allUsers.filter(u=>u.username.toLowerCase().includes(q));renderChatUsers(filtered);}
 async function renderChatUsers(users){
-  let h='';
-  for(let u of users){
-    if(u.username==curUser) continue;
-    // online check
-    let onlineHtml=''; let badge='';
-    try{
-      let sRes=await fetch('/api/status/get?user='+u.username); let st=await sRes.json();
-      onlineHtml=st.online?'<span class=onlineDot></span> <small style="color:#00c853;font-weight:700">online</small>':'<span class=offlineDot></span> <small style="color:#888">offline</small>';
-      let uRes=await fetch('/api/messages/unread_count?with='+u.username); let uc=await uRes.json();
-      if(uc.count>0) badge=`<span class=badge>${uc.count} unread</span>`;
-    }catch{}
+  let list=users.filter(u=>u.username!==curUser);
+  const box=document.getElementById('chatUsers');
+  if(!box)return;
+  if(!list.length){box.innerHTML='<div class=card style="color:#888">No friends yet - add in Search (needs approval)</div>';return;}
+  box.innerHTML=list.map(u=>{
     let pic=u.pic_url?`<img src="${u.pic_url}">`:u.username[0];
-    h+=`<div class=card style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="openChat('${u.username}')"><div class=pic>${pic}</div><div><b onclick="event.stopPropagation();viewProfile('${u.username}')">${u.username}</b><br>${onlineHtml} ${badge}</div></div>`;
-  }
-  document.getElementById('chatUsers').innerHTML=h||'<div class=card style=color:#888">No friends yet - add in Search (needs approval)</div>';
+    return `<div class="card chat-user-row" data-user="${escapeHtml(u.username)}" onclick="openChat('${escapeHtml(u.username)}')"><div class=pic>${pic}</div><div class=chat-user-main><b onclick="event.stopPropagation();viewProfile('${escapeHtml(u.username)}')">${escapeHtml(u.username)}</b><br><span class=chat-user-meta>Checking status…</span></div></div>`;
+  }).join('');
+  try{
+    const r=await fetch('/api/chat/summary',{credentials:'same-origin'});
+    const data=await r.json(); const map={}; data.forEach(x=>map[x.username]=x);
+    list.forEach(u=>{
+      const row=box.querySelector(`[data-user="${CSS.escape(u.username)}"]`), x=map[u.username];
+      if(!row||!x)return;
+      const meta=row.querySelector('.chat-user-meta');
+      if(meta)meta.innerHTML=x.online?'<span class=onlineDot></span> online':'<span class=offlineDot></span> offline';
+      if(x.unread>0)row.querySelector('.chat-user-main').insertAdjacentHTML('beforeend',` <span class=badge>${x.unread} unread</span>`);
+    });
+  }catch(_){}
 }
 async function loadChatUsers(){
   try{
-    let r=await fetch('/api/friends/list'); let friends=await r.json();
-    if(friends.length==0){ renderChatUsers(allUsers); return;}
-    let friendNames = friends.map(f=>f.friend);
-    let filtered = allUsers.filter(u=> friendNames.includes(u.username));
-    renderChatUsers(filtered);
-  }catch(e){ renderChatUsers(allUsers); }
+    let r=await fetch('/api/friends/list',{credentials:'same-origin'}); let friends=await r.json();
+    if(friends.length==0){renderChatUsers(allUsers);return;}
+    let names=new Set(friends.map(f=>f.friend));
+    renderChatUsers(allUsers.filter(u=>names.has(u.username)));
+  }catch(e){renderChatUsers(allUsers);}
 }
 async function openChat(username){
   chatWith=username;
-  document.getElementById('chatUsers').style.display='none';document.getElementById('searchChat').style.display='none';
-  let box=document.getElementById('chatBox');box.style.display='block';
-  fetch('/api/messages/mark_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({with:username})});
-  let statusRes=await fetch('/api/status/get?user='+username); let st=await statusRes.json();
-  let online=st.online?'<span class=onlineDot></span> online':'<span class=offlineDot></span> offline';
-  box.innerHTML=`<div class="chat-header"><button onclick="backChat()" class="chat-back">← ${username} ${online}</button><button onclick="searchConversation()" class="small-btn chat-search-btn">🔎 Search</button></div><div id=replyPreview style="display:none;background:#fff8e1;padding:8px;margin:8px;border-radius:10px;border-left:3px solid #ffcc00;flex:0 0 auto"></div><div id=typingStatus class=typing style="flex:0 0 auto"></div><div id=msgs></div><div class=chat-bar><input id=chatText class=pill placeholder="Write message..." /><input type=file id=chatFileHidden accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" multiple style="display:none"><button class=sticker onclick="startRecording()">🎤</button><div class=sticker onclick="document.getElementById('chatFileHidden').click()">📎</div><button class=yellow onclick=sendMsg()>Send</button></div>`;
-  document.getElementById('chatFileHidden').addEventListener('change',function(e){let f=e.target.files[0]; if(f)selectedChatFile=f;});
-  let ci=document.getElementById('chatText'); ci.addEventListener('input',()=>sendTyping());
-  if(window.typingTimer)clearInterval(window.typingTimer); window.typingTimer=setInterval(pollTyping,2500);
-  loadMsgs();
+  document.getElementById('chatUsers').style.display='none';
+  document.getElementById('searchChat').style.display='none';
+  const box=document.getElementById('chatBox'); box.style.display='block';
+
+  // Show the chat shell immediately; don't wait for status/network calls.
+  box.innerHTML=`<div class="chat-header"><button onclick="backChat()" class="chat-back">← ${escapeHtml(username)} <span id="chatOnlineState" class="chat-status-loading">●</span></button><button onclick="searchConversation()" class="small-btn chat-search-btn">🔎 Search</button></div><div id=replyPreview class=reply-preview></div><div id=typingStatus class=typing></div><div id=msgs><div class="chat-loading">Loading messages…</div></div><div class=chat-bar><div class="composer-wrap"><input id=chatText class=pill autocomplete="off" placeholder="Write message..." /><div class="composer-actions"><button type=button class=icon-btn title="Voice" onclick="startRecording()">🎤</button><button type=button class=icon-btn title="Attach" onclick="document.getElementById('chatFileHidden').click()">📎</button></div></div><input type=file id=chatFileHidden accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" multiple style="display:none"><button class=yellow onclick=sendMsg()>Send</button></div>`;
+
+  document.getElementById('chatFileHidden').addEventListener('change',function(e){
+    let f=e.target.files[0];
+    if(f){selectedChatFile=f;const input=document.getElementById('chatText');if(input&&!input.value)input.placeholder='Attachment ready — tap Send';}
+  });
+  const ci=document.getElementById('chatText');
+  ci.addEventListener('input',()=>sendTyping());
+  ci.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}});
+  if(window.typingTimer)clearInterval(window.typingTimer);
+  window.typingTimer=setInterval(pollTyping,4000);
+
+  Promise.allSettled([
+    loadMsgs(),
+    fetch('/api/status/get?user='+encodeURIComponent(username),{credentials:'same-origin'}).then(r=>r.json()).then(st=>{
+      const el=document.getElementById('chatOnlineState');
+      if(el){el.textContent=st.online?'●':'○';el.style.color=st.online?'#00d26a':'#888';}
+    }),
+    fetch('/api/messages/mark_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({with:username}),credentials:'same-origin'})
+  ]);
 }
-async function searchConversation(){if(!chatWith)return;let q=prompt('Search this conversation:');if(!q)return;let r=await fetch('/api/messages/search?with='+encodeURIComponent(chatWith)+'&q='+encodeURIComponent(q));let d=await r.json();alert(d.map(m=>(m.sender===curUser?'You':m.sender)+': '+m.text).join('\\n')||'No matching messages');}
+
+async function searchConversation(){if(!chatWith)return;let q=prompt('Search this conversation:');if(!q)return;let r=await fetch('/api/messages/search?with='+encodeURIComponent(chatWith)+'&q='+encodeURIComponent(q));let d=await r.json();alert(d.map(m=>(m.sender===curUser?'You':m.sender)+': '+m.text).join('\n')||'No matching messages');}
 function backChat(){
   chatWith='';
   if(window.typingTimer){clearInterval(window.typingTimer);window.typingTimer=null;}
-  let box=document.getElementById('chatBox');
-  if(box){box.style.display='none';box.innerHTML='';}
+  let box=document.getElementById('chatBox');if(box){box.style.display='none';box.innerHTML='';}
   let users=document.getElementById('chatUsers');if(users)users.style.display='block';
   let search=document.getElementById('searchChat');if(search)search.style.display='block';
   loadChatUsers();
 }
-
+function appendPendingMessage(text,file){
+  const mbox=document.getElementById('msgs');if(!mbox)return;
+  const row=document.createElement('div');row.className='message-row me pending-message';
+  row.innerHTML=`<div class="message-bubble me">${escapeHtml(text||'')}${file?`<div class=pending-media>📎 ${escapeHtml(file.name||'Attachment')}</div>`:''}<div class=pending-meta>sending…</div></div>`;
+  mbox.appendChild(row);requestAnimationFrame(()=>{mbox.scrollTop=mbox.scrollHeight;});
+}
 async function sendMsg(){
-  if(!chatWith){ alert('Please select a user first.'); return; }
+  if(!chatWith)return;
+  const input=document.getElementById('chatText'), fileInput=document.getElementById('chatFileHidden');
+  const text=input?input.value.trim():'';
+  const file=(typeof selectedChatFile!=='undefined'&&selectedChatFile)?selectedChatFile:(fileInput&&fileInput.files?fileInput.files[0]:null);
+  if(!text&&!file)return;
+  const receiver=chatWith, reply=(typeof replyToText!=='undefined'&&replyToText)?replyToText:'';
+  appendPendingMessage(text,file);
+  if(input){input.value='';input.placeholder='Write message...';}
+  if(fileInput)fileInput.value='';if(typeof selectedChatFile!=='undefined')selectedChatFile=null;
+  if(typeof cancelReply==='function')cancelReply();
 
-  const input=document.getElementById('chatText');
-  const fileInput=document.getElementById('chatFileHidden');
-  const text=input ? input.value.trim() : '';
-  const file=(typeof selectedChatFile!=='undefined' && selectedChatFile) ? selectedChatFile : (fileInput && fileInput.files ? fileInput.files[0] : null);
-
-  if(!text && !file) return;
-
-  const fd=new FormData();
-  fd.append('receiver',chatWith);
-  fd.append('text',text);
-  if(typeof replyToText!=='undefined' && replyToText) fd.append('reply_to',replyToText);
-  if(file) fd.append('media',file);
-
+  const fd=new FormData();fd.append('receiver',receiver);fd.append('text',text);if(reply)fd.append('reply_to',reply);if(file)fd.append('media',file);
   try{
     const r=await fetch('/api/send',{method:'POST',body:fd,credentials:'same-origin'});
-    const raw=await r.text();
-    let d={};
-    try{d=raw?JSON.parse(raw):{};}catch(_){}
-    if(!r.ok || !d.ok){
-      console.error('Message failed:',r.status,raw);
-      alert(d.error || ('Could not send message (HTTP '+r.status+').'));
-      return;
-    }
-    if(input) input.value='';
-    if(fileInput) fileInput.value='';
-    if(typeof selectedChatFile!=='undefined') selectedChatFile=null;
-    if(typeof cancelReply==='function') cancelReply();
-    await loadMsgs();
-  }catch(e){
-    console.error(e);
-    alert('Could not send message. Please check the server connection.');
-  }
+    const raw=await r.text();let d={};try{d=raw?JSON.parse(raw):{};}catch(_){}
+    if(!r.ok||!d.ok){alert(d.error||('Could not send message (HTTP '+r.status+').'));return;}
+    if(chatWith===receiver)loadMsgs();
+  }catch(e){alert('Could not send message. Please check the server connection.');}
 }
 async function loadMsgs(){
   if(!chatWith)return;
-  let r=await fetch('/api/messages?with='+encodeURIComponent(chatWith)); let msgs=await r.json(); let h='';
-  msgs.forEach(m=>{
-    let mu=m.media_url||''; let low=mu.toLowerCase(); let media='';
-    if(mu){ if(low.includes('.mp4')||low.includes('.mov')||low.includes('.webm')) media=`<br><video src="${mu}" controls playsinline style="max-width:220px;border-radius:12px;margin-top:6px"></video>`; else if(low.includes('.mp3')||low.includes('.wav')||low.includes('.ogg')||low.includes('.m4a')||m.media_type==='audio') media=`<br><audio src="${mu}" controls class="voice-audio" controlslist="nodownload noplaybackrate"></audio>`; else media=`<br><a href="${mu}" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px">📎 Open attachment</a>`; }
-    let isMe=m.sender==curUser; let tick=isMe?(m.read?'<small style="color:#00c853">✓✓ read</small>':'<small style="color:#888">✓ sent</small>'):'';
-    let reply=m.reply_to?`<div class=replyBox>${escapeHtml(m.reply_to)}</div>`:'';
-    let reactions=(m.reactions||[]).map(x=>`${x.reaction} ${x.count}`).join(' · ');
-    let text=m.deleted?'This message was deleted':(m.text||'');
-    let edit=isMe&&!m.deleted?`<button onclick="editMsg(${m.id},${JSON.stringify(m.text||'')})">Edit</button>`:'';
-    let del=isMe&&!m.deleted?`<button onclick="deleteMsg(${m.id})">Delete</button>`:'';
-    h+=`<div style="margin:12px 0;text-align:${isMe?'right':'left'}"><span data-reply-text="${escapeHtml(text.slice(0,80))}" style="background:${isMe?'#000':'#eee'};color:${isMe?'#fff':'#000'};padding:12px 16px;border-radius:22px;display:inline-block;max-width:76%;word-break:break-word;cursor:pointer">${reply}${escapeHtml(text)}${media}<br>${tick}<div class=reaction-row>${escapeHtml(reactions)}</div><div class=msg-actions><button onclick="setReply(${JSON.stringify(text.slice(0,80))})">↩ Reply</button><button onclick="reactMsg(${m.id},'❤️')">❤️</button><button onclick="reactMsg(${m.id},'😂')">😂</button><button onclick="reactMsg(${m.id},'👍')">👍</button>${edit}${del}</div></span></div>`;
-  });
-  let el=document.getElementById('msgs');
-  if(el)el.innerHTML=h||'<div style="text-align:center;color:#888;padding:30px">Start the conversation</div>';
-  let mbox=document.getElementById('msgs');
-  if(mbox){
-    requestAnimationFrame(()=>{mbox.scrollTop=mbox.scrollHeight;});
+  const target=chatWith;
+  try{
+    let r=await fetch('/api/messages?with='+encodeURIComponent(target)+'&limit=100',{credentials:'same-origin'});
+    let msgs=await r.json();if(chatWith!==target)return;
+    let h='';
+    msgs.forEach(m=>{
+      let mu=m.media_url||'',low=mu.toLowerCase(),media='';
+      if(mu){
+        if(low.includes('.mp4')||low.includes('.mov')||low.includes('.webm'))media=`<div class=media-card><video src="${mu}" controls playsinline preload="metadata"></video></div>`;
+        else if(low.includes('.mp3')||low.includes('.wav')||low.includes('.ogg')||low.includes('.m4a')||m.media_type==='audio')media=`<audio src="${mu}" controls preload="none" class=voice-audio controlslist="nodownload noplaybackrate"></audio>`;
+        else media=`<a class=attachment-chip href="${mu}" target="_blank" rel="noopener">📎 Open attachment</a>`;
+      }
+      let isMe=m.sender==curUser,tick=isMe?(m.read?'<small class="msg-tick read">✓✓</small>':'<small class=msg-tick>✓</small>'):'';
+      let reply=m.reply_to?`<div class=replyBox>${escapeHtml(m.reply_to)}</div>`:'';
+      let reactions=(m.reactions||[]).map(x=>`${x.reaction} ${x.count}`).join(' · ');
+      let msgText=m.deleted?'This message was deleted':(m.text||'');
+      let edit=isMe&&!m.deleted?`<button onclick="editMsg(${m.id},${JSON.stringify(m.text||'')})">Edit</button>`:'';
+      let del=isMe&&!m.deleted?`<button onclick="deleteMsg(${m.id})">Delete</button>`:'';
+      h+=`<div class="message-row ${isMe?'me':'them'}"><span data-reply-text="${escapeHtml(msgText.slice(0,120))}" class="message-bubble ${isMe?'me':'them'}">${reply}<span class=msg-text>${escapeHtml(msgText)}</span>${media}<div class=msg-meta>${tick}</div><div class=reaction-row>${escapeHtml(reactions)}</div><div class=msg-actions><button onclick="setReply(${JSON.stringify(msgText.slice(0,120))})">↩ Reply</button><button onclick="reactMsg(${m.id},'❤️')">❤️</button><button onclick="reactMsg(${m.id},'😂')">😂</button><button onclick="reactMsg(${m.id},'👍')">👍</button>${edit}${del}</div></span></div>`;
+    });
+    const el=document.getElementById('msgs');if(el)el.innerHTML=h||'<div class=chat-empty>Start the conversation</div>';
+    const mbox=document.getElementById('msgs');if(mbox)requestAnimationFrame(()=>{mbox.scrollTop=mbox.scrollHeight;});
+  }catch(_){
+    const el=document.getElementById('msgs');if(el&&el.innerHTML.includes('Loading messages'))el.innerHTML='<div class=chat-empty>Could not load messages. Pull to try again.</div>';
   }
 }
 function escapeHtml(s){return String(s||'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
-async function reactMsg(id,reaction){let r=await fetch('/api/message/react',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,reaction})});let d=await r.json();if(d.ok)loadMsgs();}
+async function reactMsg(id,reaction){fetch('/api/message/react',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,reaction})}).then(()=>loadMsgs()).catch(()=>{});}
 async function editMsg(id,current){let t=prompt('Edit message:',current||'');if(t===null)return;let r=await fetch('/api/message/edit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,text:t})});let d=await r.json();if(!d.ok)alert(d.error||'Could not edit');loadMsgs();}
 async function deleteMsg(id){if(!confirm('Delete this message?'))return;let r=await fetch('/api/message/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});let d=await r.json();if(!d.ok)alert(d.error||'Could not delete');loadMsgs();}
 let typingSendTimer=0;function sendTyping(){if(!chatWith)return;clearTimeout(typingSendTimer);typingSendTimer=setTimeout(()=>{fetch('/api/typing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({peer:chatWith})}).catch(()=>{});},450);}
@@ -740,7 +781,7 @@ document.addEventListener('touchend',e=>{
   /* Inside a conversation: keep the existing swipe-right-to-reply behavior. */
   if(swipeStartedInsideMessages){
     let el=swipeTarget&&swipeTarget.closest('#msgs [data-reply-text]');
-    if(el&&swipeX-endX>70&&absX>absY)setReply(el.dataset.replyText||'');
+    if(el&&absX>70&&absX>absY)setReply(el.dataset.replyText||'');
     /* Vertical movement belongs entirely to the message scroller. */
     swipeX=swipeY=0;swipeTarget=null;swipeStartedInsideMessages=false;
     return;
@@ -1388,8 +1429,8 @@ def api_messages():
     if not me or not other: return jsonify([])
     conn=get_conn(); c=conn.cursor()
     try:
-        q="SELECT id,sender,text,media_url,reply_to,read,deleted_at FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s) ORDER BY id ASC" if USE_POSTGRES else "SELECT id,sender,text,media_url,reply_to,read,deleted_at FROM messages WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?) ORDER BY id ASC"
-        c.execute(q,(me,other,other,me)); rows=c.fetchall()
+        q="SELECT id,sender,text,media_url,reply_to,read,deleted_at FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s) ORDER BY id DESC LIMIT 100" if USE_POSTGRES else "SELECT id,sender,text,media_url,reply_to,read,deleted_at FROM messages WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?) ORDER BY id DESC LIMIT 100"
+        c.execute(q,(me,other,other,me)); rows=list(reversed(c.fetchall()))
         ids=[r[0] for r in rows]
         reactions_by={}
         if ids:
