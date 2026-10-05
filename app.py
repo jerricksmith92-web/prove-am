@@ -537,7 +537,15 @@ def signup():
 def api_me(): return jsonify({"username":session.get('username','')})
 
 @app.route('/api/users')
-
+def api_users():
+    conn=get_conn(); c=conn.cursor()
+    try:
+        c.execute("SELECT username,pic_url FROM profiles")
+        rows=c.fetchall()
+    except:
+        rows=[]
+    conn.close()
+    return jsonify([{"username":r[0],"pic_url":(r[1] or "")} for r in rows])
       
 @app.route('/api/friend/request', methods=['POST'])
 def api_friend_request():
