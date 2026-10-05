@@ -538,62 +538,54 @@ def api_me(): return jsonify({"username":session.get('username','')})
 
 @app.route('/api/users')
 def api_users():
-    conn=get_conn(); c=conn.cursor(); c.execute("SELECT username,pic_url FROM profiles"); rows=c.fetchall(); conn.close()
+    conn=get_conn(); c=conn.cursor()
+    c.execute("SELECT username,pic_url FROM users ORDER BY id DESC LIMIT 50")
+    rows=c.fetchall(); conn.close()
     return jsonify([{"username":r[0],"pic_url":r[1] or ""} for r in rows])
 
-@app.route('/api/search')
-def api_search():
-    me=session.get('username'); q=(request.args.get('q','') or '').strip().lower()
-    conn=get_conn(); c=conn.cursor()
-    if q:
-        like=f"%{q}%"
-        c.execute("SELECT username,pic_url FROM profiles WHERE LOWER(username) LIKE %s LIMIT 30" if USE_POSTGRES else "SELECT username,pic_url FROM profiles WHERE LOWER(username) LIKE? LIMIT 30",(like,))
-    else:
-        c.execute("SELECT username,pic_url FROM profiles LIMIT 30")
-    users=c.fetchall()
-    c.execute("SELECT sender,receiver,status FROM friends WHERE sender=%s OR receiver=%s" if USE_POSTGRES else "SELECT sender,receiver,status FROM friends WHERE sender=? OR receiver=?",(me,me))
-    fr=c.fetchall(); status_map={}
-    for s,r,st in fr:
-        status_map[r if s==me else s]= 'friends' if st=='accepted' else 'pending_sent' if s==me else 'pending_received'
-    out=[{"username":u,"pic_url":p or "","friend_status":status_map.get(u,'none')} for u,p in users if u!=me]
-    conn.close(); return jsonify(out)
+
 
 @app.route('/api/friend/request', methods=['POST'])
 def api_friend_request():
-    me=session.get('username'); to=request.json.get('to')
+    me=session.get('username'); to=(request.json.get('to') if request.json else None)
     if not to or to==me: return jsonify({"ok":False})
     conn=get_conn(); c=conn.cursor()
-    c.execute("SELECT 1 FROM friends WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s)" if USE_POSTGRES else "SELECT 1 FROM friends WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?)",(me,to,to,me))
+    c.execute("SELECT 1 FROM friends WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s)",(me,to,to,me))
     if c.fetchone(): conn.close(); return jsonify({"ok":False,"error":"exists"})
-    c.execute("INSERT INTO friends (sender,receiver,status,created_at) VALUES (%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO friends (sender,receiver,status,created_at) VALUES (?,?,?,?)",(me,to,'pending',datetime.now().isoformat()))
-    c.execute("INSERT INTO notifications (username,type,from_user,text,created_at) VALUES (%s,%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO notifications (username,type,from_user,text,created_at) VALUES (?,?,?,?,?)",(to,'friend_request',me,f'{me} sent request - needs approval',datetime.now().isoformat()))
+    c.execute("INSERT INTO friends (sender,receiver,status) VALUES (%s,%s,'pending')",(me,to))
+    c.execute("INSERT INTO notifications (username,type,from_user) VALUES (%s,'friend_request',%s)",(to,me))
     conn.commit(); conn.close(); return jsonify({"ok":True})
 
 @app.route('/api/friend/accept', methods=['POST'])
 def api_friend_accept():
-    me=session.get('username'); frm=request.json.get('from')
+    me=session.get('username'); frm=(request.json.get('from') if request.json else None)
     conn=get_conn(); c=conn.cursor()
-    c.execute("UPDATE friends SET status='accepted' WHERE sender=%s AND receiver=%s" if USE_POSTGRES else "UPDATE friends SET status='accepted' WHERE sender=? AND receiver=?",(frm,me))
+    c.execute("UPDATE friends SET status='accepted' WHERE sender=%s AND receiver=%s",(frm,me))
     conn.commit(); conn.close(); return jsonify({"ok":True})
 
 @app.route('/api/friend/decline', methods=['POST'])
 def api_friend_decline():
-    me=session.get('username'); frm=request.json.get('from')
+    me=session.get('username'); frm=(request.json.get('from') if request.json else None)
     conn=get_conn(); c=conn.cursor()
-    c.execute("DELETE FROM friends WHERE sender=%s AND receiver=%s" if USE_POSTGRES else "DELETE FROM friends WHERE sender=? AND receiver=?",(frm,me))
+    c.execute("DELETE FROM friends WHERE sender=%s AND receiver=%s",(frm,me))
     conn.commit(); conn.close(); return jsonify({"ok":True})
 
 @app.route('/api/friend/requests')
 def api_friend_requests():
     me=session.get('username'); conn=get_conn(); c=conn.cursor()
-    c.execute("SELECT sender FROM friends WHERE receiver=%s AND status='pending'" if USE_POSTGRES else "SELECT sender FROM friends WHERE receiver=? AND status='pending'",(me,))
-    rows=c.fetchall(); conn.close(); return jsonify([{"sender":r[0]} for r in rows])
+    c.execute("SELECT sender FROM friends WHERE receiver=%s AND status='pending'",(me,))
+    rows=c.fetchall(); conn.close()
+    return jsonify([{"username":r[0]} for r in rows])
 
 @app.route('/api/friends/list')
 def api_friends_list():
     me=session.get('username'); conn=get_conn(); c=conn.cursor()
-    c.execute("SELECT sender,receiver FROM friends WHERE (sender=%s OR receiver=%s) AND status='accepted'" if USE_POSTGRES else "SELECT sender,receiver FROM friends WHERE (sender=? OR receiver=?) AND status='accepted'",(me,me))
-    rows=c.fetchall(); conn.close(); return jsonify([{"friend":r if s==me else s} for s,r in rows])
+    c.execute("SELECT sender,receiver FROM friends WHERE (sender=%s OR receiver=%s) AND status='accepted'",(me,me))
+    rows=c.fetchall(); conn.close()
+    friends=[]
+    for s,r in rows:
+        friends.append(r if s==me else s)
+    return jsonify([{"username":u} for u in friends if u])
 
 @app.route('/api/status/ping', methods=['POST'])
 def api_status_ping():
