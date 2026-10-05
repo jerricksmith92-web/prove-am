@@ -538,7 +538,35 @@ def signup():
 @app.route('/api/me')
 def api_me(): return jsonify({"username":session.get('username','')})
 
+@app.route('/api/users')
+def api_users():
+    conn=get_conn(); c=conn.cursor()
+    c.execute("SELECT username,pic_url FROM users")
+    rows=c.fetchall(); conn.close()
+    return jsonify([{"username":r[0],"pic_url":r[1] or ""} for r in rows])
 
+@app.route('/api/search')
+def api_search():
+    me=session.get('username'); q=(request.args.get('q') or "").strip()
+    conn=get_conn(); c=conn.cursor()
+    if q:
+        like=f"%{q}%"
+        c.execute("SELECT username,pic_url FROM users WHERE username ILIKE %s AND username!=%s LIMIT 20",(like,me))
+    else:
+        c.execute("SELECT username,pic_url FROM users WHERE username!=%s ORDER BY id DESC LIMIT 20",(me,))
+    users=c.fetchall()
+    c.execute("SELECT sender,receiver,status FROM friends WHERE sender=%s OR receiver=%s",(me,me))
+    fr=c.fetchall(); smap={}
+    for s,r,st in fr:
+        o=r if s==me else s
+        if st=='pending':
+            smap[o]='pending_sent' if s==me else 'pending_received'
+        elif st=='accepted':
+            smap[o]='friends'
+        else:
+            smap[o]=st
+    out=[{"username":u,"pic_url":p or "","friend_status":smap.get(u,"none")} for u,p in users]
+    conn.close(); return jsonify(out)
     out=[{"username":u,"pic_url":p or "","friend_status":smap.get(u,"none")} for u,p in users]
     conn.close(); return jsonify(out)
 
