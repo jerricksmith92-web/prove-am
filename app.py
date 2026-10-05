@@ -418,7 +418,32 @@ async function loadMsgs(){
 }
 function setReply(t){replyToText=t;let p=document.getElementById('replyPreview');p.style.display='block';p.innerHTML=`Replying to: ${t} <span onclick="cancelReply()" style="float:right;cursor:pointer;color:red">✕</span>`;}
 function cancelReply(){replyToText='';document.getElementById('replyPreview').style.display='none';}
-
+async function searchUsers(){
+  let inp=document.getElementById('searchUsersInput');
+  let q=inp? inp.value : '';
+  let box=document.getElementById('searchResults');
+  if(!box) return;
+  if(!q.trim()){ box.innerHTML=''; return; }
+  box.innerHTML='Searching...';
+  try{
+    let r=await fetch('/api/search?q='+encodeURIComponent(q));
+    let users=await r.json();
+    let h='';
+    users.forEach(function(u){
+      if(!u.username || u.username=='null' || u.username=='None') return;
+      if(typeof curUser!=='undefined' && u.username===curUser) return;
+      let s=u.friend_status||'none';
+      let pic=(u.pic_url||u.profile_pic)?'<img src="'+(u.pic_url||u.profile_pic)+'" style="width:100%;height:100%;object-fit:cover">':u.username[0].toUpperCase();
+      let btn='';
+      if(s=='none') btn='<button style="background:#ffcc00;padding:6px 12px;border-radius:20px;border:none;font-weight:700" onclick="sendFriendReq(\''+u.username+'\')">Add</button>';
+      else if(s=='pending_sent') btn='<span style="background:#ddd;padding:6px 12px;border-radius:20px;font-size:12px">Requested</span>';
+      else if(s=='pending_received') btn='<button style="background:#00c851;color:#fff;padding:6px 12px;border-radius:20px;border:none" onclick="acceptFriend(\''+u.username+'\')">Accept</button>';
+      else btn='<span style="color:#00c851;font-weight:700">✓ Friends</span>';
+      h+='<div style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid #eee"><div style="width:36px;height:36px;border-radius:50%;background:#000;color:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;font-weight:700">'+pic+'</div><b>'+u.username+'</b><div style="margin-left:auto">'+btn+'</div></div>';
+    });
+    box.innerHTML=h||'No users found';
+  }catch(e){ box.innerHTML='Error: '+e; }
+}
 async function sendFriendReq(u){ await fetch('/api/friend/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:u})}); searchUsers(); loadFriendRequests(); }
 async function acceptFriend(u){ await fetch('/api/friend/accept',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:u})}); searchUsers(); loadFriends(); }
 async function loadFriendRequests(){
