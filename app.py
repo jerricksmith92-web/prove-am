@@ -40,6 +40,7 @@ def upload_to_cloud(file_storage):
             return None
 
 app = Flask(__name__)
+CORS(app, supports_credentials=True)
 app.secret_key = os.environ.get("SECRET","prove-am-v35-all-in-one")
 DB_URL = os.environ.get("DATABASE_URL","")
 USE_POSTGRES = DB_URL.startswith("postgres")
