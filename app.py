@@ -657,11 +657,32 @@ def api_like():
         conn.commit()
     except: pass
     conn.close(); return jsonify({"ok":True})
-      if st=='pending':
-        if s==me:
-            smap[o]='pending_sent'
-        else:
-            smap[o]='pending_received'
+   
+    @app.route('/api/users/search')
+def api_search_users():
+    me=session.get('username')
+    q=request.args.get('q','').strip()
+    if not me or not q:
+        return jsonify([])
+    conn=get_conn()
+    c=conn.cursor()
+    c.execute("SELECT username,pic_url FROM users WHERE username LIKE? AND username!=? LIMIT 20", (f"%{q}%",me))
+    users=c.fetchall()
+    if not users:
+        conn.close()
+        return jsonify([])
+    names=[u for u,p in users]
+    ph=",".join(["?"]*len(names))
+    c.execute(f"SELECT sender,receiver,status FROM friends WHERE (sender=? AND receiver IN ({ph})) OR (receiver=? AND sender IN ({ph}))", (me,*names,me,*names))
+    fr=c.fetchall()
+    smap={}
+    for s,r,st in fr:
+        o=r if s==me else s
+        if st=='pending':
+            if s==me:
+                smap[o]='pending_sent'
+            else:
+                smap[o]='pending_received'
         elif st=='accepted':
             smap[o]='friends'
         else:
@@ -669,9 +690,10 @@ def api_like():
     out=[]
     for u,p in users:
         out.append({"username":u,"friend_status":smap.get(u,"none")})
-        conn.close()
-        return jsonify(out)           
-
+    conn.close()
+    return jsonify(out)
+ 
+   
 @app.route('/api/comment', methods=['POST'])
 def api_comment():
     me=session.get('username'); data=request.json; pid=data.get('post_id'); txt=data.get('text','')[:200]
