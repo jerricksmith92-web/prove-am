@@ -1,36 +1,42 @@
 import os, uuid
-from flask import Flask, request, jsonify, session, redirect, url_for, render_template, render_template_string
+from flask import Flask, request, jsonify, session
 from flask_cors import CORS
-import psycopg2
-from werkzeug.security import generate_password_hash, check_password_hash
+import cloudinary
+import cloudinary.uploader
+
+# CONFIGURE CLOUDINARY - THIS WAS MISSING
+cloudinary.config(
+    cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME"),
+    api_key = os.getenv("CLOUDINARY_API_KEY"),
+    api_secret = os.getenv("CLOUDINARY_API_SECRET"),
+    secure = True
+)
 
 UPLOAD_FOLDER = "static/uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def upload_to_cloud(file_storage):
-    # Try Cloudinary first
     try:
-        import cloudinary.uploader
-        if os.getenv("CLOUDINARY_CLOUD_NAME"):
+        if not file_storage:
+            return None
+        file_storage.stream.seek(0)
+        # resource_type="auto" = works for image AND video
+        result = cloudinary.uploader.upload(file_storage, resource_type="auto")
+        url = result.get("secure_url")
+        print(f"UPLOAD OK: {url}")
+        return url
+    except Exception as e:
+        print(f"CLOUD FAIL, trying local: {e}")
+        try:
             file_storage.stream.seek(0)
-            r = cloudinary.uploader.upload(file_storage)
-            print(f"Cloudinary OK: {r.get('secure_url')}")
-            return r.get("secure_url")
-    except Exception as e:
-        print(f"Cloud err {e}")
-
-    # Fallback to local - THIS IS THE FIX
-    try:
-        file_storage.stream.seek(0)  # <-- This line was missing!
-        fname = uuid.uuid4().hex + ".jpg"
-        path = os.path.join(UPLOAD_FOLDER, fname)
-        file_storage.save(path)
-        print(f"Local OK: {path}")
-        return "/static/uploads/" + fname
-    except Exception as e:
-        print(f"Local err {e}")
-        import traceback; traceback.print_exc()
-        return None
+            fname = uuid.uuid4().hex + ".jpg"
+            path = os.path.join(UPLOAD_FOLDER, fname)
+            file_storage.save(path)
+            return "/static/uploads/" + fname
+        except Exception as e2:
+            print(f"LOCAL FAIL TOO: {e2}")
+            import traceback; traceback.print_exc()
+            return None
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET","prove-am-v35-all-in-one")
