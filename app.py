@@ -453,8 +453,9 @@ async function searchUsers(){
     box.innerHTML='Error: '+e;
   }
 }
-
-
+async function sendFriendReq(u){ await fetch('/api/friend/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:u})}); searchUsers(); loadFriendRequests(); }
+async function acceptFriend(u){ await fetch('/api/friend/accept',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:u})}); searchUsers(); loadFriends(); }
+async function loadFriendRequests(){
   let r=await fetch('/api/friend/requests'); let reqs=await r.json();
   document.getElementById('reqCount').innerText=reqs.length;
   let h='';
