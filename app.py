@@ -418,37 +418,7 @@ async function loadMsgs(){
 }
 function setReply(t){replyToText=t;let p=document.getElementById('replyPreview');p.style.display='block';p.innerHTML=`Replying to: ${t} <span onclick="cancelReply()" style="float:right;cursor:pointer;color:red">✕</span>`;}
 function cancelReply(){replyToText='';document.getElementById('replyPreview').style.display='none';}
-async function sendMsg(){
-  let tEl=document.getElementById('chatText');let t=tEl?tEl.value:'';let f=selectedChatFile;if(!t&&!f)return;
-  let fd=new FormData();fd.append('receiver',chatWith);fd.append('text',t);fd.append('reply_to',replyToText);if(f)fd.append('media',f);
-  if(tEl) tEl.value='';selectedChatFile=null;let hid=document.getElementById('chatFileHidden');if(hid)hid.value='';cancelReply();
-  let r=await fetch('/api/send',{method:'POST',body:fd});
-  setTimeout(loadMsgs,400);
-}
-async function deleteMsg(id){if(!confirm('Delete?'))return;await fetch('/api/message/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})});loadMsgs();}
-async function searchUsers(){
-  let inp=document.getElementById('searchUsersInput');
-  let q=inp ? inp.value : '';
-  let box=document.getElementById('searchResults');
-  if(!box){ return; }
-  if(!q.trim()){ box.innerHTML=''; return; }
-  box.innerHTML='Searching...';
-  try{
-    let r=await fetch('/api/search?q='+encodeURIComponent(q));
-    let users=await r.json();
-    let h='';
-    users.forEach(u=>{
-      if(!u.username || u.username=='null' || u.username=='None') return;
-      if(typeof curUser!=='undefined' && u.username==curUser) return;
-      let s=u.friend_status||'none';
-      let btn = s=='none' ? `<button onclick="sendFriendReq('${u.username}')">Add</button>` : s=='pending_sent' ? `<span style="color:orange">Requested</span>` : s=='pending_received' ? `<button onclick="acceptFriend('${u.username}')">Accept</button>` : `<span style="color:green">✓ Friends</span>`;
-      h+=`<div style="display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #eee"><span>${u.username}</span>${btn}</div>`;
-    });
-    box.innerHTML=h||`No users found for "${q}"`;
-  }catch(e){
-    box.innerHTML='Error: '+e;
-  }
-}
+
 async function sendFriendReq(u){ await fetch('/api/friend/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:u})}); searchUsers(); loadFriendRequests(); }
 async function acceptFriend(u){ await fetch('/api/friend/accept',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:u})}); searchUsers(); loadFriends(); }
 async function loadFriendRequests(){
