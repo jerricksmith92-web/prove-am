@@ -221,8 +221,7 @@ def create_perf_indexes():
         "CREATE INDEX IF NOT EXISTS idx_shares_post ON post_shares(post_id)",
         "CREATE INDEX IF NOT EXISTS idx_post_media_post ON post_media(post_id)",
         "CREATE INDEX IF NOT EXISTS idx_messages_pair ON messages(sender,receiver,id)",
-        "CREATE INDEX IF NOT EXISTS idx_messages_pair_reverse ON messages(receiver,sender,id)",
-        "CREATE INDEX IF NOT EXISTS idx_messages_unread ON messages(receiver,sender,read,id)",
+        "CREATE INDEX IF NOT EXISTS idx_message_reactions_message ON message_reactions(message_id)",
         "CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(username,is_read,id)",
         "CREATE INDEX IF NOT EXISTS idx_stories_expiry ON stories(expires_at,id)"
     ]
@@ -261,16 +260,13 @@ def get_mentions(text):
     import re
     return list(dict.fromkeys(re.findall(r'@([A-Za-z0-9_.-]{3,20})', text or '')))
 
-LOGIN_HTML="""<!DOCTYPE html><html><head><meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><link rel="icon" href="/app-icon.jpg"><link rel="apple-touch-icon" href="/app-icon.jpg"><style>body{background:#000;color:#fff;font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;padding:18px;box-sizing:border-box}.box{background:#111;padding:22px;border-radius:22px;width:min(360px,100%);text-align:center;border:1px solid #222;box-sizing:border-box;box-shadow:0 20px 60px rgba(0,0,0,.45)}.brand{width:100%;max-width:300px;border-radius:16px;display:block;margin:0 auto 16px;object-fit:cover}.mode{display:flex;background:#222;border-radius:12px;padding:4px;margin-bottom:10px}.mode button{flex:1;padding:10px;border:none;border-radius:9px;background:transparent;color:#aaa;font-weight:800}.mode button.active{background:#ffcc00;color:#000}input{width:100%;padding:13px;margin:7px 0;box-sizing:border-box;border-radius:12px;border:none;background:#222;color:#fff;font-size:16px;outline:none}button.main{width:100%;padding:13px;background:#ffcc00;border:none;border-radius:12px;font-weight:bold;margin-top:5px}.show{font-size:12px;color:#aaa;display:flex;align-items:center;justify-content:flex-end;gap:6px;margin:2px 2px 8px}.show input{width:auto;margin:0}#confirmWrap{display:none}#msg{min-height:20px;color:#ff5555;font-size:13px}</style></head><body><div class=box><img class=brand src="/app-logo.jpg" alt="PROVE AM"><div class=mode><button id=loginMode class=active onclick="setMode('login')">Login</button><button id=signupMode onclick="setMode('signup')">Sign Up</button></div><input id=u autocomplete=username placeholder=Username><input id=p type=password autocomplete=current-password placeholder="Password"><div id=confirmWrap><input id=vp type=password autocomplete=new-password placeholder="Verify password"></div><label class=show><input id=showPass type=checkbox onchange="togglePass()"> Show password</label><button class=main id=submitBtn onclick="submitAuth()">Login</button><p id=msg></p></div><script>let mode='login';function setMode(m){mode=m;loginMode.classList.toggle('active',m==='login');signupMode.classList.toggle('active',m==='signup');confirmWrap.style.display=m==='signup'?'block':'none';p.autocomplete=m==='signup'?'new-password':'current-password';p.placeholder=m==='signup'?'Password':'Password';vp.value='';msg.innerText='';submitBtn.innerText=m==='signup'?'Create account':'Login';}function togglePass(){let t=showPass.checked?'text':'password';p.type=t;if(vp)vp.type=t;}async function submitAuth(){msg.innerText='';let username=u.value.trim(),password=p.value,verify=vp.value;if(!username||!password){msg.innerText='Enter username and password';return;}if(mode==='signup'&&password!==verify){msg.innerText='Passwords do not match';return;}let endpoint=mode==='login'?'/login':'/signup';let body=mode==='login'?{username,password}:{username,password,verify_password:verify};try{submitBtn.disabled=true;let r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});let d=await r.json();if(d.ok)location.href='/';else msg.innerText=d.error||'Could not continue';}catch(e){msg.innerText='Connection error. Please try again.';}finally{submitBtn.disabled=false;}}u.addEventListener('keydown',e=>{if(e.key==='Enter')submitAuth()});p.addEventListener('keydown',e=>{if(e.key==='Enter')submitAuth()});vp.addEventListener('keydown',e=>{if(e.key==='Enter')submitAuth()});</script></body></html>"""
+LOGIN_HTML="""<!DOCTYPE html><html><head><meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><link rel="icon" href="/app-icon.jpg"><link rel="apple-touch-icon" href="/app-icon.jpg"><style>body{background:#000;color:#fff;font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;padding:18px;box-sizing:border-box}.box{background:#111;padding:22px;border-radius:22px;width:min(360px,100%);text-align:center;border:1px solid #222;box-sizing:border-box;box-shadow:0 20px 60px rgba(0,0,0,.45)}.brand{width:100%;max-width:300px;border-radius:16px;display:block;margin:0 auto 16px;object-fit:cover}.mode{display:flex;background:#222;border-radius:12px;padding:4px;margin-bottom:10px}.mode button{flex:1;padding:10px;border:none;border-radius:9px;background:transparent;color:#aaa;font-weight:800}.mode button.active{background:#ffcc00;color:#000}input{width:100%;padding:13px;margin:7px 0;box-sizing:border-box;border-radius:12px;border:none;background:#222;color:#fff;font-size:16px;outline:none}button.main{width:100%;padding:13px;background:#ffcc00;border:none;border-radius:12px;font-weight:bold;margin-top:5px}.show{font-size:12px;color:#aaa;display:flex;align-items:center;justify-content:flex-end;gap:6px;margin:2px 2px 8px}.show input{width:auto;margin:0}#confirmWrap{display:none}#msg{min-height:20px;color:#ff5555;font-size:13px}</style></head><body><div class=box><img class=brand src="/app-logo.jpg" alt="PROVE AM"><div class=mode><button id=loginMode type=button class=active onclick="setMode('login')">Login</button><button id=signupMode type=button onclick="setMode('signup')">Sign Up</button></div><input id=u autocomplete=username placeholder=Username><input id=p type=password autocomplete=current-password placeholder="Type password"><div id=confirmWrap><input id=vp type=password autocomplete=new-password placeholder="Verify password"></div><label class=show><input id=showPass type=checkbox onchange="togglePass()"> Show password</label><button class=main id=submitBtn type=button onclick="submitAuth()">Login</button><p id=msg></p></div><script>let mode='login',submitting=false;const $=id=>document.getElementById(id);function setMode(m){mode=m;$('loginMode').classList.toggle('active',m==='login');$('signupMode').classList.toggle('active',m==='signup');$('confirmWrap').style.display=m==='signup'?'block':'none';$('p').autocomplete=m==='signup'?'new-password':'current-password';$('p').placeholder='Type password';$('vp').value='';$('msg').innerText='';$('submitBtn').innerText=m==='signup'?'Create account':'Login';}function togglePass(){let t=$('showPass').checked?'text':'password';$('p').type=t;$('vp').type=t;}async function submitAuth(){if(submitting)return;$('msg').innerText='';let username=$('u').value.trim(),password=$('p').value,verify=$('vp').value;if(!username||!password){$('msg').innerText='Enter username and password';return;}if(mode==='signup'){if(password.length<3){$('msg').innerText='Password must be at least 3 characters';return;}if(!verify){$('msg').innerText='Please verify your password';return;}if(password!==verify){$('msg').innerText='Passwords do not match';return;}}let endpoint=mode==='login'?'/login':'/signup';let body=mode==='login'?{username,password}:{username,password,verify_password:verify};try{submitting=true;$('submitBtn').disabled=true;let r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify(body)});let d=await r.json();if(d.ok)location.replace('/');else $('msg').innerText=d.error||'Could not continue';}catch(e){$('msg').innerText='Connection error. Please try again.';}finally{submitting=false;$('submitBtn').disabled=false;}}['u','p','vp'].forEach(id=>$(id).addEventListener('keydown',e=>{if(e.key==='Enter')submitAuth();}));</script></body></html>"""
+
 
 MAIN_HTML="""<!DOCTYPE html><html><head><meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><link rel="icon" href="/app-icon.jpg"><link rel="apple-touch-icon" href="/app-icon.jpg"><link rel="preload" as="image" href="/app-icon.jpg"><style>
 :root{--bg:#f6f6f6;--card:#fff;--text:#000;--sec:#efefef;--border:#e5e5e5}
 body.dark{--bg:#000;--card:#111;--text:#fff;--sec:#222;--border:#222}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,sans-serif;margin:0}
-/* Interaction safety: hidden panels must never intercept taps. */
-[style*="display:none"], .is-hidden { pointer-events:none !important; }
-button, a, input, textarea, select, label, [onclick] { touch-action:manipulation; }
-
 .top{position:fixed;top:0;left:0;right:0;background:var(--card);padding:8px 10px;display:flex;align-items:center;justify-content:space-between;z-index:100;border-bottom:1px solid var(--border);height:50px;box-sizing:border-box}
 .logo{display:flex;align-items:center;gap:7px;font-weight:900;color:#c9a227;font-size:15px}.logo img{width:34px;height:34px;border-radius:50%;object-fit:cover}
 .logo-circle{width:34px;height:34px;border:2px solid #c9a227;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px}
@@ -320,27 +316,6 @@ button, a, input, textarea, select, label, [onclick] { touch-action:manipulation
   text-overflow:ellipsis;
 }
 .chat-screen .chat-header .chat-search-btn{flex:0 0 auto}
-.chat-screen{background:#070707!important;pointer-events:auto}
-.chat-screen::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 20% 20%,rgba(255,204,0,.08),transparent 34%),radial-gradient(circle at 85% 75%,rgba(255,204,0,.06),transparent 35%);pointer-events:none}
-.chat-user-row{background:rgba(18,18,18,.96)!important;border:1px solid rgba(255,204,0,.10)!important}
-.chat-user-main{min-width:0;flex:1}.chat-user-meta{font-size:12px;color:#888}
-.chat-screen .chat-header{background:rgba(12,12,12,.98);border-bottom:1px solid rgba(255,204,0,.14)}
-.chat-screen .chat-header .chat-back{background:#171717;border-color:rgba(255,204,0,.18);color:#fff}
-.chat-screen #msgs{padding:14px 12px 28px!important;scrollbar-width:none}.chat-screen #msgs::-webkit-scrollbar{display:none}
-.message-row{display:flex;margin:8px 0}.message-row.me{justify-content:flex-end}.message-row.them{justify-content:flex-start}
-.message-bubble{display:inline-block;max-width:min(78%,420px);padding:10px 12px;border-radius:18px;word-break:break-word;box-shadow:0 3px 12px rgba(0,0,0,.12)}
-.message-bubble.them{background:#191919;color:#fff;border:1px solid #2b2b2b;border-bottom-left-radius:6px}.message-bubble.me{background:#ffcc00;color:#111;border:1px solid #e4b900;border-bottom-right-radius:6px}
-.msg-text{white-space:pre-wrap}.msg-meta{font-size:11px;text-align:right;margin-top:4px;opacity:.65}.msg-tick.read{color:#147cff}
-.chat-loading,.chat-empty{text-align:center;color:#888;padding:28px 10px}.pending-message{opacity:.65}.pending-meta{font-size:10px;text-align:right;margin-top:3px}.pending-media{font-size:12px;margin-top:5px;opacity:.8}
-.media-card video{display:block;width:min(280px,100%);max-height:240px;border-radius:14px;margin-top:7px;background:#000}.voice-audio{width:min(260px,100%);height:38px;margin-top:6px}
-.attachment-chip{display:inline-block;margin-top:7px;padding:8px 10px;border-radius:12px;background:rgba(0,0,0,.12);color:inherit;text-decoration:none}
-.composer-wrap{flex:1;display:flex;align-items:center;min-width:0;background:#181818;border:1px solid #2e2e2e;border-radius:26px;padding:4px 6px 4px 12px}
-.composer-wrap .pill{background:transparent;color:#fff;margin:0;padding:9px 6px;font-size:15px;min-width:0}.composer-actions{display:flex;gap:3px}
-.icon-btn{width:38px;height:38px;border:0;border-radius:50%;background:#232323;color:#ffcc00;font-size:18px;cursor:pointer}
-.chat-screen .chat-bar{background:rgba(8,8,8,.98);border-top:1px solid rgba(255,204,0,.12);padding:8px 10px}.chat-screen .yellow{height:44px;padding:0 16px;background:#ffcc00;color:#111;box-shadow:0 5px 16px rgba(255,204,0,.14)}
-.replyBox{border-left:3px solid #ffcc00;background:rgba(255,204,0,.10);padding:7px 9px;border-radius:9px;margin-bottom:6px;font-size:12px;color:#d8d8d8}
-.reply-preview{display:none;position:absolute;left:10px;right:10px;bottom:70px;background:#171717;color:#fff;border:1px solid rgba(255,204,0,.28);padding:9px 11px;border-radius:14px;z-index:45}
-
 .chat-screen #replyPreview,.chat-screen #typingStatus{position:absolute;left:8px;right:8px;z-index:25}
 .chat-screen #msgs{
   position:absolute;
@@ -387,7 +362,7 @@ input,textarea{width:100%;background:var(--sec);border:none;border-radius:12px;p
 .pic{width:32px;height:32px;border-radius:50%;background:#000;color:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0}
 .pic img{width:100%;height:100%;object-fit:cover}
 .sticker{width:42px;height:42px;background:#e9e9e9;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;border:1px solid #ddd}
-.chat-bar{position:absolute;bottom:0;left:0;right:0;background:var(--card);padding:10px;display:flex;gap:8px;border-top:1px solid var(--border);align-items:center;z-index:50}
+.chat-bar{position:fixed;bottom:0;left:0;right:0;background:var(--card);padding:10px;display:flex;gap:8px;border-top:1px solid var(--border);align-items:center;z-index:50}
 .pill{flex:1;background:#e9e9e9;border:none;border-radius:25px;padding:13px 16px;outline:none;font-size:15px}
 .yellow{background:#ffcc00;border:none;border-radius:25px;padding:0 18px;height:44px;font-weight:800;color:#0040ff}
 .del{font-size:11px;color:#ff4444;background:rgba(255,0,0,0.1);padding:3px 8px;border-radius:10px;margin-left:6px;cursor:pointer}
@@ -403,7 +378,7 @@ input,textarea{width:100%;background:var(--sec);border:none;border-radius:12px;p
 .onlineDot{width:10px;height:10px;background:#00c853;border-radius:50%;display:inline-block;border:2px solid #fff}
 .offlineDot{width:10px;height:10px;background:#999;border-radius:50%;display:inline-block;border:2px solid #fff}
 .badge{background:red;color:#fff;border-radius:10px;padding:2px 6px;font-size:11px;margin-left:6px;font-weight:900}
-.replyBox{border-left:3px solid #ffcc00;background:#fff8e1;padding:6px;border-radius:8px;font-size:12px;margin-bottom:4px;color:#000}.voice-audio{width:145px;height:30px;max-width:145px;vertical-align:middle;margin-top:5px}
+.replyBox{border-left:3px solid #ffcc00;background:#fff8e1;padding:6px;border-radius:8px;font-size:12px;margin-bottom:4px;color:#000}.voice-audio{width:125px;height:28px;max-width:125px;vertical-align:middle;margin-top:4px}
 </style></head><body>
 <div class=top>
 <div class=logo style="gap:8px">
@@ -427,7 +402,7 @@ input,textarea{width:100%;background:var(--sec);border:none;border-radius:12px;p
 <div class=tab id=tSearch onclick="switchTab('search')">Search</div>
 </div>
 <div class=content>
-<div id=storiesDiv style="pointer-events:auto">
+<div id=storiesDiv>
 <div style="display:flex;justify-content:space-between;padding:12px;background:var(--card)"><b>Friends ></b><small style="color:#888">Friends can view (once chatting)</small><b style="color:#a855f7;cursor:pointer" onclick="document.getElementById('storyFile').click()">+ Add</b><input type=file id=storyFile accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" multiple style=display:none></div>
 <div class=story-bar id=storyBar></div>
 <div class=story-card>
@@ -439,7 +414,7 @@ input,textarea{width:100%;background:var(--sec);border:none;border-radius:12px;p
 <p id=storyMsg style="text-align:center;color:#c9a227;font-weight:bold"></p>
 </div>
 </div>
-<div id=postDiv style="display:none;pointer-events:none">
+<div id=postDiv style=display:none>
 <div class=card>
 <textarea id=postText placeholder="What's up? Prove Am..."></textarea>
 <div style="display:flex;gap:8px;align-items:center;margin:8px 0">
@@ -453,12 +428,12 @@ input,textarea{width:100%;background:var(--sec);border:none;border-radius:12px;p
 </div>
 <div id=postsList></div>
 </div>
-<div id=chatDiv style="display:none;pointer-events:none" class="chat-page">
+<div id=chatDiv style="display:none" class="chat-page">
 <input id=searchChat placeholder="Search friends..." oninput=filterChat()>
 <div id=chatUsers></div>
 <div id=chatBox style="display:none" class="chat-screen"></div>
 </div>
-<div id=searchDiv style="display:none;pointer-events:none" class=card>
+<div id=searchDiv style=display:none class=card>
 <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
 <h3 style="margin:0">🔍 Search Users</h3>
 <span style="font-size:10px;font-weight:900;color:#a88400;background:#fff7cc;padding:6px 9px;border-radius:12px;white-space:nowrap">PROVE AM • JERRICK SMITH</span>
@@ -524,9 +499,7 @@ function updateLowBtn(){let b=document.getElementById('lowBtn'); if(!b)return; b
 function toggleLow(){lowData=!lowData;localStorage.setItem('lowData',lowData?'1':'0'); updateLowBtn(); alert(lowData?'Low Data ON':'Low Data OFF'); loadPosts();}
 function toggleTheme(){dark=!dark;localStorage.setItem('theme',dark?'dark':'light');document.body.classList.toggle('dark');}
 async function showSavedPosts(){let r=await fetch('/api/post/saved');let d=await r.json();let h=d.length?d.map(p=>`<div class=card><b>${p.username}</b><small style="float:right">${(p.created_at||'').slice(0,16)}</small><p>${linkify(p.text||'')}</p>${p.media_url?`<img src="${p.media_url}" loading="lazy" style="width:100%;max-height:240px;object-fit:cover;border-radius:10px">`:''}</div>`).join(''):'<p style="color:#888">No saved posts yet.</p>';document.getElementById('savedList').innerHTML=h;document.getElementById('savedModal').style.display='flex';}
-function switchTab(t){const panels={stories:'storiesDiv',post:'postDiv',chat:'chatDiv',search:'searchDiv'};
-Object.keys(panels).forEach(k=>{const el=document.getElementById(panels[k]);if(el){el.style.pointerEvents=(k===t)?'auto':'none';}});
-
+function switchTab(t){
   document.querySelectorAll('.tab').forEach(e=>e.classList.remove('active'));
   let el=document.getElementById('t'+t.charAt(0).toUpperCase()+t.slice(1)); if(el)el.classList.add('active');
   document.getElementById('storiesDiv').style.display=t=='stories'?'block':'none';
@@ -637,128 +610,114 @@ async function likePost(id){await fetch('/api/like',{method:'POST',headers:{'Con
 async function commentPost(id){let t=prompt('Comment:');if(!t)return;await fetch('/api/comment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id,text:t})});loadPosts();}
 function filterChat(){let q=document.getElementById('searchChat').value.toLowerCase();let filtered=allUsers.filter(u=>u.username.toLowerCase().includes(q));renderChatUsers(filtered);}
 async function renderChatUsers(users){
-  let list=users.filter(u=>u.username!==curUser);
-  const box=document.getElementById('chatUsers');
-  if(!box)return;
-  if(!list.length){box.innerHTML='<div class=card style="color:#888">No friends yet - add in Search (needs approval)</div>';return;}
-  box.innerHTML=list.map(u=>{
+  let h='';
+  for(let u of users){
+    if(u.username==curUser) continue;
+    // online check
+    let onlineHtml=''; let badge='';
+    try{
+      let sRes=await fetch('/api/status/get?user='+u.username); let st=await sRes.json();
+      onlineHtml=st.online?'<span class=onlineDot></span> <small style="color:#00c853;font-weight:700">online</small>':'<span class=offlineDot></span> <small style="color:#888">offline</small>';
+      let uRes=await fetch('/api/messages/unread_count?with='+u.username); let uc=await uRes.json();
+      if(uc.count>0) badge=`<span class=badge>${uc.count} unread</span>`;
+    }catch{}
     let pic=u.pic_url?`<img src="${u.pic_url}">`:u.username[0];
-    return `<div class="card chat-user-row" data-user="${escapeHtml(u.username)}" onclick="openChat('${escapeHtml(u.username)}')"><div class=pic>${pic}</div><div class=chat-user-main><b onclick="event.stopPropagation();viewProfile('${escapeHtml(u.username)}')">${escapeHtml(u.username)}</b><br><span class=chat-user-meta>Checking status…</span></div></div>`;
-  }).join('');
-  try{
-    const r=await fetch('/api/chat/summary',{credentials:'same-origin'});
-    const data=await r.json(); const map={}; data.forEach(x=>map[x.username]=x);
-    list.forEach(u=>{
-      const row=box.querySelector(`[data-user="${CSS.escape(u.username)}"]`), x=map[u.username];
-      if(!row||!x)return;
-      const meta=row.querySelector('.chat-user-meta');
-      if(meta)meta.innerHTML=x.online?'<span class=onlineDot></span> online':'<span class=offlineDot></span> offline';
-      if(x.unread>0)row.querySelector('.chat-user-main').insertAdjacentHTML('beforeend',` <span class=badge>${x.unread} unread</span>`);
-    });
-  }catch(_){}
+    h+=`<div class=card style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="openChat('${u.username}')"><div class=pic>${pic}</div><div><b onclick="event.stopPropagation();viewProfile('${u.username}')">${u.username}</b><br>${onlineHtml} ${badge}</div></div>`;
+  }
+  document.getElementById('chatUsers').innerHTML=h||'<div class=card style=color:#888">No friends yet - add in Search (needs approval)</div>';
 }
 async function loadChatUsers(){
   try{
-    let r=await fetch('/api/friends/list',{credentials:'same-origin'}); let friends=await r.json();
-    if(friends.length==0){renderChatUsers(allUsers);return;}
-    let names=new Set(friends.map(f=>f.friend));
-    renderChatUsers(allUsers.filter(u=>names.has(u.username)));
-  }catch(e){renderChatUsers(allUsers);}
+    let r=await fetch('/api/friends/list'); let friends=await r.json();
+    if(friends.length==0){ renderChatUsers(allUsers); return;}
+    let friendNames = friends.map(f=>f.friend);
+    let filtered = allUsers.filter(u=> friendNames.includes(u.username));
+    renderChatUsers(filtered);
+  }catch(e){ renderChatUsers(allUsers); }
 }
 async function openChat(username){
   chatWith=username;
-  document.getElementById('chatUsers').style.display='none';
-  document.getElementById('searchChat').style.display='none';
-  const box=document.getElementById('chatBox'); box.style.display='block';
-
-  // Show the chat shell immediately; don't wait for status/network calls.
-  box.innerHTML=`<div class="chat-header"><button onclick="backChat()" class="chat-back">← ${escapeHtml(username)} <span id="chatOnlineState" class="chat-status-loading">●</span></button><button onclick="searchConversation()" class="small-btn chat-search-btn">🔎 Search</button></div><div id=replyPreview class=reply-preview></div><div id=typingStatus class=typing></div><div id=msgs><div class="chat-loading">Loading messages…</div></div><div class=chat-bar><div class="composer-wrap"><input id=chatText class=pill autocomplete="off" placeholder="Write message..." /><div class="composer-actions"><button type=button class=icon-btn title="Voice" onclick="startRecording()">🎤</button><button type=button class=icon-btn title="Attach" onclick="document.getElementById('chatFileHidden').click()">📎</button></div></div><input type=file id=chatFileHidden accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" multiple style="display:none"><button class=yellow onclick=sendMsg()>Send</button></div>`;
-
-  document.getElementById('chatFileHidden').addEventListener('change',function(e){
-    let f=e.target.files[0];
-    if(f){selectedChatFile=f;const input=document.getElementById('chatText');if(input&&!input.value)input.placeholder='Attachment ready — tap Send';}
-  });
-  const ci=document.getElementById('chatText');
-  ci.addEventListener('input',()=>sendTyping());
-  ci.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}});
-  if(window.typingTimer)clearInterval(window.typingTimer);
-  window.typingTimer=setInterval(pollTyping,4000);
-
-  Promise.allSettled([
-    loadMsgs(),
-    fetch('/api/status/get?user='+encodeURIComponent(username),{credentials:'same-origin'}).then(r=>r.json()).then(st=>{
-      const el=document.getElementById('chatOnlineState');
-      if(el){el.textContent=st.online?'●':'○';el.style.color=st.online?'#00d26a':'#888';}
-    }),
-    fetch('/api/messages/mark_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({with:username}),credentials:'same-origin'})
-  ]);
+  document.getElementById('chatUsers').style.display='none';document.getElementById('searchChat').style.display='none';
+  let box=document.getElementById('chatBox');box.style.display='block';
+  fetch('/api/messages/mark_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({with:username})});
+  let statusRes=await fetch('/api/status/get?user='+username); let st=await statusRes.json();
+  let online=st.online?'<span class=onlineDot></span> online':'<span class=offlineDot></span> offline';
+  box.innerHTML=`<div class="chat-header"><button onclick="backChat()" class="chat-back">← ${username} ${online}</button><button onclick="searchConversation()" class="small-btn chat-search-btn">🔎 Search</button></div><div id=replyPreview style="display:none;background:#fff8e1;padding:8px;margin:8px;border-radius:10px;border-left:3px solid #ffcc00;flex:0 0 auto"></div><div id=typingStatus class=typing style="flex:0 0 auto"></div><div id=msgs></div><div class=chat-bar><input id=chatText class=pill placeholder="Write message..." /><input type=file id=chatFileHidden accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" multiple style="display:none"><button class=sticker onclick="startRecording()">🎤</button><div class=sticker onclick="document.getElementById('chatFileHidden').click()">📎</div><button class=yellow onclick=sendMsg()>Send</button></div>`;
+  document.getElementById('chatFileHidden').addEventListener('change',function(e){let f=e.target.files[0]; if(f)selectedChatFile=f;});
+  let ci=document.getElementById('chatText'); ci.addEventListener('input',()=>sendTyping());
+  if(window.typingTimer)clearInterval(window.typingTimer); window.typingTimer=setInterval(pollTyping,2500);
+  loadMsgs();
 }
-
-async function searchConversation(){if(!chatWith)return;let q=prompt('Search this conversation:');if(!q)return;let r=await fetch('/api/messages/search?with='+encodeURIComponent(chatWith)+'&q='+encodeURIComponent(q));let d=await r.json();alert(d.map(m=>(m.sender===curUser?'You':m.sender)+': '+m.text).join('\n')||'No matching messages');}
+async function searchConversation(){if(!chatWith)return;let q=prompt('Search this conversation:');if(!q)return;let r=await fetch('/api/messages/search?with='+encodeURIComponent(chatWith)+'&q='+encodeURIComponent(q));let d=await r.json();alert(d.map(m=>(m.sender===curUser?'You':m.sender)+': '+m.text).join('\\n')||'No matching messages');}
 function backChat(){
   chatWith='';
   if(window.typingTimer){clearInterval(window.typingTimer);window.typingTimer=null;}
-  let box=document.getElementById('chatBox');if(box){box.style.display='none';box.innerHTML='';}
+  let box=document.getElementById('chatBox');
+  if(box){box.style.display='none';box.innerHTML='';}
   let users=document.getElementById('chatUsers');if(users)users.style.display='block';
   let search=document.getElementById('searchChat');if(search)search.style.display='block';
   loadChatUsers();
 }
-function appendPendingMessage(text,file){
-  const mbox=document.getElementById('msgs');if(!mbox)return;
-  const row=document.createElement('div');row.className='message-row me pending-message';
-  row.innerHTML=`<div class="message-bubble me">${escapeHtml(text||'')}${file?`<div class=pending-media>📎 ${escapeHtml(file.name||'Attachment')}</div>`:''}<div class=pending-meta>sending…</div></div>`;
-  mbox.appendChild(row);requestAnimationFrame(()=>{mbox.scrollTop=mbox.scrollHeight;});
-}
-async function sendMsg(){
-  if(!chatWith)return;
-  const input=document.getElementById('chatText'), fileInput=document.getElementById('chatFileHidden');
-  const text=input?input.value.trim():'';
-  const file=(typeof selectedChatFile!=='undefined'&&selectedChatFile)?selectedChatFile:(fileInput&&fileInput.files?fileInput.files[0]:null);
-  if(!text&&!file)return;
-  const receiver=chatWith, reply=(typeof replyToText!=='undefined'&&replyToText)?replyToText:'';
-  appendPendingMessage(text,file);
-  if(input){input.value='';input.placeholder='Write message...';}
-  if(fileInput)fileInput.value='';if(typeof selectedChatFile!=='undefined')selectedChatFile=null;
-  if(typeof cancelReply==='function')cancelReply();
 
-  const fd=new FormData();fd.append('receiver',receiver);fd.append('text',text);if(reply)fd.append('reply_to',reply);if(file)fd.append('media',file);
+async function sendMsg(){
+  if(!chatWith){ alert('Please select a user first.'); return; }
+
+  const input=document.getElementById('chatText');
+  const fileInput=document.getElementById('chatFileHidden');
+  const text=input ? input.value.trim() : '';
+  const file=(typeof selectedChatFile!=='undefined' && selectedChatFile) ? selectedChatFile : (fileInput && fileInput.files ? fileInput.files[0] : null);
+
+  if(!text && !file) return;
+
+  const fd=new FormData();
+  fd.append('receiver',chatWith);
+  fd.append('text',text);
+  if(typeof replyToText!=='undefined' && replyToText) fd.append('reply_to',replyToText);
+  if(file) fd.append('media',file);
+
   try{
     const r=await fetch('/api/send',{method:'POST',body:fd,credentials:'same-origin'});
-    const raw=await r.text();let d={};try{d=raw?JSON.parse(raw):{};}catch(_){}
-    if(!r.ok||!d.ok){alert(d.error||('Could not send message (HTTP '+r.status+').'));return;}
-    if(chatWith===receiver)loadMsgs();
-  }catch(e){alert('Could not send message. Please check the server connection.');}
+    const raw=await r.text();
+    let d={};
+    try{d=raw?JSON.parse(raw):{};}catch(_){}
+    if(!r.ok || !d.ok){
+      console.error('Message failed:',r.status,raw);
+      alert(d.error || ('Could not send message (HTTP '+r.status+').'));
+      return;
+    }
+    if(input) input.value='';
+    if(fileInput) fileInput.value='';
+    if(typeof selectedChatFile!=='undefined') selectedChatFile=null;
+    if(typeof cancelReply==='function') cancelReply();
+    await loadMsgs();
+  }catch(e){
+    console.error(e);
+    alert('Could not send message. Please check the server connection.');
+  }
 }
 async function loadMsgs(){
   if(!chatWith)return;
-  const target=chatWith;
-  try{
-    let r=await fetch('/api/messages?with='+encodeURIComponent(target)+'&limit=100',{credentials:'same-origin'});
-    let msgs=await r.json();if(chatWith!==target)return;
-    let h='';
-    msgs.forEach(m=>{
-      let mu=m.media_url||'',low=mu.toLowerCase(),media='';
-      if(mu){
-        if(low.includes('.mp4')||low.includes('.mov')||low.includes('.webm'))media=`<div class=media-card><video src="${mu}" controls playsinline preload="metadata"></video></div>`;
-        else if(low.includes('.mp3')||low.includes('.wav')||low.includes('.ogg')||low.includes('.m4a')||m.media_type==='audio')media=`<audio src="${mu}" controls preload="none" class=voice-audio controlslist="nodownload noplaybackrate"></audio>`;
-        else media=`<a class=attachment-chip href="${mu}" target="_blank" rel="noopener">📎 Open attachment</a>`;
-      }
-      let isMe=m.sender==curUser,tick=isMe?(m.read?'<small class="msg-tick read">✓✓</small>':'<small class=msg-tick>✓</small>'):'';
-      let reply=m.reply_to?`<div class=replyBox>${escapeHtml(m.reply_to)}</div>`:'';
-      let reactions=(m.reactions||[]).map(x=>`${x.reaction} ${x.count}`).join(' · ');
-      let msgText=m.deleted?'This message was deleted':(m.text||'');
-      let edit=isMe&&!m.deleted?`<button onclick="editMsg(${m.id},${JSON.stringify(m.text||'')})">Edit</button>`:'';
-      let del=isMe&&!m.deleted?`<button onclick="deleteMsg(${m.id})">Delete</button>`:'';
-      h+=`<div class="message-row ${isMe?'me':'them'}"><span data-reply-text="${escapeHtml(msgText.slice(0,120))}" class="message-bubble ${isMe?'me':'them'}">${reply}<span class=msg-text>${escapeHtml(msgText)}</span>${media}<div class=msg-meta>${tick}</div><div class=reaction-row>${escapeHtml(reactions)}</div><div class=msg-actions><button onclick="setReply(${JSON.stringify(msgText.slice(0,120))})">↩ Reply</button><button onclick="reactMsg(${m.id},'❤️')">❤️</button><button onclick="reactMsg(${m.id},'😂')">😂</button><button onclick="reactMsg(${m.id},'👍')">👍</button>${edit}${del}</div></span></div>`;
-    });
-    const el=document.getElementById('msgs');if(el)el.innerHTML=h||'<div class=chat-empty>Start the conversation</div>';
-    const mbox=document.getElementById('msgs');if(mbox)requestAnimationFrame(()=>{mbox.scrollTop=mbox.scrollHeight;});
-  }catch(_){
-    const el=document.getElementById('msgs');if(el&&el.innerHTML.includes('Loading messages'))el.innerHTML='<div class=chat-empty>Could not load messages. Pull to try again.</div>';
+  let r=await fetch('/api/messages?with='+encodeURIComponent(chatWith)); let msgs=await r.json(); let h='';
+  msgs.forEach(m=>{
+    let mu=m.media_url||''; let low=mu.toLowerCase(); let media='';
+    if(mu){ if(low.includes('.mp4')||low.includes('.mov')||low.includes('.webm')) media=`<br><video src="${mu}" controls playsinline style="max-width:220px;border-radius:12px;margin-top:6px"></video>`; else if(low.includes('.mp3')||low.includes('.wav')||low.includes('.ogg')||low.includes('.m4a')||m.media_type==='audio') media=`<br><audio src="${mu}" controls class="voice-audio" controlslist="nodownload noplaybackrate"></audio>`; else media=`<br><a href="${mu}" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px">📎 Open attachment</a>`; }
+    let isMe=m.sender==curUser; let tick=isMe?(m.read?'<small style="color:#00c853">✓✓ read</small>':'<small style="color:#888">✓ sent</small>'):'';
+    let reply=m.reply_to?`<div class=replyBox>${escapeHtml(m.reply_to)}</div>`:'';
+    let reactions=(m.reactions||[]).map(x=>`${x.reaction} ${x.count}`).join(' · ');
+    let text=m.deleted?'This message was deleted':(m.text||'');
+    let edit=isMe&&!m.deleted?`<button onclick="editMsg(${m.id},${JSON.stringify(m.text||'')})">Edit</button>`:'';
+    let del=isMe&&!m.deleted?`<button onclick="deleteMsg(${m.id})">Delete</button>`:'';
+    h+=`<div style="margin:12px 0;text-align:${isMe?'right':'left'}"><span data-reply-text="${escapeHtml(text.slice(0,80))}" style="background:${isMe?'#000':'#eee'};color:${isMe?'#fff':'#000'};padding:12px 16px;border-radius:22px;display:inline-block;max-width:76%;word-break:break-word;cursor:pointer">${reply}${escapeHtml(text)}${media}<br>${tick}<div class=reaction-row>${escapeHtml(reactions)}</div><div class=msg-actions><button onclick="setReply(${JSON.stringify(text.slice(0,80))})">↩ Reply</button><button onclick="reactMsg(${m.id},'❤️')">❤️</button><button onclick="reactMsg(${m.id},'😂')">😂</button><button onclick="reactMsg(${m.id},'👍')">👍</button>${edit}${del}</div></span></div>`;
+  });
+  let el=document.getElementById('msgs');
+  if(el)el.innerHTML=h||'<div style="text-align:center;color:#888;padding:30px">Start the conversation</div>';
+  let mbox=document.getElementById('msgs');
+  if(mbox){
+    requestAnimationFrame(()=>{mbox.scrollTop=mbox.scrollHeight;});
   }
 }
 function escapeHtml(s){return String(s||'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
-async function reactMsg(id,reaction){fetch('/api/message/react',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,reaction})}).then(()=>loadMsgs()).catch(()=>{});}
+async function reactMsg(id,reaction){let r=await fetch('/api/message/react',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,reaction})});let d=await r.json();if(d.ok)loadMsgs();}
 async function editMsg(id,current){let t=prompt('Edit message:',current||'');if(t===null)return;let r=await fetch('/api/message/edit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,text:t})});let d=await r.json();if(!d.ok)alert(d.error||'Could not edit');loadMsgs();}
 async function deleteMsg(id){if(!confirm('Delete this message?'))return;let r=await fetch('/api/message/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});let d=await r.json();if(!d.ok)alert(d.error||'Could not delete');loadMsgs();}
 let typingSendTimer=0;function sendTyping(){if(!chatWith)return;clearTimeout(typingSendTimer);typingSendTimer=setTimeout(()=>{fetch('/api/typing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({peer:chatWith})}).catch(()=>{});},450);}
@@ -767,39 +726,45 @@ let mediaRecorder=null,recordChunks=[];
 async function startRecording(){if(mediaRecorder&&mediaRecorder.state==='recording'){mediaRecorder.stop();return;}if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){alert('Voice recording is not supported by this browser');return;}try{let stream=await navigator.mediaDevices.getUserMedia({audio:true});mediaRecorder=new MediaRecorder(stream);recordChunks=[];mediaRecorder.ondataavailable=e=>{if(e.data.size)recordChunks.push(e.data)};mediaRecorder.onstop=async()=>{stream.getTracks().forEach(t=>t.stop());let blob=new Blob(recordChunks,{type:mediaRecorder.mimeType||'audio/webm'});let file=new File([blob],'voice-'+Date.now()+'.webm',{type:blob.type});let fd=new FormData();fd.append('receiver',chatWith);fd.append('text','');fd.append('media',file);fd.append('media_type','audio');let r=await fetch('/api/send',{method:'POST',body:fd});let d=await r.json();if(!d.ok)alert(d.error||'Could not send voice message');else loadMsgs();};mediaRecorder.start();alert('Recording... tap 🎤 again to stop');}catch(e){alert('Microphone permission was denied or unavailable');}}
 let swipeX=0,swipeY=0,swipeTarget=null,swipeStartedInsideMessages=false;
 document.addEventListener('touchstart',e=>{
-  if(!e.touches||!e.touches[0]) return;
-  const target=e.target;
+  if(!e.touches||!e.touches[0])return;
+  let t=e.target;
   swipeX=e.touches[0].clientX;
   swipeY=e.touches[0].clientY;
-  swipeTarget=target;
-  swipeStartedInsideMessages=!!(target && target.closest && target.closest('#msgs'));
+  swipeTarget=t;
+  swipeStartedInsideMessages=!!t.closest('#msgs');
 },{passive:true});
-
 document.addEventListener('touchend',e=>{
-  if(!e.changedTouches||!e.changedTouches[0]) return;
-  const end=e.changedTouches[0];
-  const dx=end.clientX-swipeX, dy=end.clientY-swipeY;
-  const absX=Math.abs(dx), absY=Math.abs(dy);
+  if(!e.changedTouches||!e.changedTouches[0])return;
+  let endX=e.changedTouches[0].clientX,endY=e.changedTouches[0].clientY;
+  let dx=endX-swipeX,dy=endY-swipeY;
+  let absX=Math.abs(dx),absY=Math.abs(dy);
 
-  /* Never cancel/prevent a normal tap. Only act on a clear horizontal swipe. */
-  if(absX<70 || absX<=absY*1.25) return;
-
+  /* Inside a conversation: keep the existing swipe-right-to-reply behavior. */
   if(swipeStartedInsideMessages){
-    const el=swipeTarget&&swipeTarget.closest&&swipeTarget.closest('#msgs [data-reply-text]');
-    if(el) setReply(el.dataset.replyText||'');
+    let el=swipeTarget&&swipeTarget.closest('#msgs [data-reply-text]');
+    if(el&&swipeX-endX>70&&absX>absY)setReply(el.dataset.replyText||'');
+    /* Vertical movement belongs entirely to the message scroller. */
+    swipeX=swipeY=0;swipeTarget=null;swipeStartedInsideMessages=false;
     return;
   }
 
-  /* Only switch tabs for a genuine swipe that started outside controls. */
-  const interactive=swipeTarget&&swipeTarget.closest&&swipeTarget.closest(
-    'button,input,textarea,select,a,label,[onclick],.tab,.chat-bar,.chat-header'
-  );
-  if(interactive) return;
-
-  if(dx<0 && typeof switchTab==='function') switchTab('search');
-  if(dx>0 && typeof switchTab==='function') switchTab('stories');
-}, {passive:true});
-
+  /* Do not change pages while interacting with inputs, buttons, modals,
+     story bars, viewers, or other horizontally-scrollable controls. */
+  let blocked=swipeTarget&&swipeTarget.closest('input,textarea,button,a,select,[contenteditable="true"],.story-bar,.viewer,.profile-modal,.chat-screen');
+  if(!blocked && absX>=70 && absX>absY*1.25){
+    let current=document.querySelector('.tab.active');
+    let order=['stories','post','chat','search'];
+    let currentId=current?current.id.replace(/^t/,'').toLowerCase():'stories';
+    let i=order.indexOf(currentId);
+    if(i<0)i=0;
+    /* Swipe left = next page; swipe right = previous page. */
+    let next=dx<0?Math.min(order.length-1,i+1):Math.max(0,i-1);
+    if(next!==i)switchTab(order[next]);
+  }
+  swipeX=swipeY=0;swipeTarget=null;swipeStartedInsideMessages=false;
+},{passive:true});
+function setReply(t){replyToText=t;let p=document.getElementById('replyPreview');p.style.display='block';p.innerHTML=`Replying to: ${t} <span onclick="cancelReply()" style="float:right;cursor:pointer;color:red">✕</span>`;}
+function cancelReply(){replyToText='';document.getElementById('replyPreview').style.display='none';}
 async function searchUsers(){
   let inp=document.getElementById('searchUsersInput');
   let q=inp ? inp.value.trim() : '';
@@ -971,11 +936,11 @@ def enforce_session_version():
 
 @app.route('/app-logo.jpg')
 def app_logo():
-    return send_file(BytesIO(base64.b64decode(PROVE_AM_LOGO_B64)), mimetype='image/jpeg', max_age=86400)
+    return send_file(BytesIO(base64.b64decode(PROVE_AM_LOGO_B64)), mimetype='image/jpeg', max_age=604800, conditional=True)
 
 @app.route('/app-icon.jpg')
 def app_icon():
-    return send_file(BytesIO(base64.b64decode(PROVE_AM_ICON_B64)), mimetype='image/jpeg', max_age=86400)
+    return send_file(BytesIO(base64.b64decode(PROVE_AM_ICON_B64)), mimetype='image/jpeg', max_age=604800, conditional=True)
 
 @app.route('/')
 def home():
@@ -1425,8 +1390,9 @@ def api_messages():
     if not me or not other: return jsonify([])
     conn=get_conn(); c=conn.cursor()
     try:
-        q="SELECT id,sender,text,media_url,reply_to,read,deleted_at FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s) ORDER BY id DESC LIMIT 100" if USE_POSTGRES else "SELECT id,sender,text,media_url,reply_to,read,deleted_at FROM messages WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?) ORDER BY id DESC LIMIT 100"
-        c.execute(q,(me,other,other,me)); rows=list(reversed(c.fetchall()))
+        q="SELECT id,sender,text,media_url,reply_to,read,deleted_at FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s) ORDER BY id DESC LIMIT 200" if USE_POSTGRES else "SELECT id,sender,text,media_url,reply_to,read,deleted_at FROM messages WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?) ORDER BY id DESC LIMIT 200"
+        c.execute(q,(me,other,other,me)); rows=c.fetchall()
+        rows.reverse()  # API returns only the newest 200, displayed oldest-to-newest
         ids=[r[0] for r in rows]
         reactions_by={}
         if ids:
