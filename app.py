@@ -664,23 +664,15 @@ def api_stories():
     me=session.get('username')
     if not me:
         return jsonify([])
-    conn=get_conn(); c=conn.cursor(); now=datetime.now().isoformat()
-    c.execute("SELECT sender,receiver FROM friends WHERE (sender=%s OR receiver=%s) AND status='accepted'" if USE_POSTGRES else "SELECT sender,receiver FROM friends WHERE (sender=? OR receiver=?) AND status='accepted'",(me,me))
-    fr=c.fetchall()
-    friends=set([me]+[r if s==me else s for s,r in fr])
-    c.execute("SELECT id,username,media_url,text,created_at,expires_at FROM stories ORDER BY id DESC")
-    rows=c.fetchall()
-    out=[]
-    for r in rows:
-        try:
-            if r[5] and r[5] < now:
-                continue
-        except:
-            pass
-        if r[1] in friends or r[1]==me:
-            out.append({"id":r[0],"username":r[1],"media_url":r[2],"text":r[3],"created_at":r[4]})
+    conn=get_conn();cur=conn.cursor()
+    try:
+        cur.execute("SELECT id,username,media_url,text,created_at FROM stories ORDER BY id DESC")
+        rows=cur.fetchall()
+    except:
+        rows=[]
+    result=[{"id":r[0],"username":r[1],"media_url":r[2] or "","text":r[3] or "","created_at":str(r[4])} for r in rows]
     conn.close()
-    return jsonify(out)
+    return jsonify(result)
     
 @app.route('/api/story', methods=['POST'])
 def api_story():
