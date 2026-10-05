@@ -71,17 +71,59 @@ def run_alter(sql):
     conn.close()
 
 def nuclear_repair():
-    print("=== NUCLEAR REPAIR V35 ===")
-    # Force add missing columns - individually
+    print("=== DATABASE REPAIR V37 ===")
+    conn = get_conn()
+    c = conn.cursor()
+    try:
+        # Create every table before attempting ALTERs. This matters on a fresh
+        # Render/Postgres database where the old repair tried to ALTER missing tables.
+        if USE_POSTGRES:
+            c.execute("CREATE TABLE IF NOT EXISTS auth (username TEXT PRIMARY KEY, password TEXT, created_at TEXT)")
+            c.execute("CREATE TABLE IF NOT EXISTS profiles (username TEXT PRIMARY KEY, pic_url TEXT, bio TEXT, last_seen TEXT)")
+            c.execute("CREATE TABLE IF NOT EXISTS posts (id SERIAL PRIMARY KEY, username TEXT, text TEXT, media_url TEXT, created_at TEXT)")
+            c.execute("CREATE TABLE IF NOT EXISTS post_likes (post_id INT, username TEXT, PRIMARY KEY(post_id,username))")
+            c.execute("CREATE TABLE IF NOT EXISTS comments (id SERIAL PRIMARY KEY, post_id INT, username TEXT, text TEXT, created_at TEXT)")
+            c.execute("CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, sender TEXT, receiver TEXT, text TEXT, media_url TEXT, created_at TEXT, read INT DEFAULT 0, reply_to TEXT)")
+            c.execute("CREATE TABLE IF NOT EXISTS stories (id SERIAL PRIMARY KEY, username TEXT, media_url TEXT, text TEXT, created_at TEXT, expires_at TEXT)")
+            c.execute("CREATE TABLE IF NOT EXISTS story_views (story_id INT, viewer TEXT, PRIMARY KEY(story_id,viewer))")
+            c.execute("CREATE TABLE IF NOT EXISTS friends (id SERIAL PRIMARY KEY, sender TEXT, receiver TEXT, status TEXT, created_at TEXT)")
+            c.execute("CREATE TABLE IF NOT EXISTS notifications (id SERIAL PRIMARY KEY, username TEXT, type TEXT, from_user TEXT, text TEXT, created_at TEXT, is_read INT DEFAULT 0)")
+            c.execute("CREATE TABLE IF NOT EXISTS user_status (username TEXT PRIMARY KEY, last_seen REAL)")
+        else:
+            c.execute("CREATE TABLE IF NOT EXISTS auth (username TEXT PRIMARY KEY, password TEXT, created_at TEXT)")
+            c.execute("CREATE TABLE IF NOT EXISTS profiles (username TEXT PRIMARY KEY, pic_url TEXT, bio TEXT, last_seen TEXT)")
+            c.execute("CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, text TEXT, media_url TEXT, created_at TEXT)")
+            c.execute("CREATE TABLE IF NOT EXISTS post_likes (post_id INT, username TEXT, PRIMARY KEY(post_id,username))")
+            c.execute("CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INT, username TEXT, text TEXT, created_at TEXT)")
+            c.execute("CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, sender TEXT, receiver TEXT, text TEXT, media_url TEXT, created_at TEXT, read INT DEFAULT 0, reply_to TEXT)")
+            c.execute("CREATE TABLE IF NOT EXISTS stories (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, media_url TEXT, text TEXT, created_at TEXT, expires_at TEXT)")
+            c.execute("CREATE TABLE IF NOT EXISTS story_views (story_id INT, viewer TEXT, PRIMARY KEY(story_id,viewer))")
+            c.execute("CREATE TABLE IF NOT EXISTS friends (id INTEGER PRIMARY KEY AUTOINCREMENT, sender TEXT, receiver TEXT, status TEXT, created_at TEXT)")
+            c.execute("CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, type TEXT, from_user TEXT, text TEXT, created_at TEXT, is_read INTEGER DEFAULT 0)")
+            c.execute("CREATE TABLE IF NOT EXISTS user_status (username TEXT PRIMARY KEY, last_seen REAL)")
+        conn.commit()
+    finally:
+        conn.close()
+
+    # Migrate older databases. Duplicate-column errors are harmless.
     cols = [
-        ("posts","text","TEXT"), ("posts","media_url","TEXT"), ("posts","username","TEXT"), ("posts","created_at","TEXT"),
-        ("stories","text","TEXT"), ("stories","media_url","TEXT"), ("stories","expires_at","TEXT"), ("stories","created_at","TEXT"), ("stories","username","TEXT"),
-        ("messages","text","TEXT"), ("messages","media_url","TEXT"), ("messages","receiver","TEXT"), ("messages","sender","TEXT"), ("messages","created_at","TEXT"),
-        ("profiles","pic_url","TEXT"),
+        ("profiles","pic_url","TEXT"), ("profiles","bio","TEXT"), ("profiles","last_seen","TEXT"),
+        ("messages","sender","TEXT"), ("messages","receiver","TEXT"), ("messages","text","TEXT"),
+        ("messages","media_url","TEXT"), ("messages","created_at","TEXT"), ("messages","read","INT DEFAULT 0"),
+        ("messages","reply_to","TEXT"),
+        ("friends","sender","TEXT"), ("friends","receiver","TEXT"), ("friends","status","TEXT"),
+        ("friends","created_at","TEXT"),
+        ("notifications","username","TEXT"), ("notifications","type","TEXT"),
+        ("notifications","from_user","TEXT"), ("notifications","text","TEXT"),
+        ("notifications","created_at","TEXT"), ("notifications","is_read","INT DEFAULT 0"),
     ]
-    for tbl,col,typ in cols:
-        run_alter(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col} {typ}" if USE_POSTGRES else f"ALTER TABLE {tbl} ADD COLUMN {col} {typ}")
-    print("REPAIR DONE")
+    for tbl, col, typ in cols:
+        run_alter(
+            f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col} {typ}"
+            if USE_POSTGRES
+            else f"ALTER TABLE {tbl} ADD COLUMN {col} {typ}"
+        )
+    print("DATABASE REPAIR COMPLETE")
 
 def init_db():
     try: nuclear_repair()
@@ -113,7 +155,7 @@ def init_db():
         c.execute("CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, type TEXT, from_user TEXT, text TEXT, created_at TEXT, is_read INTEGER DEFAULT 0)")
         c.execute("CREATE TABLE IF NOT EXISTS user_status (username TEXT PRIMARY KEY, last_seen REAL)")
     conn.commit(); conn.close()
-    print("DB READY V36 BEAUTIFUL + ALL FIXES")
+    print("DB READY V37 - MESSAGING + FRIEND REQUESTS FIXED")
 
 init_db()
 
@@ -411,51 +453,41 @@ async function openChat(username){
 function backChat(){chatWith='';document.getElementById('chatBox').style.display='none';document.getElementById('chatUsers').style.display='block';document.getElementById('searchChat').style.display='block';loadChatUsers();}
 
 async function sendMsg(){
-  if(!chatWith){
-    alert('Please select a user first.');
-    return;
-  }
+  if(!chatWith){ alert('Please select a user first.'); return; }
 
-  const input = document.getElementById('chatText');
-  const text = input ? input.value.trim() : '';
-  const fileInput = document.getElementById('chatFileHidden');
-  const file = (typeof selectedChatFile !== 'undefined' && selectedChatFile) ? selectedChatFile : (fileInput && fileInput.files ? fileInput.files[0] : null);
+  const input=document.getElementById('chatText');
+  const fileInput=document.getElementById('chatFileHidden');
+  const text=input ? input.value.trim() : '';
+  const file=(typeof selectedChatFile!=='undefined' && selectedChatFile) ? selectedChatFile : (fileInput && fileInput.files ? fileInput.files[0] : null);
 
-  if(!text && !file){
-    return;
-  }
+  if(!text && !file) return;
 
-  const fd = new FormData();
-  fd.append('receiver', chatWith);
-  fd.append('text', text);
-  if(typeof replyToText !== 'undefined' && replyToText){
-    fd.append('reply_to', replyToText);
-  }
-  if(file){
-    fd.append('media', file);
-  }
+  const fd=new FormData();
+  fd.append('receiver',chatWith);
+  fd.append('text',text);
+  if(typeof replyToText!=='undefined' && replyToText) fd.append('reply_to',replyToText);
+  if(file) fd.append('media',file);
 
   try{
-    const r = await fetch('/api/send', {method:'POST', body:fd});
-    const d = await r.json();
-
+    const r=await fetch('/api/send',{method:'POST',body:fd,credentials:'same-origin'});
+    const raw=await r.text();
+    let d={};
+    try{d=raw?JSON.parse(raw):{};}catch(_){}
     if(!r.ok || !d.ok){
-      alert(d.error || 'Message could not be sent.');
+      console.error('Message failed:',r.status,raw);
+      alert(d.error || ('Could not send message (HTTP '+r.status+').'));
       return;
     }
-
-    if(input) input.value = '';
-    if(fileInput) fileInput.value = '';
-    if(typeof selectedChatFile !== 'undefined') selectedChatFile = null;
-    if(typeof cancelReply === 'function') cancelReply();
-
+    if(input) input.value='';
+    if(fileInput) fileInput.value='';
+    if(typeof selectedChatFile!=='undefined') selectedChatFile=null;
+    if(typeof cancelReply==='function') cancelReply();
     await loadMsgs();
   }catch(e){
     console.error(e);
-    alert('Message could not be sent. Please check your connection and try again.');
+    alert('Could not send message. Please check the server connection.');
   }
 }
-
 async function loadMsgs(){
   if(!chatWith)return;let r=await fetch('/api/messages?with='+chatWith);let msgs=await r.json();let h='';
   msgs.forEach(m=>{
@@ -501,18 +533,22 @@ async function sendFriendReq(u){
     const r=await fetch('/api/friend/request',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
+      credentials:'same-origin',
       body:JSON.stringify({to:u})
     });
-    const d=await r.json();
+    const raw=await r.text();
+    let d={};
+    try{ d=raw?JSON.parse(raw):{}; }catch(_){}
     if(!r.ok || !d.ok){
-      alert(d.error || 'Friend request could not be sent.');
+      console.error('Friend request failed:',r.status,raw);
+      alert(d.error || ('Could not send friend request (HTTP '+r.status+').'));
       return;
     }
     await searchUsers();
     await loadFriendRequests();
   }catch(e){
     console.error(e);
-    alert('Friend request could not be sent. Please check your connection and try again.');
+    alert('Could not send friend request. Please check the server connection.');
   }
 }
 async function acceptFriend(u){ await fetch('/api/friend/accept',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:u})}); searchUsers(); loadFriends(); }
@@ -620,53 +656,69 @@ def api_users():
       
 @app.route('/api/friend/request', methods=['POST'])
 def api_friend_request():
-    me=session.get('username')
-    data=request.get_json(silent=True) or {}
-    to=(data.get('to') or '').strip()
+    me = (session.get('username') or '').strip()
+    data = request.get_json(silent=True) or {}
+    to = (data.get('to') or '').strip()
 
     if not me:
         return jsonify({"ok":False,"error":"Not logged in"}),401
     if not to:
         return jsonify({"ok":False,"error":"Missing username"}),400
-    if to==me:
+    if to == me:
         return jsonify({"ok":False,"error":"You cannot add yourself"}),400
 
-    conn=get_conn(); c=conn.cursor()
+    conn = get_conn()
+    c = conn.cursor()
     try:
-        # The receiving account must actually exist.
-        q_user = "SELECT username FROM profiles WHERE username=%s" if USE_POSTGRES else "SELECT username FROM profiles WHERE username=?"
+        # Check the actual account in auth. Profiles from older accounts may
+        # be missing even though the login account exists.
+        q_user = "SELECT username FROM auth WHERE username=%s" if USE_POSTGRES else "SELECT username FROM auth WHERE username=?"
         c.execute(q_user, (to,))
         if not c.fetchone():
             return jsonify({"ok":False,"error":"User not found"}),404
 
-        q = "SELECT sender,receiver,status FROM friends WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s)" if USE_POSTGRES else "SELECT sender,receiver,status FROM friends WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?)"
+        q = (
+            "SELECT sender,receiver,status FROM friends WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s)"
+            if USE_POSTGRES else
+            "SELECT sender,receiver,status FROM friends WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?)"
+        )
         c.execute(q, (me,to,to,me))
-        existing=c.fetchone()
+        existing = c.fetchone()
 
         if existing:
-            sender,receiver,status=existing
-            if status=="accepted":
+            sender, receiver, status = existing
+            if status == "accepted":
                 return jsonify({"ok":False,"error":"You are already friends"}),409
-            if sender==me:
+            if sender == me and receiver == to:
                 return jsonify({"ok":False,"error":"Friend request already sent"}),409
             return jsonify({"ok":False,"error":"This user has already sent you a friend request"}),409
 
-        q2 = "INSERT INTO friends (sender,receiver,status,created_at) VALUES (%s,%s,'pending',%s)" if USE_POSTGRES else "INSERT INTO friends (sender,receiver,status,created_at) VALUES (?,?,?,?)"
+        q2 = (
+            "INSERT INTO friends (sender,receiver,status,created_at) VALUES (%s,%s,%s,%s)"
+            if USE_POSTGRES else
+            "INSERT INTO friends (sender,receiver,status,created_at) VALUES (?,?,?,?)"
+        )
         c.execute(q2, (me,to,'pending',datetime.now().isoformat()))
 
+        # Notification is created in the same transaction, but a notification
+        # failure must not make the friend request disappear.
         try:
-            q3 = "INSERT INTO notifications (username,type,from_user,text,created_at,is_read) VALUES (%s,'friend_request',%s,%s,%s,0)" if USE_POSTGRES else "INSERT INTO notifications (username,type,from_user,text,created_at,is_read) VALUES (?,?,?,?,?,0)"
-            c.execute(q3, (to,me,me+" sent you a friend request",datetime.now().isoformat()))
+            q3 = (
+                "INSERT INTO notifications (username,type,from_user,text,created_at,is_read) VALUES (%s,%s,%s,%s,%s,0)"
+                if USE_POSTGRES else
+                "INSERT INTO notifications (username,type,from_user,text,created_at,is_read) VALUES (?,?,?,?,?,0)"
+            )
+            c.execute(q3, (to,'friend_request',me,me+" sent you a friend request",datetime.now().isoformat()))
         except Exception:
-            # A notification failure must never cancel the actual friend request.
             pass
 
         conn.commit()
         return jsonify({"ok":True})
-    except Exception as e:
+    except Exception:
         conn.rollback()
-        print("FRIEND REQUEST ERROR:", traceback.format_exc())
-        return jsonify({"ok":False,"error":"Could not send friend request"}),500
+        print("FRIEND REQUEST ERROR:")
+        traceback.print_exc()
+        return jsonify({"ok":False,"error":"Server could not save the friend request"}),500
     finally:
         conn.close()
 
@@ -881,37 +933,43 @@ def api_mark_read():
 
 @app.route('/api/send', methods=['POST'])
 def api_send():
-    me=session.get('username')
-    other=(request.form.get('receiver') or '').strip()
-    txt=(request.form.get('text') or '')[:500]
-    reply_to=(request.form.get('reply_to') or '')[:100]
-    f=request.files.get('media')
+    me = (session.get('username') or '').strip()
+    other = (request.form.get('receiver') or '').strip()
+    txt = (request.form.get('text') or '')[:500]
+    reply_to = (request.form.get('reply_to') or '')[:100]
+    f = request.files.get('media')
 
     if not me:
         return jsonify({"ok":False,"error":"Not logged in"}),401
     if not other:
         return jsonify({"ok":False,"error":"No recipient selected"}),400
-    if other==me:
+    if other == me:
         return jsonify({"ok":False,"error":"You cannot message yourself"}),400
     if not txt and not (f and f.filename):
         return jsonify({"ok":False,"error":"empty"}),400
 
-    conn=get_conn(); c=conn.cursor()
+    conn = get_conn()
+    c = conn.cursor()
     try:
-        q_user = "SELECT username FROM profiles WHERE username=%s" if USE_POSTGRES else "SELECT username FROM profiles WHERE username=?"
+        q_user = "SELECT username FROM auth WHERE username=%s" if USE_POSTGRES else "SELECT username FROM auth WHERE username=?"
         c.execute(q_user, (other,))
         if not c.fetchone():
             return jsonify({"ok":False,"error":"Recipient not found"}),404
 
-        url=upload_to_cloud(f) if f and f.filename else ''
-        q = "INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at) VALUES (%s,%s,%s,%s,%s,0,%s)" if USE_POSTGRES else "INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at) VALUES (?,?,?,?,?,0,?)"
-        c.execute(q,(me,other,txt,url,reply_to,datetime.now().isoformat()))
+        url = upload_to_cloud(f) if f and f.filename else ''
+        q = (
+            "INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at) VALUES (%s,%s,%s,%s,%s,0,%s)"
+            if USE_POSTGRES else
+            "INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at) VALUES (?,?,?,?,?,0,?)"
+        )
+        c.execute(q, (me,other,txt,url,reply_to,datetime.now().isoformat()))
         conn.commit()
         return jsonify({"ok":True})
     except Exception:
         conn.rollback()
-        print("SEND MESSAGE ERROR:", traceback.format_exc())
-        return jsonify({"ok":False,"error":"Could not send message"}),500
+        print("SEND MESSAGE ERROR:")
+        traceback.print_exc()
+        return jsonify({"ok":False,"error":"Server could not save the message"}),500
     finally:
         conn.close()
 
