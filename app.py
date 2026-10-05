@@ -418,7 +418,32 @@ async function loadMsgs(){
 }
 function setReply(t){replyToText=t;let p=document.getElementById('replyPreview');p.style.display='block';p.innerHTML=`Replying to: ${t} <span onclick="cancelReply()" style="float:right;cursor:pointer;color:red">✕</span>`;}
 function cancelReply(){replyToText='';document.getElementById('replyPreview').style.display='none';}
-
+async function searchUsers(){
+ let inp=document.getElementById('searchUsersInput');
+ let q=inp?inp.value:'';
+ let box=document.getElementById('searchResults');
+ if(!box) return;
+ if(!q.trim()){box.innerHTML='';return;}
+ box.innerHTML='Searching...';
+ try{
+  let r=await fetch('/api/search?q='+encodeURIComponent(q));
+  let users=await r.json();
+  let h='';
+  users.forEach(function(u){
+   if(!u.username) return;
+   if(u.username=='null') return;
+   if(u.username=='None') return;
+   let s=u.friend_status||'none';
+   let btn='';
+   if(s=='none') btn='<button onclick="sendFriendReq(\''+u.username+'\')" style="background:#ffcc00;padding:6px 12px;border-radius:20px;border:none;font-weight:700">Add</button>';
+   else if(s=='pending_sent') btn='<span style="background:#ddd;padding:6px 12px;border-radius:20px;font-size:12px">Requested</span>';
+   else if(s=='pending_received') btn='<button onclick="acceptFriend(\''+u.username+'\')" style="background:#00c851;color:#fff;padding:6px 12px;border-radius:20px;border:none">Accept</button>';
+   else btn='<span>Friends</span>';
+   h+='<div style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid #eee"><b>'+u.username+'</b><div style="margin-left:auto">'+btn+'</div></div>';
+  });
+  box.innerHTML=h||'No users found';
+ }catch(e){box.innerHTML='Error:'+e;}
+}
 async function sendFriendReq(u){ await fetch('/api/friend/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:u})}); searchUsers(); loadFriendRequests(); }
 async function acceptFriend(u){ await fetch('/api/friend/accept',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:u})}); searchUsers(); loadFriends(); }
 async function loadFriendRequests(){
