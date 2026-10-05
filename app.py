@@ -267,12 +267,10 @@ MAIN_HTML="""<!DOCTYPE html><html><head><meta name=viewport content="width=devic
 :root{--bg:#f6f6f6;--card:#fff;--text:#000;--sec:#efefef;--border:#e5e5e5}
 body.dark{--bg:#000;--card:#111;--text:#fff;--sec:#222;--border:#222}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,sans-serif;margin:0}
-/* Tap safety: hidden panels never intercept touches. */
-[hidden],[style*="display:none"]{pointer-events:none!important}
-button,a,input,textarea,select,[role="button"],[onclick]{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
-button,a,[role="button"],[onclick]{cursor:pointer}
-.chat-screen[style*="display:block"],.chat-screen[style*="display: block"]{pointer-events:auto!important}
-.viewer[style*="display:flex"],.viewer[style*="display: flex"],.profile-modal[style*="display:flex"],.profile-modal[style*="display: flex"]{pointer-events:auto!important}
+/* Interaction safety: hidden panels must never intercept taps. */
+[style*="display:none"], .is-hidden { pointer-events:none !important; }
+button, a, input, textarea, select, label, [onclick] { touch-action:manipulation; }
+
 .top{position:fixed;top:0;left:0;right:0;background:var(--card);padding:8px 10px;display:flex;align-items:center;justify-content:space-between;z-index:100;border-bottom:1px solid var(--border);height:50px;box-sizing:border-box}
 .logo{display:flex;align-items:center;gap:7px;font-weight:900;color:#c9a227;font-size:15px}.logo img{width:34px;height:34px;border-radius:50%;object-fit:cover}
 .logo-circle{width:34px;height:34px;border:2px solid #c9a227;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px}
@@ -322,7 +320,7 @@ button,a,[role="button"],[onclick]{cursor:pointer}
   text-overflow:ellipsis;
 }
 .chat-screen .chat-header .chat-search-btn{flex:0 0 auto}
-.chat-screen{background:#070707!important}
+.chat-screen{background:#070707!important;pointer-events:auto}
 .chat-screen::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 20% 20%,rgba(255,204,0,.08),transparent 34%),radial-gradient(circle at 85% 75%,rgba(255,204,0,.06),transparent 35%);pointer-events:none}
 .chat-user-row{background:rgba(18,18,18,.96)!important;border:1px solid rgba(255,204,0,.10)!important}
 .chat-user-main{min-width:0;flex:1}.chat-user-meta{font-size:12px;color:#888}
@@ -389,7 +387,7 @@ input,textarea{width:100%;background:var(--sec);border:none;border-radius:12px;p
 .pic{width:32px;height:32px;border-radius:50%;background:#000;color:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0}
 .pic img{width:100%;height:100%;object-fit:cover}
 .sticker{width:42px;height:42px;background:#e9e9e9;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;border:1px solid #ddd}
-.chat-bar{position:fixed;bottom:0;left:0;right:0;background:var(--card);padding:10px;display:flex;gap:8px;border-top:1px solid var(--border);align-items:center;z-index:50}
+.chat-bar{position:absolute;bottom:0;left:0;right:0;background:var(--card);padding:10px;display:flex;gap:8px;border-top:1px solid var(--border);align-items:center;z-index:50}
 .pill{flex:1;background:#e9e9e9;border:none;border-radius:25px;padding:13px 16px;outline:none;font-size:15px}
 .yellow{background:#ffcc00;border:none;border-radius:25px;padding:0 18px;height:44px;font-weight:800;color:#0040ff}
 .del{font-size:11px;color:#ff4444;background:rgba(255,0,0,0.1);padding:3px 8px;border-radius:10px;margin-left:6px;cursor:pointer}
@@ -429,7 +427,7 @@ input,textarea{width:100%;background:var(--sec);border:none;border-radius:12px;p
 <div class=tab id=tSearch onclick="switchTab('search')">Search</div>
 </div>
 <div class=content>
-<div id=storiesDiv>
+<div id=storiesDiv style="pointer-events:auto">
 <div style="display:flex;justify-content:space-between;padding:12px;background:var(--card)"><b>Friends ></b><small style="color:#888">Friends can view (once chatting)</small><b style="color:#a855f7;cursor:pointer" onclick="document.getElementById('storyFile').click()">+ Add</b><input type=file id=storyFile accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" multiple style=display:none></div>
 <div class=story-bar id=storyBar></div>
 <div class=story-card>
@@ -441,7 +439,7 @@ input,textarea{width:100%;background:var(--sec);border:none;border-radius:12px;p
 <p id=storyMsg style="text-align:center;color:#c9a227;font-weight:bold"></p>
 </div>
 </div>
-<div id=postDiv style=display:none>
+<div id=postDiv style="display:none;pointer-events:none">
 <div class=card>
 <textarea id=postText placeholder="What's up? Prove Am..."></textarea>
 <div style="display:flex;gap:8px;align-items:center;margin:8px 0">
@@ -455,12 +453,12 @@ input,textarea{width:100%;background:var(--sec);border:none;border-radius:12px;p
 </div>
 <div id=postsList></div>
 </div>
-<div id=chatDiv style="display:none" class="chat-page">
+<div id=chatDiv style="display:none;pointer-events:none" class="chat-page">
 <input id=searchChat placeholder="Search friends..." oninput=filterChat()>
 <div id=chatUsers></div>
 <div id=chatBox style="display:none" class="chat-screen"></div>
 </div>
-<div id=searchDiv style=display:none class=card>
+<div id=searchDiv style="display:none;pointer-events:none" class=card>
 <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
 <h3 style="margin:0">🔍 Search Users</h3>
 <span style="font-size:10px;font-weight:900;color:#a88400;background:#fff7cc;padding:6px 9px;border-radius:12px;white-space:nowrap">PROVE AM • JERRICK SMITH</span>
@@ -526,7 +524,9 @@ function updateLowBtn(){let b=document.getElementById('lowBtn'); if(!b)return; b
 function toggleLow(){lowData=!lowData;localStorage.setItem('lowData',lowData?'1':'0'); updateLowBtn(); alert(lowData?'Low Data ON':'Low Data OFF'); loadPosts();}
 function toggleTheme(){dark=!dark;localStorage.setItem('theme',dark?'dark':'light');document.body.classList.toggle('dark');}
 async function showSavedPosts(){let r=await fetch('/api/post/saved');let d=await r.json();let h=d.length?d.map(p=>`<div class=card><b>${p.username}</b><small style="float:right">${(p.created_at||'').slice(0,16)}</small><p>${linkify(p.text||'')}</p>${p.media_url?`<img src="${p.media_url}" loading="lazy" style="width:100%;max-height:240px;object-fit:cover;border-radius:10px">`:''}</div>`).join(''):'<p style="color:#888">No saved posts yet.</p>';document.getElementById('savedList').innerHTML=h;document.getElementById('savedModal').style.display='flex';}
-function switchTab(t){
+function switchTab(t){const panels={stories:'storiesDiv',post:'postDiv',chat:'chatDiv',search:'searchDiv'};
+Object.keys(panels).forEach(k=>{const el=document.getElementById(panels[k]);if(el){el.style.pointerEvents=(k===t)?'auto':'none';}});
+
   document.querySelectorAll('.tab').forEach(e=>e.classList.remove('active'));
   let el=document.getElementById('t'+t.charAt(0).toUpperCase()+t.slice(1)); if(el)el.classList.add('active');
   document.getElementById('storiesDiv').style.display=t=='stories'?'block':'none';
@@ -669,7 +669,7 @@ async function openChat(username){
   chatWith=username;
   document.getElementById('chatUsers').style.display='none';
   document.getElementById('searchChat').style.display='none';
-  const box=document.getElementById('chatBox'); box.style.display='block'; box.style.pointerEvents='auto';
+  const box=document.getElementById('chatBox'); box.style.display='block';
 
   // Show the chat shell immediately; don't wait for status/network calls.
   box.innerHTML=`<div class="chat-header"><button onclick="backChat()" class="chat-back">← ${escapeHtml(username)} <span id="chatOnlineState" class="chat-status-loading">●</span></button><button onclick="searchConversation()" class="small-btn chat-search-btn">🔎 Search</button></div><div id=replyPreview class=reply-preview></div><div id=typingStatus class=typing></div><div id=msgs><div class="chat-loading">Loading messages…</div></div><div class=chat-bar><div class="composer-wrap"><input id=chatText class=pill autocomplete="off" placeholder="Write message..." /><div class="composer-actions"><button type=button class=icon-btn title="Voice" onclick="startRecording()">🎤</button><button type=button class=icon-btn title="Attach" onclick="document.getElementById('chatFileHidden').click()">📎</button></div></div><input type=file id=chatFileHidden accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" multiple style="display:none"><button class=yellow onclick=sendMsg()>Send</button></div>`;
@@ -698,7 +698,7 @@ async function searchConversation(){if(!chatWith)return;let q=prompt('Search thi
 function backChat(){
   chatWith='';
   if(window.typingTimer){clearInterval(window.typingTimer);window.typingTimer=null;}
-  let box=document.getElementById('chatBox');if(box){box.style.display='none';box.style.pointerEvents='none';box.innerHTML='';}
+  let box=document.getElementById('chatBox');if(box){box.style.display='none';box.innerHTML='';}
   let users=document.getElementById('chatUsers');if(users)users.style.display='block';
   let search=document.getElementById('searchChat');if(search)search.style.display='block';
   loadChatUsers();
@@ -765,12 +765,41 @@ let typingSendTimer=0;function sendTyping(){if(!chatWith)return;clearTimeout(typ
 async function pollTyping(){if(!chatWith)return;try{let d=await (await fetch('/api/typing?peer='+encodeURIComponent(chatWith))).json();let el=document.getElementById('typingStatus');if(el)el.innerText=d.typing?chatWith+' is typing…':'';}catch(e){}}
 let mediaRecorder=null,recordChunks=[];
 async function startRecording(){if(mediaRecorder&&mediaRecorder.state==='recording'){mediaRecorder.stop();return;}if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){alert('Voice recording is not supported by this browser');return;}try{let stream=await navigator.mediaDevices.getUserMedia({audio:true});mediaRecorder=new MediaRecorder(stream);recordChunks=[];mediaRecorder.ondataavailable=e=>{if(e.data.size)recordChunks.push(e.data)};mediaRecorder.onstop=async()=>{stream.getTracks().forEach(t=>t.stop());let blob=new Blob(recordChunks,{type:mediaRecorder.mimeType||'audio/webm'});let file=new File([blob],'voice-'+Date.now()+'.webm',{type:blob.type});let fd=new FormData();fd.append('receiver',chatWith);fd.append('text','');fd.append('media',file);fd.append('media_type','audio');let r=await fetch('/api/send',{method:'POST',body:fd});let d=await r.json();if(!d.ok)alert(d.error||'Could not send voice message');else loadMsgs();};mediaRecorder.start();alert('Recording... tap 🎤 again to stop');}catch(e){alert('Microphone permission was denied or unavailable');}}
-let swipeX=0,swipeY=0,swipeTarget=null,swipeStartedInsideMessages=false,swipeMoved=false;
-document.addEventListener('touchstart',e=>{if(!e.touches||!e.touches[0])return;const t=e.target;swipeX=e.touches[0].clientX;swipeY=e.touches[0].clientY;swipeTarget=t;swipeMoved=false;swipeStartedInsideMessages=!!(t&&t.closest&&t.closest('#msgs'));},{passive:true});
-document.addEventListener('touchmove',e=>{if(!e.touches||!e.touches[0])return;const dx=e.touches[0].clientX-swipeX,dy=e.touches[0].clientY-swipeY;if(Math.abs(dx)>12||Math.abs(dy)>12)swipeMoved=true;},{passive:true});
-document.addEventListener('touchend',e=>{if(!e.changedTouches||!e.changedTouches[0])return;const dx=e.changedTouches[0].clientX-swipeX,dy=e.changedTouches[0].clientY-swipeY,absX=Math.abs(dx),absY=Math.abs(dy),target=swipeTarget;const blocked=target&&target.closest&&target.closest('input,textarea,button,a,select,[contenteditable="true"],[role="button"],.story-bar,.viewer,.profile-modal,.chat-screen,.chat-bar');if(swipeStartedInsideMessages){const el=target&&target.closest&&target.closest('#msgs [data-reply-text]');if(el&&!blocked&&absX>70&&absX>absY)setReply(el.dataset.replyText||'');}else if(!blocked&&swipeMoved&&absX>=70&&absX>absY*1.25){const current=document.querySelector('.tab.active'),order=['stories','post','chat','search'];const currentId=current?current.id.replace(/^t/,'').toLowerCase():'stories';let i=order.indexOf(currentId);if(i<0)i=0;const next=dx<0?Math.min(order.length-1,i+1):Math.max(0,i-1);if(next!==i)switchTab(order[next]);}swipeX=swipeY=0;swipeTarget=null;swipeStartedInsideMessages=false;swipeMoved=false;},{passive:true});
-function setReply(t){replyToText=t;let p=document.getElementById('replyPreview');p.style.display='block';p.innerHTML=`Replying to: ${t} <span onclick="cancelReply()" style="float:right;cursor:pointer;color:red">✕</span>`;}
-function cancelReply(){replyToText='';document.getElementById('replyPreview').style.display='none';}
+let swipeX=0,swipeY=0,swipeTarget=null,swipeStartedInsideMessages=false;
+document.addEventListener('touchstart',e=>{
+  if(!e.touches||!e.touches[0]) return;
+  const target=e.target;
+  swipeX=e.touches[0].clientX;
+  swipeY=e.touches[0].clientY;
+  swipeTarget=target;
+  swipeStartedInsideMessages=!!(target && target.closest && target.closest('#msgs'));
+},{passive:true});
+
+document.addEventListener('touchend',e=>{
+  if(!e.changedTouches||!e.changedTouches[0]) return;
+  const end=e.changedTouches[0];
+  const dx=end.clientX-swipeX, dy=end.clientY-swipeY;
+  const absX=Math.abs(dx), absY=Math.abs(dy);
+
+  /* Never cancel/prevent a normal tap. Only act on a clear horizontal swipe. */
+  if(absX<70 || absX<=absY*1.25) return;
+
+  if(swipeStartedInsideMessages){
+    const el=swipeTarget&&swipeTarget.closest&&swipeTarget.closest('#msgs [data-reply-text]');
+    if(el) setReply(el.dataset.replyText||'');
+    return;
+  }
+
+  /* Only switch tabs for a genuine swipe that started outside controls. */
+  const interactive=swipeTarget&&swipeTarget.closest&&swipeTarget.closest(
+    'button,input,textarea,select,a,label,[onclick],.tab,.chat-bar,.chat-header'
+  );
+  if(interactive) return;
+
+  if(dx<0 && typeof switchTab==='function') switchTab('search');
+  if(dx>0 && typeof switchTab==='function') switchTab('stories');
+}, {passive:true});
+
 async function searchUsers(){
   let inp=document.getElementById('searchUsersInput');
   let q=inp ? inp.value.trim() : '';
