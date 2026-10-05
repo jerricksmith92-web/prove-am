@@ -31,7 +31,12 @@ def upload_to_cloud(file_storage):
         print(f"CLOUD FAIL, trying local: {e}")
         try:
             file_storage.stream.seek(0)
-            fname = uuid.uuid4().hex + ".jpg"
+            original = os.path.basename(file_storage.filename or "")
+            ext = os.path.splitext(original)[1].lower()
+            allowed_exts = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp4", ".webm", ".mov", ".m4v", ".avi"}
+            if ext not in allowed_exts:
+                ext = ".bin"
+            fname = uuid.uuid4().hex + ext
             path = os.path.join(UPLOAD_FOLDER, fname)
             file_storage.save(path)
             return "/static/uploads/" + fname
@@ -105,6 +110,7 @@ def init_db():
         c.execute("CREATE TABLE IF NOT EXISTS story_views (story_id INT, viewer TEXT, PRIMARY KEY(story_id,viewer))")
         c.execute("CREATE TABLE IF NOT EXISTS friends (id INTEGER PRIMARY KEY AUTOINCREMENT, sender TEXT, receiver TEXT, status TEXT, created_at TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS friend (id INTEGER PRIMARY KEY AUTOINCREMENT, sender TEXT, receiver TEXT, status TEXT, created_at TEXT)")
+        c.execute("CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, type TEXT, from_user TEXT, text TEXT, created_at TEXT, is_read INTEGER DEFAULT 0)")
         c.execute("CREATE TABLE IF NOT EXISTS user_status (username TEXT PRIMARY KEY, last_seen REAL)")
     conn.commit(); conn.close()
     print("DB READY V36 BEAUTIFUL + ALL FIXES")
@@ -403,6 +409,53 @@ async function openChat(username){
   loadMsgs();
 }
 function backChat(){chatWith='';document.getElementById('chatBox').style.display='none';document.getElementById('chatUsers').style.display='block';document.getElementById('searchChat').style.display='block';loadChatUsers();}
+
+async function sendMsg(){
+  if(!chatWith){
+    alert('Please select a user first.');
+    return;
+  }
+
+  const input = document.getElementById('chatText');
+  const text = input ? input.value.trim() : '';
+  const fileInput = document.getElementById('chatFileHidden');
+  const file = (typeof selectedChatFile !== 'undefined' && selectedChatFile) ? selectedChatFile : (fileInput && fileInput.files ? fileInput.files[0] : null);
+
+  if(!text && !file){
+    return;
+  }
+
+  const fd = new FormData();
+  fd.append('receiver', chatWith);
+  fd.append('text', text);
+  if(typeof replyToText !== 'undefined' && replyToText){
+    fd.append('reply_to', replyToText);
+  }
+  if(file){
+    fd.append('media', file);
+  }
+
+  try{
+    const r = await fetch('/api/send', {method:'POST', body:fd});
+    const d = await r.json();
+
+    if(!r.ok || !d.ok){
+      alert(d.error || 'Message could not be sent.');
+      return;
+    }
+
+    if(input) input.value = '';
+    if(fileInput) fileInput.value = '';
+    if(typeof selectedChatFile !== 'undefined') selectedChatFile = null;
+    if(typeof cancelReply === 'function') cancelReply();
+
+    await loadMsgs();
+  }catch(e){
+    console.error(e);
+    alert('Message could not be sent. Please check your connection and try again.');
+  }
+}
+
 async function loadMsgs(){
   if(!chatWith)return;let r=await fetch('/api/messages?with='+chatWith);let msgs=await r.json();let h='';
   msgs.forEach(m=>{
@@ -443,7 +496,25 @@ async function searchUsers(){
     box.innerHTML=h||'No users found';
   }catch(e){ box.innerHTML='Error: '+e; }
 }
-async function sendFriendReq(u){ await fetch('/api/friend/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:u})}); searchUsers(); loadFriendRequests(); }
+async function sendFriendReq(u){
+  try{
+    const r=await fetch('/api/friend/request',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({to:u})
+    });
+    const d=await r.json();
+    if(!r.ok || !d.ok){
+      alert(d.error || 'Friend request could not be sent.');
+      return;
+    }
+    await searchUsers();
+    await loadFriendRequests();
+  }catch(e){
+    console.error(e);
+    alert('Friend request could not be sent. Please check your connection and try again.');
+  }
+}
 async function acceptFriend(u){ await fetch('/api/friend/accept',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:u})}); searchUsers(); loadFriends(); }
 async function loadFriendRequests(){
   let r=await fetch('/api/friend/requests'); let reqs=await r.json();
@@ -549,20 +620,55 @@ def api_users():
       
 @app.route('/api/friend/request', methods=['POST'])
 def api_friend_request():
-    me=session.get('username'); to=(request.json.get('to') if request.json else None)
-    if not to or to==me: return jsonify({"ok":False})
+    me=session.get('username')
+    data=request.get_json(silent=True) or {}
+    to=(data.get('to') or '').strip()
+
+    if not me:
+        return jsonify({"ok":False,"error":"Not logged in"}),401
+    if not to:
+        return jsonify({"ok":False,"error":"Missing username"}),400
+    if to==me:
+        return jsonify({"ok":False,"error":"You cannot add yourself"}),400
+
     conn=get_conn(); c=conn.cursor()
-    q = "SELECT 1 FROM friends WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s)" if USE_POSTGRES else "SELECT 1 FROM friends WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?)"
-    c.execute(q, (me,to,to,me))
-    if c.fetchone(): conn.close(); return jsonify({"ok":False, "error":"exists"})
-    q2 = "INSERT INTO friends (sender,receiver,status) VALUES (%s,%s,'pending')" if USE_POSTGRES else "INSERT INTO friends (sender,receiver,status) VALUES (?,?, 'pending')"
-    c.execute(q2, (me,to))
     try:
-        q3 = "INSERT INTO notifications (username,type,from_user) VALUES (%s,'friend_request',%s)" if USE_POSTGRES else "INSERT INTO notifications (username,type,from_user) VALUES (?,'friend_request',?)"
-        c.execute(q3, (to,me))
-    except:
-        pass
-    conn.commit(); conn.close(); return jsonify({"ok":True})
+        # The receiving account must actually exist.
+        q_user = "SELECT username FROM profiles WHERE username=%s" if USE_POSTGRES else "SELECT username FROM profiles WHERE username=?"
+        c.execute(q_user, (to,))
+        if not c.fetchone():
+            return jsonify({"ok":False,"error":"User not found"}),404
+
+        q = "SELECT sender,receiver,status FROM friends WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s)" if USE_POSTGRES else "SELECT sender,receiver,status FROM friends WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?)"
+        c.execute(q, (me,to,to,me))
+        existing=c.fetchone()
+
+        if existing:
+            sender,receiver,status=existing
+            if status=="accepted":
+                return jsonify({"ok":False,"error":"You are already friends"}),409
+            if sender==me:
+                return jsonify({"ok":False,"error":"Friend request already sent"}),409
+            return jsonify({"ok":False,"error":"This user has already sent you a friend request"}),409
+
+        q2 = "INSERT INTO friends (sender,receiver,status,created_at) VALUES (%s,%s,'pending',%s)" if USE_POSTGRES else "INSERT INTO friends (sender,receiver,status,created_at) VALUES (?,?,?,?)"
+        c.execute(q2, (me,to,'pending',datetime.now().isoformat()))
+
+        try:
+            q3 = "INSERT INTO notifications (username,type,from_user,text,created_at,is_read) VALUES (%s,'friend_request',%s,%s,%s,0)" if USE_POSTGRES else "INSERT INTO notifications (username,type,from_user,text,created_at,is_read) VALUES (?,?,?,?,?,0)"
+            c.execute(q3, (to,me,me+" sent you a friend request",datetime.now().isoformat()))
+        except Exception:
+            # A notification failure must never cancel the actual friend request.
+            pass
+
+        conn.commit()
+        return jsonify({"ok":True})
+    except Exception as e:
+        conn.rollback()
+        print("FRIEND REQUEST ERROR:", traceback.format_exc())
+        return jsonify({"ok":False,"error":"Could not send friend request"}),500
+    finally:
+        conn.close()
 
 @app.route('/api/friend/accept', methods=['POST'])
 def api_friend_accept():
@@ -775,11 +881,39 @@ def api_mark_read():
 
 @app.route('/api/send', methods=['POST'])
 def api_send():
-    me=session.get('username'); other=request.form.get('receiver',''); txt=request.form.get('text','')[:500]; reply_to=request.form.get('reply_to','')[:100]; f=request.files.get('media'); url=upload_to_cloud(f) if f and f.filename else ''
-    if not txt and not url: return jsonify({"ok":False,"error":"empty"}),400
+    me=session.get('username')
+    other=(request.form.get('receiver') or '').strip()
+    txt=(request.form.get('text') or '')[:500]
+    reply_to=(request.form.get('reply_to') or '')[:100]
+    f=request.files.get('media')
+
+    if not me:
+        return jsonify({"ok":False,"error":"Not logged in"}),401
+    if not other:
+        return jsonify({"ok":False,"error":"No recipient selected"}),400
+    if other==me:
+        return jsonify({"ok":False,"error":"You cannot message yourself"}),400
+    if not txt and not (f and f.filename):
+        return jsonify({"ok":False,"error":"empty"}),400
+
     conn=get_conn(); c=conn.cursor()
-    c.execute("INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at) VALUES (%s,%s,%s,%s,%s,0,%s)" if USE_POSTGRES else "INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at) VALUES (?,?,?,?,?,0,?)",(me,other,txt,url,reply_to,datetime.now().isoformat()))
-    conn.commit(); conn.close(); return jsonify({"ok":True})
+    try:
+        q_user = "SELECT username FROM profiles WHERE username=%s" if USE_POSTGRES else "SELECT username FROM profiles WHERE username=?"
+        c.execute(q_user, (other,))
+        if not c.fetchone():
+            return jsonify({"ok":False,"error":"Recipient not found"}),404
+
+        url=upload_to_cloud(f) if f and f.filename else ''
+        q = "INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at) VALUES (%s,%s,%s,%s,%s,0,%s)" if USE_POSTGRES else "INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at) VALUES (?,?,?,?,?,0,?)"
+        c.execute(q,(me,other,txt,url,reply_to,datetime.now().isoformat()))
+        conn.commit()
+        return jsonify({"ok":True})
+    except Exception:
+        conn.rollback()
+        print("SEND MESSAGE ERROR:", traceback.format_exc())
+        return jsonify({"ok":False,"error":"Could not send message"}),500
+    finally:
+        conn.close()
 
 @app.route('/api/message/delete', methods=['POST'])
 def api_message_delete():
