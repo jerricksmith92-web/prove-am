@@ -666,7 +666,14 @@ def api_search():
     q = request.args.get('q', '').strip()
     if not q:
         return jsonify([])
-
+    conn = get_conn()
+    c = conn.cursor()
+    like = f"%{q.lower()}%"
+    c.execute("SELECT username,pic_url FROM profiles WHERE LOWER(username) LIKE %s AND username!=%s LIMIT 30" if USE_POSTGRES else "SELECT username,pic_url FROM profiles WHERE LOWER(username) LIKE ? AND username!=? LIMIT 30", (like, me))
+    rows = c.fetchall()
+    conn.close()
+    result = [{"username": r[0], "profile_pic": r[1]} for r in rows]
+    return jsonify(result)
  
    
 @app.route('/api/comment', methods=['POST'])
