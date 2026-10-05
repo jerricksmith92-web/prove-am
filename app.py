@@ -1016,13 +1016,29 @@ def api_search():
     if not me:
         return jsonify({"error": "Not logged in"}), 401
     q = request.args.get('q', '').strip()
-    if not q:
-        return jsonify([])
     conn = get_conn()
     c = conn.cursor()
-    like = f"%{q.lower()}%"
+
+    # Show every registered user when the search box is empty.
+    # When a query is entered, filter the full user list by username.
     try:
-        c.execute("SELECT username,pic_url FROM profiles WHERE LOWER(username) LIKE %s AND username!=%s LIMIT 30" if USE_POSTGRES else "SELECT username,pic_url FROM profiles WHERE LOWER(username) LIKE? AND username!=? LIMIT 30", (like, me))
+        if q:
+            like = f"%{q.lower()}%"
+            c.execute(
+                "SELECT username,pic_url FROM profiles WHERE LOWER(username) LIKE %s AND username!=%s ORDER BY LOWER(username) LIMIT 100"
+                if USE_POSTGRES
+                else
+                "SELECT username,pic_url FROM profiles WHERE LOWER(username) LIKE ? AND username!=? ORDER BY LOWER(username) LIMIT 100",
+                (like, me)
+            )
+        else:
+            c.execute(
+                "SELECT username,pic_url FROM profiles WHERE username!=%s ORDER BY LOWER(username) LIMIT 100"
+                if USE_POSTGRES
+                else
+                "SELECT username,pic_url FROM profiles WHERE username!=? ORDER BY LOWER(username) LIMIT 100",
+                (me,)
+            )
         rows = c.fetchall()
     except Exception as e:
         rows=[]
