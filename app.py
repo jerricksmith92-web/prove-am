@@ -542,23 +542,7 @@ def api_users():
     c.execute("SELECT username,pic_url FROM users")
     rows=c.fetchall(); conn.close()
     return jsonify([{"username":r[0],"pic_url":r[1] or ""} for r in rows])
-
-@app.route('/api/search')
-def api_search():
-    me=session.get('username'); q=(request.args.get('q') or "").strip()
-    conn=get_conn(); c=conn.cursor()
-    if q:
-        like=f"%{q}%"
-        c.execute("SELECT username,pic_url FROM users WHERE username ILIKE %s AND username!=%s LIMIT 20",(like,me))
-    else:
-        c.execute("SELECT username,pic_url FROM users WHERE username!=%s ORDER BY id DESC LIMIT 20",(me,))
-    users=c.fetchall()
-    c.execute("SELECT sender,receiver,status FROM friends WHERE sender=%s OR receiver=%s",(me,me))
-    fr=c.fetchall(); smap={}
-    for s,r,st in fr:
-        o=r if s==me else s
-        
-
+      
 @app.route('/api/friend/request', methods=['POST'])
 def api_friend_request():
     me=session.get('username'); to=(request.json.get('to') if request.json else None)
