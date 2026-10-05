@@ -426,33 +426,7 @@ async function sendMsg(){
   setTimeout(loadMsgs,400);
 }
 async function deleteMsg(id){if(!confirm('Delete?'))return;await fetch('/api/message/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})});loadMsgs();}
-async function searchUsers(){
-  let inp=document.getElementById('searchUsersInput');
-  let q=inp ? inp.value : '';
-  let box=document.getElementById('searchResults');
-  if(!box){ console.log('no searchResults div!'); return; }
-  if(!q.trim()){ box.innerHTML=''; return; }
-  box.innerHTML='Searching...';
-  try{
-    let r=await fetch('/api/search?q='+encodeURIComponent(q));
-    let users=await r.json();
-    console.log('FOUND',users);
-    let h='';
-    users.forEach(u=>{
-      if(!u.username || u.username=='null') return;
-      if(typeof curUser!=='undefined' && u.username==curUser) return;
-      let s=u.friend_status||'none';
-      let btn = s=='none' ? `<button onclick="sendFriendReq('${u.username}')" style="background:#FFD700;border:none;padding:6px 14px;border-radius:20px;font-weight:bold">Add</button>` :
-                s=='pending_sent' ? `<span style="background:#eee;padding:6px 12px;border-radius:20px">Pending</span>` :
-                s=='pending_received' ? `<button onclick="acceptFriend('${u.username}')" style="background:#25D366;color:white;border:none;padding:6px 12px;border-radius:20px">Accept</button>` :
-                `<span style="color:green">✓ Friends</span>`;
-      h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:12px;border-bottom:1px solid #eee"><div><b>${u.username}</b> <small style="color:#888">(${s})</small></div><div>${btn}</div></div>`;
-    });
-    box.innerHTML=h||'No users found for "'+q+'"';
-  }catch(e){
-    box.innerHTML='Error: '+e;
-  }
-}
+
 async function sendFriendReq(u){ await fetch('/api/friend/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:u})}); searchUsers(); loadFriendRequests(); }
 async function acceptFriend(u){ await fetch('/api/friend/accept',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:u})}); searchUsers(); loadFriends(); }
 async function loadFriendRequests(){
