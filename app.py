@@ -1,5 +1,5 @@
 import os, uuid
-from flask import Flask, request, jsonify, session, redirect, url_for, render_template
+from flask import Flask, request, jsonify, session, redirect, url_for, render_template, render_template_string
 from flask_cors import CORS
 import cloudinary
 import cloudinary.uploader
