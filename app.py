@@ -661,7 +661,7 @@ def api_comment():
 
 @app.route('/api/stories')
 def api_stories():
-me=session.get('username')
+    me=session.get('username')
     if not me:
         return jsonify([])
     conn=get_conn(); c=conn.cursor(); now=datetime.now().isoformat()
