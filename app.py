@@ -557,13 +557,8 @@ def api_search():
     fr=c.fetchall(); smap={}
     for s,r,st in fr:
         o=r if s==me else s
-        if st=='pending':
-            smap[o]='pending_sent' if s==me else 'pending_received'
-        elif st=='accepted':
-            smap[o]='friends'
-        else:
-            smap[o]=st
-   
+        
+
 @app.route('/api/friend/request', methods=['POST'])
 def api_friend_request():
     me=session.get('username'); to=(request.json.get('to') if request.json else None)
