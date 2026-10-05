@@ -430,7 +430,7 @@ async function searchUsers(){
     let users=await r.json();
     let h='';
     users.forEach(function(u){
-      
+      if(!u.username || u.username=='null' || u.username=='None' ||!u.username.trim()) return;
       if(typeof curUser!=='undefined' && u.username==curUser) return;
       let s=u.friend_status||'none';
       let btn='';
