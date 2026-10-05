@@ -2,6 +2,7 @@ import os, uuid, sqlite3, time, traceback
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, session, redirect, url_for, render_template, render_template_string, send_from_directory
 from flask_cors import CORS
+from werkzeug.security import generate_password_hash, check_password_hash
 import cloudinary
 import cloudinary.uploader
 
