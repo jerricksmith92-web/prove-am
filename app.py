@@ -453,8 +453,7 @@ async function searchUsers(){
     box.innerHTML='Error: '+e;
   }
 }
-async function sendFriendReq(u){ await fetch('/api/friend/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:u})}); searchUsers(); loadFriendReqs(); }
-async function acceptFriend(u){ await fetch('/api/friend/accept',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:u})}); searchUsers(); loadFriendReqs(); loadFriends(); }
+
 async function addFriend(username){await fetch('/api/friend/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:username})}); searchUsers(); loadFriendRequests();}
 async function acceptFriend(username){await fetch('/api/friend/accept',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:username})}); searchUsers(); loadFriendRequests(); loadMyFriends(); loadStories(); loadChatUsers();}
 async function loadFriendRequests(){
