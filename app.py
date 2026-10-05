@@ -426,23 +426,7 @@ async function sendMsg(){
   setTimeout(loadMsgs,400);
 }
 async function deleteMsg(id){if(!confirm('Delete?'))return;await fetch('/api/message/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})});loadMsgs();}
-async function searchUsers(){
-  let q=document.getElementById('searchUsersInput').value||'';
-  let r=await fetch('/api/search?q='+encodeURIComponent(q)); let users=await r.json();
-  let h='';
-  users.forEach(u=>{
-    if(u.username==curUser) return;
-    let pic=u.pic_url?`<img src="${u.pic_url}">`:u.username[0];
-    let status = u.friend_status||'none';
-    let btn='';
-    if(status=='none') btn=`<button class=friend-btn f-add onclick="addFriend('${u.username}')">+ Add</button>`;
-    else if(status=='pending_sent') btn=`<button class=friend-btn f-pending>Pending - needs approval</button>`;
-    else if(status=='pending_received') btn=`<button class=friend-btn f-add onclick="acceptFriend('${u.username}')">Accept</button>`;
-    else if(status=='friends') btn=`<button class=friend-btn f-friends>✓ Friends - can view story</button>`;
-    h+=`<div class=card style="display:flex;align-items:center;gap:10px"><div class=pic>${pic}</div><b>${u.username}</b><div style="margin-left:auto">${btn}</div></div>`;
-  });
-  document.getElementById('searchResults').innerHTML=h||'<small style=color:#888>No users found</small>';
-}
+
 async function addFriend(username){await fetch('/api/friend/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:username})}); searchUsers(); loadFriendRequests();}
 async function acceptFriend(username){await fetch('/api/friend/accept',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:username})}); searchUsers(); loadFriendRequests(); loadMyFriends(); loadStories(); loadChatUsers();}
 async function loadFriendRequests(){
