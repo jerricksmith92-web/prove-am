@@ -563,7 +563,9 @@ def api_search():
             smap[o]='friends'
         else:
             smap[o]=st
- 
+     out=[{"username":u,"friend_status":smap.get(u,"none")} for u,p in users]
+    conn.close()
+    return jsonify(out)
 
 @app.route('/api/friend/request', methods=['POST'])
 def api_friend_request():
