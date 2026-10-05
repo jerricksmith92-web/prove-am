@@ -426,25 +426,7 @@ async function sendMsg(){
   setTimeout(loadMsgs,400);
 }
 async function deleteMsg(id){if(!confirm('Delete?'))return;await fetch('/api/message/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})});loadMsgs();}
-async function searchUsers(){
-  let q=document.getElementById('searchUsersInput')?.value || '';
-  if(!q.trim()){ let b=document.getElementById('searchResults')||document.getElementById('searchUsersList'); if(b) b.innerHTML=''; return; }
-  let r=await fetch('/api/search?q='+encodeURIComponent(q));
-  let users=await r.json();
-  let h='';
-  users.forEach(u=>{
-    if(u.username==curUser) return;
-    let pic=u.pic_url?`<img src="${u.pic_url}" style="width:40px;height:40px;border-radius:50%">`:`<div style="width:40px;height:40px;border-radius:50%;background:#ddd"></div>`;
-    let status=u.friend_status||'none'; let btn='';
-    if(status=='none') btn=`<button class="friendBtn" onclick="sendFriendReq('${u.username}')" style="background:#FFD700;border:none;padding:6px 12px;border-radius:20px">Add</button>`;
-    else if(status=='pending_sent') btn=`<button disabled style="background:#ccc;border:none;padding:6px 12px;border-radius:20px">Pending</button>`;
-    else if(status=='pending_received') btn=`<button onclick="acceptFriend('${u.username}')" style="background:green;color:white;border:none;padding:6px 12px;border-radius:20px">Accept</button>`;
-    else if(status=='friends') btn=`<span style="color:green">✓ Friends</span>`;
-    h+=`<div class="card" style="display:flex;align-items:center;justify-content:space-between;padding:10px;border-bottom:1px solid #eee"><div style="display:flex;align-items:center;gap:10px">${pic}<b>${u.username}</b></div><div>${btn}</div></div>`;
-  });
-  let box=document.getElementById('searchResults')||document.getElementById('searchUsersList')||document.getElementById('searchUsersContainer');
-  if(box) box.innerHTML=h||'<p style="padding:10px">No users found</p>';
-}
+
 async function addFriend(username){await fetch('/api/friend/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:username})}); searchUsers(); loadFriendRequests();}
 async function acceptFriend(username){await fetch('/api/friend/accept',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:username})}); searchUsers(); loadFriendRequests(); loadMyFriends(); loadStories(); loadChatUsers();}
 async function loadFriendRequests(){
