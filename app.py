@@ -121,7 +121,8 @@ def nuclear_repair():
                 "CREATE TABLE IF NOT EXISTS follows (follower TEXT, following TEXT, PRIMARY KEY(follower,following))",
                 "CREATE TABLE IF NOT EXISTS post_media (id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INT, media_url TEXT, media_type TEXT)",
                 "CREATE TABLE IF NOT EXISTS post_shares (id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INT, username TEXT, created_at TEXT, UNIQUE(post_id,username))",
-                "CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY AUTOINCREMENT, reporter TEXT, target_type TEXT, target_id TEXT, reason TEXT, created_at TEXT)",
+                "CREATE TABLE IF NOT EXISTS saved_posts (post_id INT, username TEXT, created_at TEXT, PRIMARY KEY(post_id,username))",
+        "CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY AUTOINCREMENT, reporter TEXT, target_type TEXT, target_id TEXT, reason TEXT, created_at TEXT)",
                 "CREATE TABLE IF NOT EXISTS user_typing (username TEXT, peer TEXT, last_seen REAL, PRIMARY KEY(username,peer))",
                 "CREATE TABLE IF NOT EXISTS user_settings (username TEXT PRIMARY KEY, private_account INT DEFAULT 0, message_privacy TEXT DEFAULT 'friends', show_last_seen INT DEFAULT 1, show_read_receipts INT DEFAULT 1)"]
         for sql in stmts:
@@ -175,6 +176,7 @@ def init_db():
         c.execute("CREATE TABLE IF NOT EXISTS follows (follower TEXT, following TEXT, PRIMARY KEY(follower,following))")
         c.execute("CREATE TABLE IF NOT EXISTS post_media (id SERIAL PRIMARY KEY, post_id INT, media_url TEXT, media_type TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS post_shares (id SERIAL PRIMARY KEY, post_id INT, username TEXT, created_at TEXT, UNIQUE(post_id,username))")
+        c.execute("CREATE TABLE IF NOT EXISTS saved_posts (post_id INT, username TEXT, created_at TEXT, PRIMARY KEY(post_id,username))")
         c.execute("CREATE TABLE IF NOT EXISTS reports (id SERIAL PRIMARY KEY, reporter TEXT, target_type TEXT, target_id TEXT, reason TEXT, created_at TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS user_typing (username TEXT, peer TEXT, last_seen REAL, PRIMARY KEY(username,peer))")
         c.execute("CREATE TABLE IF NOT EXISTS user_settings (username TEXT PRIMARY KEY, private_account INT DEFAULT 0, message_privacy TEXT DEFAULT 'friends', show_last_seen INT DEFAULT 1, show_read_receipts INT DEFAULT 1)")
@@ -184,6 +186,7 @@ def init_db():
         c.execute("CREATE TABLE IF NOT EXISTS follows (follower TEXT, following TEXT, PRIMARY KEY(follower,following))")
         c.execute("CREATE TABLE IF NOT EXISTS post_media (id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INT, media_url TEXT, media_type TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS post_shares (id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INT, username TEXT, created_at TEXT, UNIQUE(post_id,username))")
+        c.execute("CREATE TABLE IF NOT EXISTS saved_posts (post_id INT, username TEXT, created_at TEXT, PRIMARY KEY(post_id,username))")
         c.execute("CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY AUTOINCREMENT, reporter TEXT, target_type TEXT, target_id TEXT, reason TEXT, created_at TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS user_typing (username TEXT, peer TEXT, last_seen REAL, PRIMARY KEY(username,peer))")
         c.execute("CREATE TABLE IF NOT EXISTS user_settings (username TEXT PRIMARY KEY, private_account INT DEFAULT 0, message_privacy TEXT DEFAULT 'friends', show_last_seen INT DEFAULT 1, show_read_receipts INT DEFAULT 1)")
@@ -208,6 +211,27 @@ def init_db():
 
 init_db()
 
+# Performance indexes: keep feeds, chats and notifications fast as the database grows.
+def create_perf_indexes():
+    conn=get_conn(); c=conn.cursor()
+    indexes=[
+        "CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(id DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_post_likes_post ON post_likes(post_id)",
+        "CREATE INDEX IF NOT EXISTS idx_comments_post ON comments(post_id)",
+        "CREATE INDEX IF NOT EXISTS idx_shares_post ON post_shares(post_id)",
+        "CREATE INDEX IF NOT EXISTS idx_post_media_post ON post_media(post_id)",
+        "CREATE INDEX IF NOT EXISTS idx_messages_pair ON messages(sender,receiver,id)",
+        "CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(username,is_read,id)",
+        "CREATE INDEX IF NOT EXISTS idx_stories_expiry ON stories(expires_at,id)"
+    ]
+    for q in indexes:
+        try: c.execute(q)
+        except Exception: pass
+    try: conn.commit()
+    except Exception: pass
+    conn.close()
+
+create_perf_indexes()
 
 def notify(username, ntype, from_user='', text=''):
     if not username or username==from_user: return
@@ -472,6 +496,7 @@ updateLowBtn();
 function updateLowBtn(){let b=document.getElementById('lowBtn'); if(!b)return; b.innerText=lowData?'📶 Low: ON':'📶 Low: OFF'; if(lowData) b.classList.add('low-on'); else b.classList.remove('low-on');}
 function toggleLow(){lowData=!lowData;localStorage.setItem('lowData',lowData?'1':'0'); updateLowBtn(); alert(lowData?'Low Data ON':'Low Data OFF'); loadPosts();}
 function toggleTheme(){dark=!dark;localStorage.setItem('theme',dark?'dark':'light');document.body.classList.toggle('dark');}
+async function showSavedPosts(){let r=await fetch('/api/post/saved');let d=await r.json();let h=d.length?d.map(p=>`<div class=card><b>${p.username}</b><small style="float:right">${(p.created_at||'').slice(0,16)}</small><p>${linkify(p.text||'')}</p>${p.media_url?`<img src="${p.media_url}" loading="lazy" style="width:100%;max-height:240px;object-fit:cover;border-radius:10px">`:''}</div>`).join(''):'<p style="color:#888">No saved posts yet.</p>';document.getElementById('savedList').innerHTML=h;document.getElementById('savedModal').style.display='flex';}
 function switchTab(t){
   document.querySelectorAll('.tab').forEach(e=>e.classList.remove('active'));
   let el=document.getElementById('t'+t.charAt(0).toUpperCase()+t.slice(1)); if(el)el.classList.add('active');
@@ -559,8 +584,8 @@ async function loadPosts(){
   let r=await fetch('/api/posts'); let posts=await r.json(); let h=''; if(!posts.length)h='<div class=card style="text-align:center;color:#888">No posts</div>';
   posts.forEach(p=>{
     let pic=profiles[p.username];let picHtml=pic?`<img src="${pic}">`:p.username[0]; let media=(p.media||[]).map(x=>{let u=x.url||'',low=u.toLowerCase();if((x.type||'').startsWith('video')||['.mp4','.mov','.webm','.m4v'].some(z=>low.includes(z)))return `<video src="${u}" controls style="width:100%;max-height:400px"></video>`;return `<img src="${u}" style="width:100%;max-height:400px;object-fit:cover">`;}).join(''); if(p.shared){media+=`<div class=card style="margin:8px;background:var(--sec)"><b>Shared from @${p.shared.username}</b><p>${escapeHtml(p.shared.text||'')}</p>${p.shared.media_url?`<img src="${p.shared.media_url}" style="width:100%;max-height:240px;object-fit:cover">`:''}</div>`;}
-    let del=p.username==curUser?`<span class=del onclick="deletePost(${p.id})">🗑️</span>`:'';
-    let text=linkify(p.text||''); let actions=`<span onclick="likePost(${p.id})" style="cursor:pointer">${p.liked?'❤️':'🤍'} ${p.like_count||0}</span><span onclick="commentPost(${p.id})" style="cursor:pointer">💬 ${p.comment_count||0}</span><span onclick="sharePost(${p.id})" style="cursor:pointer">🔄 ${p.share_count||0}</span><span onclick="viewComments(${p.id})" style="cursor:pointer">View</span><span onclick="reportTarget('post',${p.id})" style="cursor:pointer">🚩</span>`;
+    let del=p.username==curUser?`<span class=del onclick="deletePost(${p.id})">🗑️</span>`:''; let edit=p.username==curUser?`<span onclick="editPost(${p.id},${JSON.stringify(p.text||'').replace(/</g,'&lt;')})" style="cursor:pointer">✏️ Edit</span>`:'';
+    let text=linkify(p.text||''); let actions=`<span onclick="likePost(${p.id})" style="cursor:pointer">${p.liked?'❤️':'🤍'} ${p.like_count||0}</span><span onclick="commentPost(${p.id})" style="cursor:pointer">💬 ${p.comment_count||0}</span><span onclick="sharePost(${p.id})" style="cursor:pointer">🔄 ${p.share_count||0}</span><span onclick="savePost(${p.id})" style="cursor:pointer">${p.saved?'🔖':'🔖'} ${p.saved?'Saved':'Save'}</span><span onclick="viewComments(${p.id})" style="cursor:pointer">View</span><span onclick="reportTarget('post',${p.id})" style="cursor:pointer">🚩</span>${edit}`;
     h+=`<div class=card style="padding:0;overflow:hidden"><div style="padding:10px;display:flex;align-items:center;gap:8px"><div class=pic>${picHtml}</div><b onclick="viewProfile('${p.username}')" style="cursor:pointer">${p.username}</b><small style="margin-left:auto">${(p.created_at||'').slice(0,16)}</small>${del}</div>${p.text?`<div style="padding:0 12px 8px">${text}</div>`:''}${media}<div style="padding:10px;display:flex;gap:12px;flex-wrap:wrap">${actions}</div></div>`;
   });
   document.getElementById('postsList').innerHTML=h;
@@ -577,6 +602,8 @@ async function createPost(){
   if(d.ok){document.getElementById('postMsg').innerText='✅ Posted!';document.getElementById('postText').value='';document.getElementById('postPreview').style.display='none';document.getElementById('postFile').value='';selectedPostFile=null;loadPosts();}else document.getElementById('postMsg').innerText='Failed: '+(d.error||'');
 }
 async function deletePost(id){if(!confirm('Delete post?'))return;await fetch('/api/post/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})});loadPosts();}
+async function editPost(id,current){let t=prompt('Edit your post:',current||'');if(t===null)return;t=t.trim();if(!t)return;let r=await fetch('/api/post/edit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,text:t})});let d=await r.json();if(!d.ok)alert(d.error||'Could not edit');else loadPosts();}
+async function savePost(id){let r=await fetch('/api/post/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id})});let d=await r.json();if(!d.ok)alert(d.error||'Could not save');else loadPosts();}
 async function likePost(id){await fetch('/api/like',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id})});loadPosts();}
 async function commentPost(id){let t=prompt('Comment:');if(!t)return;await fetch('/api/comment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id,text:t})});loadPosts();}
 function filterChat(){let q=document.getElementById('searchChat').value.toLowerCase();let filtered=allUsers.filter(u=>u.username.toLowerCase().includes(q));renderChatUsers(filtered);}
@@ -1126,7 +1153,12 @@ def api_posts():
                 q="SELECT username,text,media_url,created_at FROM posts WHERE id=%s" if USE_POSTGRES else "SELECT username,text,media_url,created_at FROM posts WHERE id=?";c.execute(q,(r[5],));x=c.fetchone()
                 if x:shared={"username":x[0],"text":x[1],"media_url":x[2],"created_at":str(x[3])}
             except:pass
-        out.append({"id":pid,"username":r[1],"text":r[2],"media_url":r[3],"created_at":str(r[4]),"like_count":lc,"liked":liked,"comment_count":cc,"share_count":sc,"shared_post_id":r[5],"media":media,"shared":shared})
+        saved=False
+        try:
+            qs="SELECT 1 FROM saved_posts WHERE post_id=%s AND username=%s" if USE_POSTGRES else "SELECT 1 FROM saved_posts WHERE post_id=? AND username=?"
+            c.execute(qs,(pid,me)); saved=bool(c.fetchone())
+        except: pass
+        out.append({"id":pid,"username":r[1],"text":r[2],"media_url":r[3],"created_at":str(r[4]),"like_count":lc,"liked":liked,"saved":saved,"comment_count":cc,"share_count":sc,"shared_post_id":r[5],"media":media,"shared":shared})
     conn.close();return jsonify(out)
 
 @app.route('/api/post', methods=['POST'])
@@ -1163,6 +1195,39 @@ def api_post_delete():
     me=session.get('username'); data=request.json; pid=data.get('id')
     conn=get_conn(); c=conn.cursor()
     c.execute("DELETE FROM posts WHERE id=%s AND username=%s" if USE_POSTGRES else "DELETE FROM posts WHERE id=? AND username=?", (pid,me)); conn.commit(); conn.close(); return jsonify({"ok":True})
+
+@app.route('/api/post/edit', methods=['POST'])
+def api_post_edit():
+    me=session.get('username'); data=request.json or {}; pid=data.get('id'); txt=(data.get('text') or '')[:500]
+    if not pid or not txt.strip(): return jsonify({"ok":False,"error":"Post text cannot be empty"}),400
+    conn=get_conn(); c=conn.cursor()
+    q="UPDATE posts SET text=%s, edited_at=%s WHERE id=%s AND username=%s" if USE_POSTGRES else "UPDATE posts SET text=?, edited_at=? WHERE id=? AND username=?"
+    c.execute(q,(txt.strip(),datetime.now().isoformat(),pid,me)); ok=c.rowcount>0; conn.commit(); conn.close()
+    return jsonify({"ok":ok})
+
+@app.route('/api/post/save', methods=['POST'])
+def api_post_save():
+    me=session.get('username'); data=request.json or {}; pid=data.get('post_id')
+    if not pid: return jsonify({"ok":False,"error":"Missing post"}),400
+    conn=get_conn(); c=conn.cursor()
+    q="SELECT 1 FROM saved_posts WHERE post_id=%s AND username=%s" if USE_POSTGRES else "SELECT 1 FROM saved_posts WHERE post_id=? AND username=?"
+    c.execute(q,(pid,me)); exists=bool(c.fetchone())
+    try:
+        if exists:
+            qd="DELETE FROM saved_posts WHERE post_id=%s AND username=%s" if USE_POSTGRES else "DELETE FROM saved_posts WHERE post_id=? AND username=?"; c.execute(qd,(pid,me)); saved=False
+        else:
+            qi="INSERT INTO saved_posts (post_id,username,created_at) VALUES (%s,%s,%s)" if USE_POSTGRES else "INSERT INTO saved_posts (post_id,username,created_at) VALUES (?,?,?)"; c.execute(qi,(pid,me,datetime.now().isoformat())); saved=True
+        conn.commit()
+    except Exception:
+        conn.rollback(); conn.close(); return jsonify({"ok":False,"error":"Could not save post"}),500
+    conn.close(); return jsonify({"ok":True,"saved":saved})
+
+@app.route('/api/post/saved')
+def api_saved_posts():
+    me=session.get('username'); conn=get_conn(); c=conn.cursor()
+    q="SELECT p.id,p.username,p.text,p.media_url,p.created_at FROM saved_posts s JOIN posts p ON p.id=s.post_id WHERE s.username=%s ORDER BY s.created_at DESC LIMIT 50" if USE_POSTGRES else "SELECT p.id,p.username,p.text,p.media_url,p.created_at FROM saved_posts s JOIN posts p ON p.id=s.post_id WHERE s.username=? ORDER BY s.created_at DESC LIMIT 50"
+    c.execute(q,(me,)); rows=c.fetchall(); conn.close()
+    return jsonify([{"id":r[0],"username":r[1],"text":r[2],"media_url":r[3],"created_at":str(r[4])} for r in rows])
 
 @app.route('/api/like', methods=['POST'])
 def api_like():
