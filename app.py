@@ -580,26 +580,7 @@ def api_friend_decline():
     c.execute(q, (frm,me))
     conn.commit(); conn.close(); return jsonify({"ok":True})
 
-@app.route('/api/friend/requests')
-def api_friend_requests():
-    me=session.get('username')
-    conn=get_conn(); c=conn.cursor()
-    q = "SELECT sender FROM friends WHERE receiver=%s AND status='pending'" if USE_POSTGRES else "SELECT sender FROM friends WHERE receiver=? AND status='pending'"
-    c.execute(q, (me,))
-    rows=c.fetchall(); conn.close()
-    return jsonify([{"username":r[0]} for r in rows])
 
-@app.route('/api/friends/list')
-def api_friends_list():
-    me=session.get('username')
-    conn=get_conn(); c=conn.cursor()
-    q = "SELECT sender,receiver FROM friends WHERE (sender=%s OR receiver=%s) AND status='accepted'" if USE_POSTGRES else "SELECT sender,receiver FROM friends WHERE (sender=? OR receiver=?) AND status='accepted'"
-    c.execute(q, (me,me))
-    rows=c.fetchall(); conn.close()
-    friends=[]
-    for s,r in rows:
-        friends.append(r if s==me else s)
-    return jsonify([{"username":u} for u in friends if u])
 
 @app.route('/api/status/ping', methods=['POST'])
 def api_status_ping():
