@@ -657,15 +657,7 @@ def api_like():
         conn.commit()
     except: pass
     conn.close(); return jsonify({"ok":True})
-        if st=='pending':
-            smap[o]='pending_sent' if s==me else 'pending_received'
-        elif st=='accepted':
-            smap[o]='friends'
-        else:
-            smap[o]=st
-    out=[{"username":u,"friend_status":smap.get(u,"none")} for u,p in users]
-    conn.close()
-    return jsonify(out)
+        
 
 @app.route('/api/comment', methods=['POST'])
 def api_comment():
