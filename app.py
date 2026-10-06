@@ -654,21 +654,14 @@ async function sendMsg(){
   const fileInput=document.getElementById('chatFileHidden');
   const text=input ? input.value.trim() : '';
   const file=(typeof selectedChatFile!=='undefined' && selectedChatFile) ? selectedChatFile : (fileInput && fileInput.files ? fileInput.files[0] : null);
+
   if(!text && !file) return;
 
-  const receiver=chatWith;
   const fd=new FormData();
-  fd.append('receiver',receiver);
+  fd.append('receiver',chatWith);
   fd.append('text',text);
   if(typeof replyToText!=='undefined' && replyToText) fd.append('reply_to',replyToText);
   if(file) fd.append('media',file);
-
-  // Clear the composer immediately so the UI feels responsive while the server
-  // saves/uploads the message in the background.
-  if(input) input.value='';
-  if(fileInput) fileInput.value='';
-  if(typeof selectedChatFile!=='undefined') selectedChatFile=null;
-  if(typeof cancelReply==='function') cancelReply();
 
   try{
     const r=await fetch('/api/send',{method:'POST',body:fd,credentials:'same-origin'});
@@ -680,9 +673,11 @@ async function sendMsg(){
       alert(d.error || ('Could not send message (HTTP '+r.status+').'));
       return;
     }
-    // The server returns the saved message, so don't immediately fetch the
-    // whole conversation again just because one message was sent.
-    if(receiver===chatWith && d.message) appendChatMessage(d.message);
+    if(input) input.value='';
+    if(fileInput) fileInput.value='';
+    if(typeof selectedChatFile!=='undefined') selectedChatFile=null;
+    if(typeof cancelReply==='function') cancelReply();
+    await loadMsgs();
   }catch(e){
     console.error(e);
     alert('Could not send message. Please check the server connection.');
@@ -1520,20 +1515,18 @@ def api_send():
         url = upload_to_cloud(f) if f and f.filename else ''
         if f and f.filename and not url:
             return jsonify({"ok":False,"error":"Media upload failed. Please try again."}),500
-        now=datetime.now().isoformat()
-        if USE_POSTGRES:
-            q="INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at) VALUES (%s,%s,%s,%s,%s,0,%s) RETURNING id"
-            c.execute(q,(me,other,txt,url,reply_to,now)); mid=c.fetchone()[0]
-        else:
-            q="INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at) VALUES (?,?,?,?,?,0,?)"
-            c.execute(q,(me,other,txt,url,reply_to,now)); mid=c.lastrowid
+        q = (
+            "INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at) VALUES (%s,%s,%s,%s,%s,0,%s)"
+            if USE_POSTGRES else
+            "INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at) VALUES (?,?,?,?,?,0,?)"
+        )
+        now=datetime.now().isoformat(); c.execute(q, (me,other,txt,url,reply_to,now))
         conn.commit()
-        # Notification is best-effort and happens after the message is safely committed.
-        try: notify(other,'message',me,me+' sent you a message')
-        except Exception: pass
-        low=str(url or '').lower()
-        media_type='audio' if low.endswith(('.mp3','.wav','.ogg','.m4a','.aac','.webm')) else ''
-        return jsonify({"ok":True,"message":{"id":mid,"sender":me,"text":txt,"media_url":url or '',"reply_to":reply_to,"read":0,"deleted":False,"reactions":[],"media_type":media_type,"created_at":now}})
+        try:
+            notify(other,'message',me,me+' sent you a message')
+        except Exception:
+            pass
+        return jsonify({"ok":True})
     except Exception:
         conn.rollback()
         print("SEND MESSAGE ERROR:")
