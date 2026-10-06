@@ -610,22 +610,40 @@ async function savePost(id){let r=await fetch('/api/post/save',{method:'POST',he
 async function likePost(id){await fetch('/api/like',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id})});loadPosts();}
 async function commentPost(id){let t=prompt('Comment:');if(!t)return;await fetch('/api/comment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id,text:t})});loadPosts();}
 function filterChat(){let q=document.getElementById('searchChat').value.toLowerCase();let filtered=allUsers.filter(u=>u.username.toLowerCase().includes(q));renderChatUsers(filtered);}
-async function renderChatUsers(users){
+function renderChatUsers(users){
   const visible=users.filter(u=>u.username!==curUser);
-  const results=await Promise.all(visible.map(async u=>{
+  const el=document.getElementById('chatUsers');
+  if(!el)return;
+  if(!visible.length){el.innerHTML='<div class="card" style="color:#888">No friends yet - add in Search (needs approval)</div>';return;}
+  // Render immediately. Do not wait for status/unread requests before making chats tappable.
+  el.innerHTML=visible.map(u=>{
+    const name=escapeHtml(u.username||'');
+    const pic=u.pic_url?`<img src="${u.pic_url}" loading="lazy">`:escapeHtml((u.username||'?')[0]);
+    return `<div class="card chat-user-row" data-chat-user="${name}" style="display:flex;align-items:center;gap:10px;cursor:pointer">`+
+      `<div class=pic>${pic}</div><div style="min-width:0"><b>${name}</b><br><small class="chat-meta" style="color:#888">Checking…</small></div></div>`;
+  }).join('');
+  // Event delegation: one listener instead of an onclick handler on every row.
+  if(!el.dataset.bound){
+    el.dataset.bound='1';
+    el.addEventListener('click',e=>{
+      const row=e.target.closest('.chat-user-row');
+      if(!row)return;
+      const name=row.getAttribute('data-chat-user');
+      if(name)openChat(name);
+    });
+  }
+  // Update status/unread in the background; never block opening a chat.
+  visible.forEach(async u=>{
     try{
       const [sr,ur]=await Promise.all([
         fetch('/api/status/get?user='+encodeURIComponent(u.username)),
         fetch('/api/messages/unread_count?with='+encodeURIComponent(u.username))
       ]);
       const st=await sr.json(), uc=await ur.json();
-      const onlineHtml=st.online?'<span class=onlineDot></span> <small style="color:#00c853;font-weight:700">online</small>':'<span class=offlineDot></span> <small style="color:#888">offline</small>';
-      const badge=uc.count>0?`<span class=badge>${uc.count} unread</span>`:'';
-      const pic=u.pic_url?`<img src="${u.pic_url}" loading="lazy">`:escapeHtml(u.username[0]||'?');
-      return `<div class=card style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="openChat(${JSON.stringify(u.username)})"><div class=pic>${pic}</div><div><b onclick="event.stopPropagation();viewProfile(${JSON.stringify(u.username)})">${escapeHtml(u.username)}</b><br>${onlineHtml} ${badge}</div></div>`;
-    }catch(e){return `<div class=card style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="openChat(${JSON.stringify(u.username)})"><div class=pic>${escapeHtml((u.username||'?')[0])}</div><div><b>${escapeHtml(u.username)}</b></div></div>`;}
-  }));
-  const el=document.getElementById('chatUsers'); if(el)el.innerHTML=results.join('')||'<div class="card" style="color:#888">No friends yet - add in Search (needs approval)</div>';
+      const row=el.querySelector(`[data-chat-user="${CSS.escape(u.username)}"]`);
+      if(row){const meta=row.querySelector('.chat-meta');if(meta)meta.innerHTML=(st.online?'🟢 online':'⚪ offline')+(uc.count>0?' · '+uc.count+' unread':'');}
+    }catch(e){}
+  });
 }
 
 async function loadChatUsers(){
@@ -637,18 +655,19 @@ async function loadChatUsers(){
     renderChatUsers(filtered);
   }catch(e){ renderChatUsers(allUsers); }
 }
-async function openChat(username){
+function openChat(username){
   chatWith=username;
-  document.getElementById('chatUsers').style.display='none';document.getElementById('searchChat').style.display='none';
-  let box=document.getElementById('chatBox');box.style.display='block';
-  fetch('/api/messages/mark_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({with:username})});
-  let statusRes=await fetch('/api/status/get?user='+username); let st=await statusRes.json();
-  let online=st.online?'<span class=onlineDot></span> online':'<span class=offlineDot></span> offline';
-  box.innerHTML=`<div class="chat-header"><button onclick="backChat()" class="chat-back">← ${username} ${online}</button><button onclick="searchConversation()" class="small-btn chat-search-btn">🔎 Search</button></div><div id=replyPreview style="display:none;background:#fff8e1;padding:8px;margin:8px;border-radius:10px;border-left:3px solid #ffcc00;flex:0 0 auto"></div><div id=typingStatus class=typing style="flex:0 0 auto"></div><div id=msgs></div><div class=chat-bar><input id=chatText class=pill placeholder="Write message..." /><input type=file id=chatFileHidden accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" multiple style="display:none"><button class=sticker onclick="startRecording()">🎤</button><div class=sticker onclick="document.getElementById('chatFileHidden').click()">📎</div><button class=yellow onclick=sendMsg()>Send</button></div>`;
-  document.getElementById('chatFileHidden').addEventListener('change',function(e){let f=e.target.files[0]; if(f)selectedChatFile=f;});
-  let ci=document.getElementById('chatText'); ci.addEventListener('input',()=>sendTyping());
-  if(window.typingTimer)clearInterval(window.typingTimer); window.typingTimer=setInterval(pollTyping,2500);
+  const users=document.getElementById('chatUsers'), search=document.getElementById('searchChat'), box=document.getElementById('chatBox');
+  if(users)users.style.display='none'; if(search)search.style.display='none'; if(!box)return;
+  box.style.display='block';
+  // Draw the chat immediately. Status is intentionally loaded in the background.
+  box.innerHTML=`<div class="chat-header"><button onclick="backChat()" class="chat-back">← ${escapeHtml(username)} <span id="chatOnlineState"></span></button><button onclick="searchConversation()" class="small-btn chat-search-btn">🔎 Search</button></div><div id=replyPreview style="display:none;background:#fff8e1;padding:8px;margin:8px;border-radius:10px;border-left:3px solid #ffcc00;flex:0 0 auto"></div><div id=typingStatus class=typing style="flex:0 0 auto"></div><div id=msgs></div><div class=chat-bar><input id=chatText class=pill placeholder="Write message..." /><input type=file id=chatFileHidden accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" multiple style="display:none"><button class=sticker onclick="startRecording()">🎤</button><div class=sticker onclick="document.getElementById('chatFileHidden').click()">📎</div><button class=yellow onclick=sendMsg()>Send</button></div>`;
+  document.getElementById('chatFileHidden').addEventListener('change',function(e){let f=e.target.files[0];if(f)selectedChatFile=f;});
+  document.getElementById('chatText').addEventListener('input',()=>sendTyping());
+  if(window.typingTimer)clearInterval(window.typingTimer); window.typingTimer=setInterval(pollTyping,3500);
   loadMsgs();
+  fetch('/api/status/get?user='+encodeURIComponent(username)).then(r=>r.json()).then(st=>{let x=document.getElementById('chatOnlineState');if(x)x.innerHTML=st.online?'<span class=onlineDot></span> online':'<span class=offlineDot></span> offline';}).catch(()=>{});
+  fetch('/api/messages/mark_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({with:username})}).catch(()=>{});
 }
 async function searchConversation(){if(!chatWith)return;let q=prompt('Search this conversation:');if(!q)return;let r=await fetch('/api/messages/search?with='+encodeURIComponent(chatWith)+'&q='+encodeURIComponent(q));let d=await r.json();alert(d.map(m=>(m.sender===curUser?'You':m.sender)+': '+m.text).join('\\n')||'No matching messages');}
 function backChat(){
@@ -711,7 +730,7 @@ async function loadMsgs(){
     let text=m.deleted?'This message was deleted':(m.text||'');
     let edit=isMe&&!m.deleted?`<button onclick="editMsg(${m.id},${JSON.stringify(m.text||'')})">Edit</button>`:'';
     let del=isMe&&!m.deleted?`<button onclick="deleteMsg(${m.id})">Delete</button>`:'';
-    h+=`<div style="margin:12px 0;text-align:${isMe?'right':'left'}"><span data-reply-text="${escapeHtml(text.slice(0,80))}" style="background:${isMe?'#000':'#eee'};color:${isMe?'#fff':'#000'};padding:12px 16px;border-radius:22px;display:inline-block;max-width:76%;word-break:break-word;cursor:pointer">${reply}${escapeHtml(text)}${media}<br>${tick}<div class=reaction-row>${escapeHtml(reactions)}</div><div class=msg-actions><button onclick="setReply(${JSON.stringify(text.slice(0,80))})">↩ Reply</button><button onclick="reactMsg(${m.id},'❤️')">❤️</button><button onclick="reactMsg(${m.id},'😂')">😂</button><button onclick="reactMsg(${m.id},'👍')">👍</button>${edit}${del}</div></span></div>`;
+    h+=`<div style="margin:12px 0;text-align:${isMe?'right':'left'}"><span data-reply-text="${escapeHtml(text.slice(0,80))}" style="background:${isMe?'#000':'#eee'};color:${isMe?'#fff':'#000'};padding:12px 16px;border-radius:22px;display:inline-block;max-width:76%;word-break:break-word;cursor:pointer;pointer-events:auto" onclick="setReply(${JSON.stringify(text.slice(0,80))})">${reply}${escapeHtml(text)}${media}<br>${tick}<div class=reaction-row>${escapeHtml(reactions)}</div><div class=msg-actions><button onclick="setReply(${JSON.stringify(text.slice(0,80))})">↩ Reply</button><button onclick="reactMsg(${m.id},'❤️')">❤️</button><button onclick="reactMsg(${m.id},'😂')">😂</button><button onclick="reactMsg(${m.id},'👍')">👍</button>${edit}${del}</div></span></div>`;
   });
   let el=document.getElementById('msgs');
   if(el)el.innerHTML=h||'<div style="text-align:center;color:#888;padding:30px">Start the conversation</div>';
@@ -1058,7 +1077,7 @@ def api_friend_request():
             pass
 
         conn.commit()
-        return jsonify({"ok":True})
+        return jsonify({"ok":True,"id":c.lastrowid if not USE_POSTGRES else None,"created_at":now,"media_url":url})
     except Exception:
         conn.rollback()
         print("FRIEND REQUEST ERROR:")
@@ -1370,7 +1389,7 @@ def api_story_react():
         qo="SELECT username FROM stories WHERE id=%s" if USE_POSTGRES else "SELECT username FROM stories WHERE id=?";c.execute(qo,(sid,));o=c.fetchone()
         conn.commit();conn.close();
         if o:notify(o[0],'story_reaction',me,me+' reacted to your story')
-        return jsonify({"ok":True})
+        return jsonify({"ok":True,"id":c.lastrowid if not USE_POSTGRES else None,"created_at":now,"media_url":url})
     except Exception:
         conn.rollback();conn.close();return jsonify({"ok":False}),500
 
@@ -1469,7 +1488,7 @@ def api_send():
         now=datetime.now().isoformat(); c.execute(q, (me,other,txt,url,reply_to,now))
         conn.commit()
         notify(other,'message',me,me+' sent you a message')
-        return jsonify({"ok":True})
+        return jsonify({"ok":True,"id":c.lastrowid if not USE_POSTGRES else None,"created_at":now,"media_url":url})
     except Exception:
         conn.rollback()
         print("SEND MESSAGE ERROR:")
@@ -1607,7 +1626,7 @@ def api_post_share():
         if not orig:return jsonify({"ok":False,"error":"Post not found"}),404
         qs="INSERT INTO post_shares (post_id,username,created_at) VALUES (%s,%s,%s) ON CONFLICT DO NOTHING" if USE_POSTGRES else "INSERT OR IGNORE INTO post_shares (post_id,username,created_at) VALUES (?,?,?)";c.execute(qs,(pid,me,now))
         qp="INSERT INTO posts (username,text,media_url,created_at,shared_post_id) VALUES (%s,%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO posts (username,text,media_url,created_at,shared_post_id) VALUES (?,?,?,?,?)";c.execute(qp,(me,'🔄 Shared a post','',now,pid))
-        conn.commit();notify(orig[0],'share',me,me+' shared your post');return jsonify({"ok":True})
+        conn.commit();notify(orig[0],'share',me,me+' shared your post');return jsonify({"ok":True,"id":c.lastrowid if not USE_POSTGRES else None,"created_at":now,"media_url":url})
     except Exception:conn.rollback();return jsonify({"ok":False,"error":"Could not share"}),500
     finally:conn.close()
 
