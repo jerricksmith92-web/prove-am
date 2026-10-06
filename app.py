@@ -1,4 +1,4 @@
-import os, uuid, sqlite3, time, traceback, base64
+import os, uuid, sqlite3, time, traceback, base64, threading
 from io import BytesIO
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, session, redirect, url_for, render_template, render_template_string, send_from_directory, send_file
@@ -244,6 +244,9 @@ def notify(username, ntype, from_user='', text=''):
         conn.rollback()
     finally: conn.close()
 
+def notify_async(username, ntype, from_user='', text=''):
+    threading.Thread(target=notify, args=(username, ntype, from_user, text), daemon=True).start()
+
 def is_friend(a,b):
     if not a or not b: return False
     conn=get_conn(); c=conn.cursor()
@@ -344,6 +347,17 @@ button,input,textarea,select,a{pointer-events:auto;touch-action:manipulation}
   .chat-screen .chat-header .chat-back{font-size:14px}
   .chat-screen #msgs{top:54px;bottom:64px;padding-bottom:24px!important}
 }
+
+/* Reference-style chat UI */
+.chat-screen{background:#030303;background-image:radial-gradient(circle at 50% 45%,rgba(201,162,39,.08),transparent 42%),linear-gradient(rgba(0,0,0,.86),rgba(0,0,0,.92)),url('/app-icon.jpg');background-size:auto,auto,260px;background-repeat:no-repeat;background-position:center;}
+.chat-screen .chat-header{background:rgba(10,10,10,.88);backdrop-filter:blur(10px)}
+.chat-screen .chat-header .chat-back{background:#151515;color:#fff;border-color:#2d2d2d}
+.chat-screen #msgs{padding:12px 12px 90px!important}
+.msg-row{display:flex;margin:9px 0;width:100%;touch-action:pan-y}.msg-row.me{justify-content:flex-end}
+.msg-bubble{position:relative;display:inline-block;max-width:min(78%,420px);padding:10px 13px;border-radius:20px;word-break:break-word;box-shadow:0 2px 10px rgba(0,0,0,.16);cursor:pointer;pointer-events:auto}.msg-bubble.in{background:#24272b;color:#fff;border:1px solid #34383d;border-bottom-left-radius:7px}.msg-bubble.out{background:#ffcc19;color:#090909;border:1px solid #e7b800;border-bottom-right-radius:7px}
+.msg-time{font-size:10px;opacity:.58;margin-left:8px;white-space:nowrap}.msg-tick{font-size:10px;margin-left:5px}.reply-quote{border-left:3px solid #ffcc19;background:rgba(0,0,0,.18);padding:7px 9px;border-radius:9px;margin:-2px 0 7px;font-size:12px}.reply-quote b{display:block;margin-bottom:2px}.swipe-hint{display:block;color:#ffcc19;font-size:11px;font-weight:800;margin-top:3px}.msg-actions{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}.msg-actions button{font-size:11px;padding:4px 7px;border-radius:9px;border:1px solid rgba(128,128,128,.35);background:rgba(0,0,0,.12);color:inherit}
+.chat-bar{background:rgba(8,8,8,.94)!important;border-top:1px solid #292929!important;padding:8px!important}.chat-bar .pill{background:#1b1d20;color:#fff;border:1px solid #303236;padding:12px 14px}.chat-bar .yellow{min-width:72px;background:#ffcc19;color:#111}.voice-audio{width:125px;height:28px;max-width:125px}
+.sheet-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:1200;display:none;align-items:flex-end}.sheet{width:100%;max-height:78vh;background:#24272b;color:#fff;border-radius:28px 28px 0 0;padding:10px 0 18px;box-shadow:0 -15px 50px rgba(0,0,0,.45);overflow:hidden}.sheet-handle{width:42px;height:4px;border-radius:8px;background:#aaa;margin:2px auto 14px}.sheet-title{font-size:20px;font-weight:900;text-align:center;padding:0 18px 12px}.comment-list,.viewer-list{max-height:55vh;overflow:auto;padding:0 18px}.comment-item,.viewer-person{display:flex;gap:10px;padding:14px 0;border-bottom:1px solid #34383d}.comment-avatar{width:38px;height:38px;border-radius:50%;background:#111;flex:0 0 38px;overflow:hidden;display:flex;align-items:center;justify-content:center}.comment-avatar img{width:100%;height:100%;object-fit:cover}.comment-main{min-width:0;flex:1}.comment-user{font-weight:900;font-size:14px}.comment-time{font-size:11px;color:#9da3aa;margin-left:5px}.comment-text{font-size:15px;margin-top:3px;line-height:1.35}.comment-reply{font-size:12px;color:#aeb4bb;font-weight:800;margin-top:8px}.comment-input-row{display:flex;gap:8px;align-items:center;padding:12px 14px 0}.comment-input-row input{margin:0;background:#1a1c1f;color:#fff;border:1px solid #36393d;border-radius:24px;padding:12px 15px}.comment-send{width:44px;height:44px;border-radius:50%;border:0;background:#ffcc19;font-weight:900}.viewer-counter-btn{border:0;background:rgba(255,255,255,.12);color:#fff;border-radius:18px;padding:5px 9px;font-weight:800}
 /* Main page swipe navigation */
 body{overscroll-behavior-x:none}
 .story-bar{display:flex;gap:12px;overflow-x:auto;padding:12px;background:var(--card);min-height:80px}
@@ -470,10 +484,12 @@ input,textarea{width:100%;background:var(--sec);border:none;border-radius:12px;p
 </div>
 </div>
 <div id="profileModal" class="profile-modal" onclick="if(event.target.id==='profileModal')closeProfileModal()"><div class="profile-sheet"><button class="small-btn" style="float:right" onclick="closeProfileModal()">Close</button><div id="publicProfile"></div></div></div>
+<div id=commentsModal class=sheet-backdrop onclick=closeComments(event)><div class=sheet onclick=event.stopPropagation()><div class=sheet-handle></div><div class=sheet-title>Comments</div><div id=commentList class=comment-list></div><div class=comment-input-row><input id=commentInput placeholder="Add a comment..."><button class=comment-send onclick=sendComment()>➤</button></div></div></div>
+<div id=storyViewersModal class=sheet-backdrop onclick=closeStoryViewers(event)><div class=sheet onclick=event.stopPropagation()><div class=sheet-handle></div><div class=sheet-title>Story viewers</div><div id=storyViewerList class=viewer-list></div></div></div>
 <div class=viewer id=viewerModal style="position:fixed;top:0;left:0;right:0;bottom:0;background:#000;z-index:999;display:none;flex-direction:column">
 <div class=bar id=progressBar></div>
 <div style="padding:10px;display:flex;justify-content:space-between;color:#fff;align-items:center">
-<div><b id=viewerUser></b> <small id=viewerCounter style="margin-left:6px;color:#aaa"></small></div>
+<div><b id=viewerUser></b> <button id=viewerCounter class=viewer-counter-btn onclick="openStoryViewers()">👁️ 0</button></div>
 <div><button onclick="deleteStory()" id=delStoryBtn style="background:#ff4444;color:#fff;padding:5px 8px;border-radius:8px;border:none;margin-right:6px;display:none">🗑️</button><button onclick=closeViewer() style="background:#fff;padding:5px 10px;border-radius:8px;border:none">X</button></div>
 </div>
 <div style="flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;position:relative" onclick="nextStory()">
@@ -558,7 +574,7 @@ function openGrouped(username){ currentGroup=groupedStories[username]||[]; curre
 function showGrouped(){
   clearTimeout(storyTimer); let s=currentGroup[currentGroupIdx]; if(!s){closeViewer();return;}
   document.getElementById('viewerUser').innerText=s.username;
-  document.getElementById('viewerCounter').innerText=(currentGroupIdx+1)+'/'+currentGroup.length;
+  document.getElementById('viewerCounter').innerText='👁️ 0';document.getElementById('viewerCounter').disabled=false;
   document.getElementById('delStoryBtn').style.display=(s.username==curUser)?'inline-block':'none';
   let bar=document.getElementById('progressBar'); bar.innerHTML=currentGroup.map((_,idx)=>`<div class="${idx==currentGroupIdx?'active':idx<currentGroupIdx?'seen':''}"></div>`).join('');
   let img=document.getElementById('viewerMedia'),vid=document.getElementById('viewerVideo'),txt=document.getElementById('viewerText'),cap=document.getElementById('viewerCaption');
@@ -568,9 +584,11 @@ function showGrouped(){
   else if(low.includes('.mp4')||low.includes('.mov')||low.includes('.webm')){vid.style.display='block';vid.src=m;vid.load(); if(!lowData) vid.play().catch(()=>{}); if(s.text){cap.style.display='block';cap.innerText=s.text;}}
   else if(m){img.style.display='block';img.src=m; if(s.text){cap.style.display='block';cap.innerText=s.text;}}
   fetch('/api/story/view',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:s.id})});
-  if(s.username==curUser){fetch('/api/story/viewers?id='+s.id).then(r=>r.json()).then(v=>{document.getElementById('viewerCounter').innerText=(currentGroupIdx+1)+'/'+currentGroup.length+' · '+v.count+' views';}).catch(()=>{});}
+  if(s.username==curUser){fetch('/api/story/viewers?id='+s.id).then(r=>r.json()).then(v=>{document.getElementById('viewerCounter').innerText='👁️ '+v.count;}).catch(()=>{});}else{document.getElementById('viewerCounter').disabled=true;}
   storyTimer=setTimeout(()=>{nextStory()},6000);
 }
+async function openStoryViewers(){let s=currentGroup[currentGroupIdx];if(!s||s.username!==curUser)return;let box=document.getElementById('storyViewerList');document.getElementById('storyViewersModal').style.display='flex';box.innerHTML='<div style="padding:25px;text-align:center;color:#aaa">Loading viewers…</div>';try{let r=await fetch('/api/story/viewers?id='+s.id);let d=await r.json();box.innerHTML=d.viewers.length?d.viewers.map(u=>{let pic=profiles[u];return `<div class=viewer-person><div class=comment-avatar>${pic?`<img src="${pic}" loading="lazy">`:escapeHtml((u||'?')[0])}</div><b>${escapeHtml(u)}</b></div>`}).join(''):'<div style="padding:25px;text-align:center;color:#aaa">No viewers yet</div>';}catch(e){box.innerHTML='<div style="padding:25px;text-align:center;color:#aaa">Could not load viewers</div>';}}
+function closeStoryViewers(e){if(!e||e.target.id==='storyViewersModal')document.getElementById('storyViewersModal').style.display='none';}
 function nextStory(){ if(currentGroupIdx<currentGroup.length-1){currentGroupIdx++; showGrouped();} else {closeViewer(); loadStories();} }
 function prevStory(){ if(currentGroupIdx>0){currentGroupIdx--; showGrouped();} }
 function closeViewer(){clearTimeout(storyTimer);document.getElementById('viewerModal').style.display='none';let v=document.getElementById('viewerVideo');v.pause();}
@@ -588,14 +606,18 @@ async function loadPosts(){
   posts.forEach(p=>{
     let pic=profiles[p.username];let picHtml=pic?`<img src="${pic}">`:p.username[0]; let media=(p.media||[]).map(x=>{let u=x.url||'',low=u.toLowerCase();if((x.type||'').startsWith('video')||['.mp4','.mov','.webm','.m4v'].some(z=>low.includes(z)))return `<video src="${u}" controls style="width:100%;max-height:400px"></video>`;return `<img src="${u}" style="width:100%;max-height:400px;object-fit:cover">`;}).join(''); if(p.shared){media+=`<div class=card style="margin:8px;background:var(--sec)"><b>Shared from @${p.shared.username}</b><p>${escapeHtml(p.shared.text||'')}</p>${p.shared.media_url?`<img src="${p.shared.media_url}" style="width:100%;max-height:240px;object-fit:cover">`:''}</div>`;}
     let del=p.username==curUser?`<span class=del onclick="deletePost(${p.id})">🗑️</span>`:''; let edit=p.username==curUser?`<span onclick="editPost(${p.id},${JSON.stringify(p.text||'').replace(/</g,'&lt;')})" style="cursor:pointer">✏️ Edit</span>`:'';
-    let text=linkify(p.text||''); let actions=`<span onclick="likePost(${p.id})" style="cursor:pointer">${p.liked?'❤️':'🤍'} ${p.like_count||0}</span><span onclick="commentPost(${p.id})" style="cursor:pointer">💬 ${p.comment_count||0}</span><span onclick="sharePost(${p.id})" style="cursor:pointer">🔄 ${p.share_count||0}</span><span onclick="savePost(${p.id})" style="cursor:pointer">${p.saved?'🔖':'🔖'} ${p.saved?'Saved':'Save'}</span><span onclick="viewComments(${p.id})" style="cursor:pointer">View</span><span onclick="reportTarget('post',${p.id})" style="cursor:pointer">🚩</span>${edit}`;
+    let text=linkify(p.text||''); let actions=`<span onclick="likePost(${p.id})" style="cursor:pointer">${p.liked?'❤️':'🤍'} ${p.like_count||0}</span><span onclick="commentPost(${p.id})" style="cursor:pointer">💬 ${p.comment_count||0}</span><span onclick="sharePost(${p.id})" style="cursor:pointer">🔄 ${p.share_count||0}</span><span onclick="savePost(${p.id})" style="cursor:pointer">${p.saved?'🔖':'🔖'} ${p.saved?'Saved':'Save'}</span><span onclick="openComments(${p.id})" style="cursor:pointer">Comments</span><span onclick="reportTarget('post',${p.id})" style="cursor:pointer">🚩</span>${edit}`;
     h+=`<div class=card style="padding:0;overflow:hidden"><div style="padding:10px;display:flex;align-items:center;gap:8px"><div class=pic>${picHtml}</div><b onclick="viewProfile('${p.username}')" style="cursor:pointer">${p.username}</b><small style="margin-left:auto">${(p.created_at||'').slice(0,16)}</small>${del}</div>${p.text?`<div style="padding:0 12px 8px">${text}</div>`:''}${media}<div style="padding:10px;display:flex;gap:12px;flex-wrap:wrap">${actions}</div></div>`;
   });
   document.getElementById('postsList').innerHTML=h;
 }
 function linkify(t){return escapeHtml(t).replace(/#([A-Za-z0-9_]+)/g,'<span style="color:#9a6b00;font-weight:700">#$1</span>').replace(/@([A-Za-z0-9_.-]{3,20})/g,'<span style="color:#4169e1;font-weight:700">@$1</span>');}
 async function sharePost(id){let r=await fetch('/api/post/share',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id})});let d=await r.json();if(!d.ok)alert(d.error||'Could not share');loadPosts();}
-async function viewComments(id){let r=await fetch('/api/comments?post_id='+id);let d=await r.json();let text=d.map(c=>c.username+': '+c.text).join('\\n')||'No comments';alert(text);}
+let activeCommentPost=0;
+async function openComments(id){activeCommentPost=id;document.getElementById('commentsModal').style.display='flex';document.getElementById('commentList').innerHTML='<div style="padding:25px;text-align:center;color:#aaa">Loading comments…</div>';try{let r=await fetch('/api/comments?post_id='+id);let d=await r.json();let h=d.length?d.map(c=>{let pic=profiles[c.username];return `<div class=comment-item><div class=comment-avatar>${pic?`<img src="${pic}" loading="lazy">`:escapeHtml((c.username||'?')[0])}</div><div class=comment-main><div><span class=comment-user>${escapeHtml(c.username)}</span><span class=comment-time>${escapeHtml((c.created_at||'').slice(0,10))}</span></div><div class=comment-text>${escapeHtml(c.text)}</div><div class=comment-reply>Reply</div></div><div style="font-size:20px;color:#aeb4bb">♡</div></div>`}).join(''):'<div style="padding:30px;text-align:center;color:#aaa">No comments yet</div>';document.getElementById('commentList').innerHTML=h;}catch(e){document.getElementById('commentList').innerHTML='<div style="padding:30px;text-align:center;color:#aaa">Could not load comments</div>';}}
+function closeComments(e){if(!e||e.target.id==='commentsModal')document.getElementById('commentsModal').style.display='none';}
+async function sendComment(){let input=document.getElementById('commentInput'),t=input.value.trim();if(!t||!activeCommentPost)return;input.disabled=true;try{let r=await fetch('/api/comment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:activeCommentPost,text:t})});let d=await r.json();if(d.ok){input.value='';openComments(activeCommentPost);}}finally{input.disabled=false;}}
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.activeElement===document.getElementById('commentInput'))sendComment();});
 async function createPost(){
   let txt=document.getElementById('postText').value; let files=[...((document.getElementById('postFile').files||[]))]; if(selectedPostFile&&!files.length)files=[selectedPostFile];
   if(!txt&&!files.length){document.getElementById('postMsg').innerText='Add text or tap 📎';return;}
@@ -661,9 +683,9 @@ function openChat(username){
   if(users)users.style.display='none'; if(search)search.style.display='none'; if(!box)return;
   box.style.display='block';
   // Draw the chat immediately. Status is intentionally loaded in the background.
-  box.innerHTML=`<div class="chat-header"><button onclick="backChat()" class="chat-back">← ${escapeHtml(username)} <span id="chatOnlineState"></span></button><button onclick="searchConversation()" class="small-btn chat-search-btn">🔎 Search</button></div><div id=replyPreview style="display:none;background:#fff8e1;padding:8px;margin:8px;border-radius:10px;border-left:3px solid #ffcc00;flex:0 0 auto"></div><div id=typingStatus class=typing style="flex:0 0 auto"></div><div id=msgs></div><div class=chat-bar><input id=chatText class=pill placeholder="Write message..." /><input type=file id=chatFileHidden accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" multiple style="display:none"><button class=sticker onclick="startRecording()">🎤</button><div class=sticker onclick="document.getElementById('chatFileHidden').click()">📎</div><button class=yellow onclick=sendMsg()>Send</button></div>`;
+  box.innerHTML=`<div class=chat-header><button onclick=backChat() class=chat-back>← ${escapeHtml(username)} <span id=chatOnlineState></span></button><button onclick=searchConversation() class=small-btn chat-search-btn>🔎 Search</button></div><div id=replyPreview style="display:none;background:#24272b;color:#fff;padding:8px;margin:8px;border-radius:10px;border-left:3px solid #ffcc19;flex:0 0 auto"></div><div id=typingStatus class=typing style="flex:0 0 auto"></div><div id=msgs></div><div class=chat-bar><input id=chatText class=pill placeholder="Type a message..." autocomplete=off /><input type=file id=chatFileHidden accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" multiple style=display:none><button class=sticker onclick=startRecording()>🎤</button><div class=sticker onclick="document.getElementById('chatFileHidden').click()">📎</div><button class=yellow onclick=sendMsg()>Send</button></div>`;
   document.getElementById('chatFileHidden').addEventListener('change',function(e){let f=e.target.files[0];if(f)selectedChatFile=f;});
-  document.getElementById('chatText').addEventListener('input',()=>sendTyping());
+  document.getElementById('chatText').addEventListener('input',()=>sendTyping());document.getElementById('chatText').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}});
   if(window.typingTimer)clearInterval(window.typingTimer); window.typingTimer=setInterval(pollTyping,3500);
   loadMsgs();
   fetch('/api/status/get?user='+encodeURIComponent(username)).then(r=>r.json()).then(st=>{let x=document.getElementById('chatOnlineState');if(x)x.innerHTML=st.online?'<span class=onlineDot></span> online':'<span class=offlineDot></span> offline';}).catch(()=>{});
@@ -680,65 +702,9 @@ function backChat(){
   loadChatUsers();
 }
 
-async function sendMsg(){
-  if(!chatWith){ alert('Please select a user first.'); return; }
-
-  const input=document.getElementById('chatText');
-  const fileInput=document.getElementById('chatFileHidden');
-  const text=input ? input.value.trim() : '';
-  const file=(typeof selectedChatFile!=='undefined' && selectedChatFile) ? selectedChatFile : (fileInput && fileInput.files ? fileInput.files[0] : null);
-
-  if(!text && !file) return;
-
-  const fd=new FormData();
-  fd.append('receiver',chatWith);
-  fd.append('text',text);
-  if(typeof replyToText!=='undefined' && replyToText) fd.append('reply_to',replyToText);
-  if(file) fd.append('media',file);
-
-  try{
-    const r=await fetch('/api/send',{method:'POST',body:fd,credentials:'same-origin'});
-    const raw=await r.text();
-    let d={};
-    try{d=raw?JSON.parse(raw):{};}catch(_){}
-    if(!r.ok || !d.ok){
-      console.error('Message failed:',r.status,raw);
-      alert(d.error || ('Could not send message (HTTP '+r.status+').'));
-      return;
-    }
-    if(input) input.value='';
-    if(fileInput) fileInput.value='';
-    if(typeof selectedChatFile!=='undefined') selectedChatFile=null;
-    if(typeof cancelReply==='function') cancelReply();
-    loadMsgs();
-  }catch(e){
-    console.error(e);
-    alert('Could not send message. Please check the server connection.');
-  }
-}
-async function loadMsgs(){
-  if(!chatWith)return;
-  if(window.msgAbort)window.msgAbort.abort();
-  window.msgAbort=new AbortController();
-  let r=await fetch('/api/messages?with='+encodeURIComponent(chatWith),{signal:window.msgAbort.signal}); let msgs=await r.json(); let h='';
-  msgs.forEach(m=>{
-    let mu=m.media_url||''; let low=mu.toLowerCase(); let media='';
-    if(mu){ if(low.includes('.mp4')||low.includes('.mov')||low.includes('.webm')) media=`<br><video src="${mu}" controls playsinline style="max-width:220px;border-radius:12px;margin-top:6px"></video>`; else if(low.includes('.mp3')||low.includes('.wav')||low.includes('.ogg')||low.includes('.m4a')||m.media_type==='audio') media=`<br><audio src="${mu}" controls class="voice-audio" controlslist="nodownload noplaybackrate"></audio>`; else media=`<br><a href="${mu}" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px">📎 Open attachment</a>`; }
-    let isMe=m.sender==curUser; let tick=isMe?(m.read?'<small style="color:#00c853">✓✓ read</small>':'<small style="color:#888">✓ sent</small>'):'';
-    let reply=m.reply_to?`<div class=replyBox>${escapeHtml(m.reply_to)}</div>`:'';
-    let reactions=(m.reactions||[]).map(x=>`${x.reaction} ${x.count}`).join(' · ');
-    let text=m.deleted?'This message was deleted':(m.text||'');
-    let edit=isMe&&!m.deleted?`<button onclick="editMsg(${m.id},${JSON.stringify(m.text||'')})">Edit</button>`:'';
-    let del=isMe&&!m.deleted?`<button onclick="deleteMsg(${m.id})">Delete</button>`:'';
-    h+=`<div style="margin:12px 0;text-align:${isMe?'right':'left'}"><span data-reply-text="${escapeHtml(text.slice(0,80))}" style="background:${isMe?'#000':'#eee'};color:${isMe?'#fff':'#000'};padding:12px 16px;border-radius:22px;display:inline-block;max-width:76%;word-break:break-word;cursor:pointer;pointer-events:auto" onclick="setReply(${JSON.stringify(text.slice(0,80))})">${reply}${escapeHtml(text)}${media}<br>${tick}<div class=reaction-row>${escapeHtml(reactions)}</div><div class=msg-actions><button onclick="setReply(${JSON.stringify(text.slice(0,80))})">↩ Reply</button><button onclick="reactMsg(${m.id},'❤️')">❤️</button><button onclick="reactMsg(${m.id},'😂')">😂</button><button onclick="reactMsg(${m.id},'👍')">👍</button>${edit}${del}</div></span></div>`;
-  });
-  let el=document.getElementById('msgs');
-  if(el)el.innerHTML=h||'<div style="text-align:center;color:#888;padding:30px">Start the conversation</div>';
-  let mbox=document.getElementById('msgs');
-  if(mbox){
-    requestAnimationFrame(()=>{mbox.scrollTop=mbox.scrollHeight;});
-  }
-}
+function appendOptimisticMessage(text,reply){const el=document.getElementById('msgs');if(!el)return null;const row=document.createElement('div');row.className='msg-row me';row.innerHTML=`<span class="msg-bubble out pending-msg">${reply?`<div class=reply-quote><b>You</b>${escapeHtml(reply)}</div>`:''}${escapeHtml(text)}<span class=msg-time>${new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span><span class=msg-tick>✓</span></span>`;el.appendChild(row);el.scrollTop=el.scrollHeight;return row;}
+async function sendMsg(){if(!chatWith){alert('Please select a user first.');return;}const input=document.getElementById('chatText'),fileInput=document.getElementById('chatFileHidden');const text=input?input.value.trim():'';const file=(typeof selectedChatFile!=='undefined'&&selectedChatFile)?selectedChatFile:(fileInput&&fileInput.files?fileInput.files[0]:null);if(!text&&!file)return;const receiver=chatWith,reply=(typeof replyToText!=='undefined'&&replyToText)?replyToText:'';const optimistic=!file?appendOptimisticMessage(text,reply):null;if(input)input.value='';if(fileInput)fileInput.value='';if(typeof selectedChatFile!=='undefined')selectedChatFile=null;if(typeof cancelReply==='function')cancelReply();const fd=new FormData();fd.append('receiver',receiver);fd.append('text',text);if(reply)fd.append('reply_to',reply);if(file)fd.append('media',file);try{const r=await fetch('/api/send',{method:'POST',body:fd,credentials:'same-origin'});const d=await r.json().catch(()=>({}));if(!r.ok||!d.ok){if(optimistic)optimistic.remove();alert(d.error||'Could not send message');return;}if(optimistic){optimistic.querySelector('.msg-bubble')?.classList.remove('pending-msg');let tick=optimistic.querySelector('.msg-tick');if(tick)tick.innerText='✓✓';}setTimeout(()=>{if(chatWith===receiver)loadMsgs(true);},1200);}catch(e){if(optimistic)optimistic.remove();alert('Could not send message. Please check the server connection.');}}
+async function loadMsgs(silent=false){if(!chatWith)return;if(window.msgAbort)window.msgAbort.abort();window.msgAbort=new AbortController();try{let r=await fetch('/api/messages?with='+encodeURIComponent(chatWith),{signal:window.msgAbort.signal});let msgs=await r.json();let h='';msgs.forEach(m=>{let mu=m.media_url||'',low=mu.toLowerCase(),media='';if(mu){if(/\.(mp4|mov|webm|m4v)(\?|$)/i.test(low))media=`<br><video src="${mu}" controls playsinline style="max-width:240px;border-radius:14px;margin-top:7px"></video>`;else if(/\.(mp3|wav|ogg|m4a|aac|webm)(\?|$)/i.test(low)||m.media_type==='audio')media=`<br><audio src="${mu}" controls class=voice-audio controlslist="nodownload noplaybackrate"></audio>`;else media=`<br><a href="${mu}" target="_blank" rel="noopener" style="display:inline-block;margin-top:7px;color:inherit">📎 Open attachment</a>`;}let isMe=m.sender==curUser,tick=isMe?(m.read?'✓✓':'✓'):'',text=m.deleted?'This message was deleted':(m.text||'');let reply=m.reply_to?`<div class=reply-quote><b>${escapeHtml(m.sender)}</b>${escapeHtml(m.reply_to)}<span class=swipe-hint>↩ Swipe to reply</span></div>`:`<span class=swipe-hint>↩ Swipe to reply</span>`;let reactions=(m.reactions||[]).map(x=>`${x.reaction} ${x.count}`).join(' · ');let edit=isMe&&!m.deleted?`<button onclick="event.stopPropagation();editMsg(${m.id},${JSON.stringify(m.text||'')})">Edit</button>`:'';let del=isMe&&!m.deleted?`<button onclick="event.stopPropagation();deleteMsg(${m.id})">Delete</button>`:'';h+=`<div class="msg-row ${isMe?'me':''}"><span data-reply-text="${escapeHtml(text.slice(0,80))}" class="msg-bubble ${isMe?'out':'in'}" onclick="setReply(${JSON.stringify(text.slice(0,80))})">${reply}${escapeHtml(text)}${media}<div><span class=msg-time>${escapeHtml((m.created_at||'').slice(11,16))}</span><span class=msg-tick>${tick}</span></div><div class=reaction-row>${escapeHtml(reactions)}</div><div class=msg-actions><button onclick="event.stopPropagation();setReply(${JSON.stringify(text.slice(0,80))})">↩ Reply</button><button onclick="event.stopPropagation();reactMsg(${m.id},'❤️')">❤️</button><button onclick="event.stopPropagation();reactMsg(${m.id},'😂')">😂</button><button onclick="event.stopPropagation();reactMsg(${m.id},'👍')">👍</button>${edit}${del}</div></span></div>`;});let el=document.getElementById('msgs');if(!el)return;let nearBottom=el.scrollHeight-el.scrollTop-el.clientHeight<80;el.innerHTML=h||'<div style="text-align:center;color:#888;padding:30px">Start the conversation</div>';if(!silent||nearBottom)requestAnimationFrame(()=>{el.scrollTop=el.scrollHeight;});}catch(e){if(e.name!=='AbortError')console.error(e);}}
 function escapeHtml(s){return String(s||'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
 async function reactMsg(id,reaction){let r=await fetch('/api/message/react',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,reaction})});let d=await r.json();if(d.ok)loadMsgs();}
 async function editMsg(id,current){let t=prompt('Edit message:',current||'');if(t===null)return;let r=await fetch('/api/message/edit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,text:t})});let d=await r.json();if(!d.ok)alert(d.error||'Could not edit');loadMsgs();}
@@ -1414,7 +1380,7 @@ def api_messages():
     if not me or not other: return jsonify([])
     conn=get_conn(); c=conn.cursor()
     try:
-        q="SELECT id,sender,text,media_url,reply_to,read,deleted_at FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s) ORDER BY id DESC LIMIT 100" if USE_POSTGRES else "SELECT id,sender,text,media_url,reply_to,read,deleted_at FROM messages WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?) ORDER BY id DESC LIMIT 100"
+        q="SELECT id,sender,text,media_url,reply_to,read,deleted_at,created_at FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s) ORDER BY id DESC LIMIT 100" if USE_POSTGRES else "SELECT id,sender,text,media_url,reply_to,read,deleted_at,created_at FROM messages WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?) ORDER BY id DESC LIMIT 100"
         c.execute(q,(me,other,other,me)); rows=list(reversed(c.fetchall()))
         ids=[r[0] for r in rows]
         reactions_by={}
@@ -1428,7 +1394,7 @@ def api_messages():
             media_url=str(r[3] or '')
             low=media_url.lower()
             is_audio=low.endswith(('.mp3','.wav','.ogg','.m4a','.aac','.webm'))
-            out.append({"id":r[0],"sender":r[1],"text":r[2],"media_url":r[3],"reply_to":r[4],"read":r[5],"deleted":bool(r[6]),"reactions":reactions_by.get(r[0],[]),"media_type":"audio" if is_audio else ""})
+            out.append({"id":r[0],"sender":r[1],"text":r[2],"media_url":r[3],"reply_to":r[4],"read":r[5],"deleted":bool(r[6]),"created_at":str(r[7] or ""),"reactions":reactions_by.get(r[0],[]),"media_type":"audio" if is_audio else ""})
         return jsonify(out)
     finally:
         conn.close()
@@ -1487,7 +1453,7 @@ def api_send():
         )
         now=datetime.now().isoformat(); c.execute(q, (me,other,txt,url,reply_to,now))
         conn.commit()
-        notify(other,'message',me,me+' sent you a message')
+        notify_async(other,'message',me,me+' sent you a message')
         return jsonify({"ok":True,"id":c.lastrowid if not USE_POSTGRES else None,"created_at":now,"media_url":url})
     except Exception:
         conn.rollback()
