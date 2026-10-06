@@ -121,8 +121,7 @@ def nuclear_repair():
                 "CREATE TABLE IF NOT EXISTS follows (follower TEXT, following TEXT, PRIMARY KEY(follower,following))",
                 "CREATE TABLE IF NOT EXISTS post_media (id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INT, media_url TEXT, media_type TEXT)",
                 "CREATE TABLE IF NOT EXISTS post_shares (id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INT, username TEXT, created_at TEXT, UNIQUE(post_id,username))",
-                "CREATE TABLE IF NOT EXISTS saved_posts (post_id INT, username TEXT, created_at TEXT, PRIMARY KEY(post_id,username))",
-        "CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY AUTOINCREMENT, reporter TEXT, target_type TEXT, target_id TEXT, reason TEXT, created_at TEXT)",
+                "CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY AUTOINCREMENT, reporter TEXT, target_type TEXT, target_id TEXT, reason TEXT, created_at TEXT)",
                 "CREATE TABLE IF NOT EXISTS user_typing (username TEXT, peer TEXT, last_seen REAL, PRIMARY KEY(username,peer))",
                 "CREATE TABLE IF NOT EXISTS user_settings (username TEXT PRIMARY KEY, private_account INT DEFAULT 0, message_privacy TEXT DEFAULT 'friends', show_last_seen INT DEFAULT 1, show_read_receipts INT DEFAULT 1)"]
         for sql in stmts:
@@ -176,7 +175,6 @@ def init_db():
         c.execute("CREATE TABLE IF NOT EXISTS follows (follower TEXT, following TEXT, PRIMARY KEY(follower,following))")
         c.execute("CREATE TABLE IF NOT EXISTS post_media (id SERIAL PRIMARY KEY, post_id INT, media_url TEXT, media_type TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS post_shares (id SERIAL PRIMARY KEY, post_id INT, username TEXT, created_at TEXT, UNIQUE(post_id,username))")
-        c.execute("CREATE TABLE IF NOT EXISTS saved_posts (post_id INT, username TEXT, created_at TEXT, PRIMARY KEY(post_id,username))")
         c.execute("CREATE TABLE IF NOT EXISTS reports (id SERIAL PRIMARY KEY, reporter TEXT, target_type TEXT, target_id TEXT, reason TEXT, created_at TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS user_typing (username TEXT, peer TEXT, last_seen REAL, PRIMARY KEY(username,peer))")
         c.execute("CREATE TABLE IF NOT EXISTS user_settings (username TEXT PRIMARY KEY, private_account INT DEFAULT 0, message_privacy TEXT DEFAULT 'friends', show_last_seen INT DEFAULT 1, show_read_receipts INT DEFAULT 1)")
@@ -186,7 +184,6 @@ def init_db():
         c.execute("CREATE TABLE IF NOT EXISTS follows (follower TEXT, following TEXT, PRIMARY KEY(follower,following))")
         c.execute("CREATE TABLE IF NOT EXISTS post_media (id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INT, media_url TEXT, media_type TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS post_shares (id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INT, username TEXT, created_at TEXT, UNIQUE(post_id,username))")
-        c.execute("CREATE TABLE IF NOT EXISTS saved_posts (post_id INT, username TEXT, created_at TEXT, PRIMARY KEY(post_id,username))")
         c.execute("CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY AUTOINCREMENT, reporter TEXT, target_type TEXT, target_id TEXT, reason TEXT, created_at TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS user_typing (username TEXT, peer TEXT, last_seen REAL, PRIMARY KEY(username,peer))")
         c.execute("CREATE TABLE IF NOT EXISTS user_settings (username TEXT PRIMARY KEY, private_account INT DEFAULT 0, message_privacy TEXT DEFAULT 'friends', show_last_seen INT DEFAULT 1, show_read_receipts INT DEFAULT 1)")
@@ -211,27 +208,6 @@ def init_db():
 
 init_db()
 
-# Performance indexes: keep feeds, chats and notifications fast as the database grows.
-def create_perf_indexes():
-    conn=get_conn(); c=conn.cursor()
-    indexes=[
-        "CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(id DESC)",
-        "CREATE INDEX IF NOT EXISTS idx_post_likes_post ON post_likes(post_id)",
-        "CREATE INDEX IF NOT EXISTS idx_comments_post ON comments(post_id)",
-        "CREATE INDEX IF NOT EXISTS idx_shares_post ON post_shares(post_id)",
-        "CREATE INDEX IF NOT EXISTS idx_post_media_post ON post_media(post_id)",
-        "CREATE INDEX IF NOT EXISTS idx_messages_pair ON messages(sender,receiver,id)",
-        "CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(username,is_read,id)",
-        "CREATE INDEX IF NOT EXISTS idx_stories_expiry ON stories(expires_at,id)"
-    ]
-    for q in indexes:
-        try: c.execute(q)
-        except Exception: pass
-    try: conn.commit()
-    except Exception: pass
-    conn.close()
-
-create_perf_indexes()
 
 def notify(username, ntype, from_user='', text=''):
     if not username or username==from_user: return
@@ -271,78 +247,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,sans-serif
 .tabs{position:fixed;top:50px;left:0;right:0;background:var(--card);display:flex;z-index:99;border-bottom:1px solid var(--border);height:50px}
 .tab{flex:1;display:flex;align-items:center;justify-content:center;font-weight:bold;color:#888;cursor:pointer;border-bottom:3px solid transparent;font-size:13px}
 .tab.active{color:var(--text);border-color:var(--text)}
-.content{margin-top:100px;padding-bottom:160px}/* Stable chat screen: header stays fixed while the message area scrolls normally. */
-.chat-page{touch-action:pan-y}
-.chat-screen{
-  position:fixed;
-  top:100px;
-  left:0;
-  right:0;
-  bottom:0;
-  background:var(--bg);
-  z-index:98;
-  overflow:hidden;
-}
-.chat-screen .chat-header{
-  position:absolute;
-  top:0;
-  left:0;
-  right:0;
-  height:54px;
-  box-sizing:border-box;
-  background:var(--card);
-  border-bottom:1px solid var(--border);
-  padding:8px;
-  z-index:30;
-  display:flex;
-  align-items:center;
-  gap:8px;
-  box-shadow:0 1px 4px rgba(0,0,0,.08);
-}
-.chat-screen .chat-header .chat-back{
-  flex:1;
-  text-align:left;
-  background:var(--sec);
-  padding:9px 10px;
-  border-radius:10px;
-  border:1px solid var(--border);
-  font-weight:800;
-  color:var(--text);
-  min-width:0;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-.chat-screen .chat-header .chat-search-btn{flex:0 0 auto}
-.chat-screen #replyPreview,.chat-screen #typingStatus{position:absolute;left:8px;right:8px;z-index:25}
-.chat-screen #msgs{
-  position:absolute;
-  top:54px;
-  left:0;
-  right:0;
-  bottom:64px;
-  overflow-y:auto;
-  overflow-x:hidden;
-  -webkit-overflow-scrolling:touch;
-  overscroll-behavior-y:contain;
-  touch-action:pan-y;
-  padding:10px 10px 24px!important;
-  box-sizing:border-box;
-}
-.chat-screen .chat-bar{
-  position:absolute;
-  left:0;
-  right:0;
-  bottom:0;
-  z-index:40;
-}
-@media (max-width:600px){
-  .chat-screen .chat-header{height:54px;padding:8px}
-  .chat-screen .chat-header .chat-back{font-size:14px}
-  .chat-screen #msgs{top:54px;bottom:64px;padding-bottom:24px!important}
-}
-/* Main page swipe navigation */
-body{overscroll-behavior-x:none}
+.content{margin-top:100px;padding-bottom:160px}
 .story-bar{display:flex;gap:12px;overflow-x:auto;padding:12px;background:var(--card);min-height:80px}
 .s-item{text-align:center;min-width:68px;cursor:pointer}
 .s-ring{width:62px;height:62px;border-radius:50%;background:#000;display:flex;align-items:center;justify-content:center;color:#fff;border:3px solid #ffcc00;overflow:hidden;position:relative}
@@ -379,13 +284,7 @@ input,textarea{width:100%;background:var(--sec);border:none;border-radius:12px;p
 .replyBox{border-left:3px solid #ffcc00;background:#fff8e1;padding:6px;border-radius:8px;font-size:12px;margin-bottom:4px;color:#000}.voice-audio{width:145px;height:30px;max-width:145px;vertical-align:middle;margin-top:5px}
 </style></head><body>
 <div class=top>
-<div class=logo style="gap:8px">
-<img src="/app-icon.jpg" alt="PROVE AM">
-<div style="display:flex;flex-direction:column;line-height:1.05">
-<span>PROVE AM</span>
-<small style="font-size:9px;color:#888;font-weight:800;margin-top:3px">OWNED BY JERRICK SMITH</small>
-</div>
-</div>
+<div class=logo><img src="/app-icon.jpg" alt="PROVE AM"><span>PROVE AM</span></div>
 <div style="display:flex;gap:10px;align-items:center">
 <button onclick="toggleLow()" id=lowBtn style="padding:5px 8px;font-size:11px;border:1px solid var(--border);background:var(--sec);color:var(--text);border-radius:8px">📶 Low: OFF</button>
 <div style="position:relative;cursor:pointer" onclick="openNotifs()">🔔<span id=notifCount class=notif-dot style="display:none">0</span></div>
@@ -426,16 +325,9 @@ input,textarea{width:100%;background:var(--sec);border:none;border-radius:12px;p
 </div>
 <div id=postsList></div>
 </div>
-<div id=chatDiv style="display:none" class="chat-page">
-<input id=searchChat placeholder="Search friends..." oninput=filterChat()>
-<div id=chatUsers></div>
-<div id=chatBox style="display:none" class="chat-screen"></div>
-</div>
+<div id=chatDiv style=display:none><input id=searchChat placeholder="Search friends..." oninput=filterChat()><div id=chatUsers></div><div id=chatBox style=display:none></div></div>
 <div id=searchDiv style=display:none class=card>
-<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-<h3 style="margin:0">🔍 Search Users</h3>
-<span style="font-size:10px;font-weight:900;color:#a88400;background:#fff7cc;padding:6px 9px;border-radius:12px;white-space:nowrap">PROVE AM • JERRICK SMITH</span>
-</div>
+<h3>🔍 Search Users</h3>
 <input id=searchUsersInput placeholder="Search username..." oninput="searchUsers()" style="background:var(--sec)">
 <div id=searchResults style="margin-top:10px"></div><div id=globalSearchResults style="margin-top:10px"></div>
 <h4 style="margin-top:20px">Friend Requests <span id=reqCount style="background:#ff4444;color:#fff;padding:2px 8px;border-radius:12px;font-size:11px">0</span></h4>
@@ -496,7 +388,6 @@ updateLowBtn();
 function updateLowBtn(){let b=document.getElementById('lowBtn'); if(!b)return; b.innerText=lowData?'📶 Low: ON':'📶 Low: OFF'; if(lowData) b.classList.add('low-on'); else b.classList.remove('low-on');}
 function toggleLow(){lowData=!lowData;localStorage.setItem('lowData',lowData?'1':'0'); updateLowBtn(); alert(lowData?'Low Data ON':'Low Data OFF'); loadPosts();}
 function toggleTheme(){dark=!dark;localStorage.setItem('theme',dark?'dark':'light');document.body.classList.toggle('dark');}
-async function showSavedPosts(){let r=await fetch('/api/post/saved');let d=await r.json();let h=d.length?d.map(p=>`<div class=card><b>${p.username}</b><small style="float:right">${(p.created_at||'').slice(0,16)}</small><p>${linkify(p.text||'')}</p>${p.media_url?`<img src="${p.media_url}" loading="lazy" style="width:100%;max-height:240px;object-fit:cover;border-radius:10px">`:''}</div>`).join(''):'<p style="color:#888">No saved posts yet.</p>';document.getElementById('savedList').innerHTML=h;document.getElementById('savedModal').style.display='flex';}
 function switchTab(t){
   document.querySelectorAll('.tab').forEach(e=>e.classList.remove('active'));
   let el=document.getElementById('t'+t.charAt(0).toUpperCase()+t.slice(1)); if(el)el.classList.add('active');
@@ -584,8 +475,8 @@ async function loadPosts(){
   let r=await fetch('/api/posts'); let posts=await r.json(); let h=''; if(!posts.length)h='<div class=card style="text-align:center;color:#888">No posts</div>';
   posts.forEach(p=>{
     let pic=profiles[p.username];let picHtml=pic?`<img src="${pic}">`:p.username[0]; let media=(p.media||[]).map(x=>{let u=x.url||'',low=u.toLowerCase();if((x.type||'').startsWith('video')||['.mp4','.mov','.webm','.m4v'].some(z=>low.includes(z)))return `<video src="${u}" controls style="width:100%;max-height:400px"></video>`;return `<img src="${u}" style="width:100%;max-height:400px;object-fit:cover">`;}).join(''); if(p.shared){media+=`<div class=card style="margin:8px;background:var(--sec)"><b>Shared from @${p.shared.username}</b><p>${escapeHtml(p.shared.text||'')}</p>${p.shared.media_url?`<img src="${p.shared.media_url}" style="width:100%;max-height:240px;object-fit:cover">`:''}</div>`;}
-    let del=p.username==curUser?`<span class=del onclick="deletePost(${p.id})">🗑️</span>`:''; let edit=p.username==curUser?`<span onclick="editPost(${p.id},${JSON.stringify(p.text||'').replace(/</g,'&lt;')})" style="cursor:pointer">✏️ Edit</span>`:'';
-    let text=linkify(p.text||''); let actions=`<span onclick="likePost(${p.id})" style="cursor:pointer">${p.liked?'❤️':'🤍'} ${p.like_count||0}</span><span onclick="commentPost(${p.id})" style="cursor:pointer">💬 ${p.comment_count||0}</span><span onclick="sharePost(${p.id})" style="cursor:pointer">🔄 ${p.share_count||0}</span><span onclick="savePost(${p.id})" style="cursor:pointer">${p.saved?'🔖':'🔖'} ${p.saved?'Saved':'Save'}</span><span onclick="viewComments(${p.id})" style="cursor:pointer">View</span><span onclick="reportTarget('post',${p.id})" style="cursor:pointer">🚩</span>${edit}`;
+    let del=p.username==curUser?`<span class=del onclick="deletePost(${p.id})">🗑️</span>`:'';
+    let text=linkify(p.text||''); let actions=`<span onclick="likePost(${p.id})" style="cursor:pointer">${p.liked?'❤️':'🤍'} ${p.like_count||0}</span><span onclick="commentPost(${p.id})" style="cursor:pointer">💬 ${p.comment_count||0}</span><span onclick="sharePost(${p.id})" style="cursor:pointer">🔄 ${p.share_count||0}</span><span onclick="viewComments(${p.id})" style="cursor:pointer">View</span><span onclick="reportTarget('post',${p.id})" style="cursor:pointer">🚩</span>`;
     h+=`<div class=card style="padding:0;overflow:hidden"><div style="padding:10px;display:flex;align-items:center;gap:8px"><div class=pic>${picHtml}</div><b onclick="viewProfile('${p.username}')" style="cursor:pointer">${p.username}</b><small style="margin-left:auto">${(p.created_at||'').slice(0,16)}</small>${del}</div>${p.text?`<div style="padding:0 12px 8px">${text}</div>`:''}${media}<div style="padding:10px;display:flex;gap:12px;flex-wrap:wrap">${actions}</div></div>`;
   });
   document.getElementById('postsList').innerHTML=h;
@@ -602,8 +493,6 @@ async function createPost(){
   if(d.ok){document.getElementById('postMsg').innerText='✅ Posted!';document.getElementById('postText').value='';document.getElementById('postPreview').style.display='none';document.getElementById('postFile').value='';selectedPostFile=null;loadPosts();}else document.getElementById('postMsg').innerText='Failed: '+(d.error||'');
 }
 async function deletePost(id){if(!confirm('Delete post?'))return;await fetch('/api/post/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})});loadPosts();}
-async function editPost(id,current){let t=prompt('Edit your post:',current||'');if(t===null)return;t=t.trim();if(!t)return;let r=await fetch('/api/post/edit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,text:t})});let d=await r.json();if(!d.ok)alert(d.error||'Could not edit');else loadPosts();}
-async function savePost(id){let r=await fetch('/api/post/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id})});let d=await r.json();if(!d.ok)alert(d.error||'Could not save');else loadPosts();}
 async function likePost(id){await fetch('/api/like',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id})});loadPosts();}
 async function commentPost(id){let t=prompt('Comment:');if(!t)return;await fetch('/api/comment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id,text:t})});loadPosts();}
 function filterChat(){let q=document.getElementById('searchChat').value.toLowerCase();let filtered=allUsers.filter(u=>u.username.toLowerCase().includes(q));renderChatUsers(filtered);}
@@ -640,22 +529,14 @@ async function openChat(username){
   fetch('/api/messages/mark_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({with:username})});
   let statusRes=await fetch('/api/status/get?user='+username); let st=await statusRes.json();
   let online=st.online?'<span class=onlineDot></span> online':'<span class=offlineDot></span> offline';
-  box.innerHTML=`<div class="chat-header"><button onclick="backChat()" class="chat-back">← ${username} ${online}</button><button onclick="searchConversation()" class="small-btn chat-search-btn">🔎 Search</button></div><div id=replyPreview style="display:none;background:#fff8e1;padding:8px;margin:8px;border-radius:10px;border-left:3px solid #ffcc00;flex:0 0 auto"></div><div id=typingStatus class=typing style="flex:0 0 auto"></div><div id=msgs></div><div class=chat-bar><input id=chatText class=pill placeholder="Write message..." /><input type=file id=chatFileHidden accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" multiple style="display:none"><button class=sticker onclick="startRecording()">🎤</button><div class=sticker onclick="document.getElementById('chatFileHidden').click()">📎</div><button class=yellow onclick=sendMsg()>Send</button></div>`;
+  box.innerHTML=`<div style="padding:10px"><button onclick="backChat()" style="background:var(--sec);padding:8px;border-radius:8px;border:1px solid var(--border)">← ${username} ${online}</button><button onclick="searchConversation()" class=small-btn style="float:right">🔎 Search</button></div><div id=replyPreview style="display:none;background:#fff8e1;padding:8px;margin:8px;border-radius:10px;border-left:3px solid #ffcc00"></div><div id=typingStatus class=typing></div><div id=msgs style="padding:10px;padding-bottom:130px"></div><div class=chat-bar><input id=chatText class=pill placeholder="Write message..." /><input type=file id=chatFileHidden accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" multiple style="display:none"><button class=sticker onclick="startRecording()">🎤</button><div class=sticker onclick="document.getElementById('chatFileHidden').click()">📎</div><button class=yellow onclick=sendMsg()>Send</button></div>`;
   document.getElementById('chatFileHidden').addEventListener('change',function(e){let f=e.target.files[0]; if(f)selectedChatFile=f;});
   let ci=document.getElementById('chatText'); ci.addEventListener('input',()=>sendTyping());
   if(window.typingTimer)clearInterval(window.typingTimer); window.typingTimer=setInterval(pollTyping,2500);
   loadMsgs();
 }
 async function searchConversation(){if(!chatWith)return;let q=prompt('Search this conversation:');if(!q)return;let r=await fetch('/api/messages/search?with='+encodeURIComponent(chatWith)+'&q='+encodeURIComponent(q));let d=await r.json();alert(d.map(m=>(m.sender===curUser?'You':m.sender)+': '+m.text).join('\\n')||'No matching messages');}
-function backChat(){
-  chatWith='';
-  if(window.typingTimer){clearInterval(window.typingTimer);window.typingTimer=null;}
-  let box=document.getElementById('chatBox');
-  if(box){box.style.display='none';box.innerHTML='';}
-  let users=document.getElementById('chatUsers');if(users)users.style.display='block';
-  let search=document.getElementById('searchChat');if(search)search.style.display='block';
-  loadChatUsers();
-}
+function backChat(){chatWith='';document.getElementById('chatBox').style.display='none';document.getElementById('chatUsers').style.display='block';document.getElementById('searchChat').style.display='block';loadChatUsers();}
 
 async function sendMsg(){
   if(!chatWith){ alert('Please select a user first.'); return; }
@@ -707,12 +588,7 @@ async function loadMsgs(){
     let del=isMe&&!m.deleted?`<button onclick="deleteMsg(${m.id})">Delete</button>`:'';
     h+=`<div style="margin:12px 0;text-align:${isMe?'right':'left'}"><span data-reply-text="${escapeHtml(text.slice(0,80))}" style="background:${isMe?'#000':'#eee'};color:${isMe?'#fff':'#000'};padding:12px 16px;border-radius:22px;display:inline-block;max-width:76%;word-break:break-word;cursor:pointer">${reply}${escapeHtml(text)}${media}<br>${tick}<div class=reaction-row>${escapeHtml(reactions)}</div><div class=msg-actions><button onclick="setReply(${JSON.stringify(text.slice(0,80))})">↩ Reply</button><button onclick="reactMsg(${m.id},'❤️')">❤️</button><button onclick="reactMsg(${m.id},'😂')">😂</button><button onclick="reactMsg(${m.id},'👍')">👍</button>${edit}${del}</div></span></div>`;
   });
-  let el=document.getElementById('msgs');
-  if(el)el.innerHTML=h||'<div style="text-align:center;color:#888;padding:30px">Start the conversation</div>';
-  let mbox=document.getElementById('msgs');
-  if(mbox){
-    requestAnimationFrame(()=>{mbox.scrollTop=mbox.scrollHeight;});
-  }
+  let el=document.getElementById('msgs'); if(el)el.innerHTML=h||'<div style="text-align:center;color:#888;padding:30px">Start the conversation</div>'; let mbox=document.getElementById('msgs');if(mbox)mbox.scrollTop=mbox.scrollHeight;
 }
 function escapeHtml(s){return String(s||'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
 async function reactMsg(id,reaction){let r=await fetch('/api/message/react',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,reaction})});let d=await r.json();if(d.ok)loadMsgs();}
@@ -722,105 +598,33 @@ let typingSendTimer=0;function sendTyping(){if(!chatWith)return;clearTimeout(typ
 async function pollTyping(){if(!chatWith)return;try{let d=await (await fetch('/api/typing?peer='+encodeURIComponent(chatWith))).json();let el=document.getElementById('typingStatus');if(el)el.innerText=d.typing?chatWith+' is typing…':'';}catch(e){}}
 let mediaRecorder=null,recordChunks=[];
 async function startRecording(){if(mediaRecorder&&mediaRecorder.state==='recording'){mediaRecorder.stop();return;}if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){alert('Voice recording is not supported by this browser');return;}try{let stream=await navigator.mediaDevices.getUserMedia({audio:true});mediaRecorder=new MediaRecorder(stream);recordChunks=[];mediaRecorder.ondataavailable=e=>{if(e.data.size)recordChunks.push(e.data)};mediaRecorder.onstop=async()=>{stream.getTracks().forEach(t=>t.stop());let blob=new Blob(recordChunks,{type:mediaRecorder.mimeType||'audio/webm'});let file=new File([blob],'voice-'+Date.now()+'.webm',{type:blob.type});let fd=new FormData();fd.append('receiver',chatWith);fd.append('text','');fd.append('media',file);fd.append('media_type','audio');let r=await fetch('/api/send',{method:'POST',body:fd});let d=await r.json();if(!d.ok)alert(d.error||'Could not send voice message');else loadMsgs();};mediaRecorder.start();alert('Recording... tap 🎤 again to stop');}catch(e){alert('Microphone permission was denied or unavailable');}}
-let swipeX=0,swipeY=0,swipeTarget=null,swipeStartedInsideMessages=false;
-document.addEventListener('touchstart',e=>{
-  if(!e.touches||!e.touches[0])return;
-  let t=e.target;
-  swipeX=e.touches[0].clientX;
-  swipeY=e.touches[0].clientY;
-  swipeTarget=t;
-  swipeStartedInsideMessages=!!t.closest('#msgs');
-},{passive:true});
-document.addEventListener('touchend',e=>{
-  if(!e.changedTouches||!e.changedTouches[0])return;
-  let endX=e.changedTouches[0].clientX,endY=e.changedTouches[0].clientY;
-  let dx=endX-swipeX,dy=endY-swipeY;
-  let absX=Math.abs(dx),absY=Math.abs(dy);
-
-  /* Inside a conversation: keep the existing swipe-right-to-reply behavior. */
-  if(swipeStartedInsideMessages){
-    let el=swipeTarget&&swipeTarget.closest('#msgs [data-reply-text]');
-    if(el&&swipeX-endX>70&&absX>absY)setReply(el.dataset.replyText||'');
-    /* Vertical movement belongs entirely to the message scroller. */
-    swipeX=swipeY=0;swipeTarget=null;swipeStartedInsideMessages=false;
-    return;
-  }
-
-  /* Do not change pages while interacting with inputs, buttons, modals,
-     story bars, viewers, or other horizontally-scrollable controls. */
-  let blocked=swipeTarget&&swipeTarget.closest('input,textarea,button,a,select,[contenteditable="true"],.story-bar,.viewer,.profile-modal,.chat-screen');
-  if(!blocked && absX>=70 && absX>absY*1.25){
-    let current=document.querySelector('.tab.active');
-    let order=['stories','post','chat','search'];
-    let currentId=current?current.id.replace(/^t/,'').toLowerCase():'stories';
-    let i=order.indexOf(currentId);
-    if(i<0)i=0;
-    /* Swipe left = next page; swipe right = previous page. */
-    let next=dx<0?Math.min(order.length-1,i+1):Math.max(0,i-1);
-    if(next!==i)switchTab(order[next]);
-  }
-  swipeX=swipeY=0;swipeTarget=null;swipeStartedInsideMessages=false;
-},{passive:true});
+let swipeX=0;document.addEventListener('touchstart',e=>{if(e.target.closest('#msgs'))swipeX=e.touches[0].clientX},{passive:true});document.addEventListener('touchend',e=>{let el=e.target.closest('#msgs [data-reply-text]');if(el&&swipeX-e.changedTouches[0].clientX>70)setReply(el.dataset.replyText||'');swipeX=0},{passive:true});
 function setReply(t){replyToText=t;let p=document.getElementById('replyPreview');p.style.display='block';p.innerHTML=`Replying to: ${t} <span onclick="cancelReply()" style="float:right;cursor:pointer;color:red">✕</span>`;}
 function cancelReply(){replyToText='';document.getElementById('replyPreview').style.display='none';}
 async function searchUsers(){
   let inp=document.getElementById('searchUsersInput');
-  let q=inp ? inp.value.trim() : '';
+  let q=inp ? inp.value : '';
   let box=document.getElementById('searchResults');
   if(!box) return;
-
-  box.innerHTML='Loading users...';
+  if(!q.trim()){ box.innerHTML=''; return; }
+  box.innerHTML='Searching...';
   try{
-    let r=await fetch('/api/search?q='+encodeURIComponent(q), {credentials:'same-origin'});
+    let r=await fetch('/api/search?q='+encodeURIComponent(q));
     let users=await r.json();
-    if(!r.ok || !Array.isArray(users)){
-      box.innerHTML='Could not load users';
-      return;
-    }
-
-    let h='<div style="font-weight:900;font-size:16px;margin:12px 0 8px">All Users <span style="color:#888;font-size:12px;font-weight:600">('+users.length+')</span></div>';
-
+    let h='';
     users.forEach(function(u){
+      
+      if(typeof curUser!=='undefined' && u.username==curUser) return;
       let s=u.friend_status||'none';
-      let isMe=(typeof curUser!=='undefined' && u.username==curUser);
       let btn='';
-
-      if(isMe){
-        btn='<span style="background:#ffcc00;color:#000;padding:5px 10px;border-radius:14px;font-size:12px;font-weight:800">You</span>';
-      }else if(s=='none'){
-        btn='<button class="friend-btn f-add" data-u="'+u.username+'" onclick="sendFriendReq(this.dataset.u)">Add</button>';
-      }else if(s=='pending_sent'){
-        btn='<span class="friend-btn f-pending">Requested</span>';
-      }else if(s=='pending_received'){
-        btn='<button class="friend-btn f-add" data-u="'+u.username+'" onclick="acceptFriend(this.dataset.u)">Accept</button>';
-      }else{
-        btn='<span class="friend-btn f-friends">✓ Friends</span>';
-      }
-
-      let pic=u.pic_url||u.profile_pic||'';
-      let avatar=pic
-        ? '<img src="'+pic+'" style="width:100%;height:100%;object-fit:cover">'
-        : (u.username||'?').charAt(0).toUpperCase();
-
-      h+='<div style="padding:10px 4px;border-bottom:1px solid #eee;display:flex;align-items:center;gap:10px">'+
-         '<div class="pic" style="width:42px;height:42px;flex-shrink:0;cursor:pointer" data-user="'+u.username+'" onclick="viewProfile(this.dataset.user)">'+avatar+'</div>'+
-         '<span style="cursor:pointer;font-weight:800" data-user="'+u.username+'" onclick="viewProfile(this.dataset.user)">'+u.username+'</span>'+
-         '<span style="margin-left:auto">'+btn+'</span>'+
-         '</div>';
+      if(s=='none') btn='<button data-u="'+u.username+'" onclick="sendFriendReq(this.dataset.u)">Add</button>';
+      else if(s=='pending_sent') btn='<span>Requested</span>';
+      else if(s=='pending_received') btn='<button data-u="'+u.username+'" onclick="acceptFriend(this.dataset.u)">Accept</button>';
+      else btn='<span>Friends</span>';
+      h+='<div style="padding:8px;border-bottom:1px solid #eee;display:flex;align-items:center;gap:8px"><span style="cursor:pointer" data-user="'+u.username+'" onclick="viewProfile(this.dataset.user)">'+u.username+'</span><span style="margin-left:auto">'+btn+'</span></div>';
     });
-
-    box.innerHTML=h+(users.length?'':'<div style="color:#888;padding:8px 0">No registered users found.</div>');
-
-    // Keep public-post search available when the user actually types something.
-    if(q) globalSearch(q);
-    else {
-      let g=document.getElementById('globalSearchResults');
-      if(g) g.innerHTML='';
-    }
-  }catch(e){
-    console.error(e);
-    box.innerHTML='Error loading users. Please try again.';
-  }
+    box.innerHTML=h||'No users found'; globalSearch(q);
+  }catch(e){ box.innerHTML='Error: '+e; }
 }
 async function globalSearch(q){let box=document.getElementById('globalSearchResults');if(!box)return;let r=await fetch('/api/global-search?q='+encodeURIComponent(q));let d=await r.json();let h='<h4>Posts</h4>';d.posts.forEach(p=>{h+=`<div class=card><b>${p.username}</b><br>${p.text||''}<br><small>${p.created_at||''}</small></div>`});box.innerHTML=h+(d.posts.length?'':'<small style="color:#888">No matching posts</small>');}
 
@@ -1153,12 +957,7 @@ def api_posts():
                 q="SELECT username,text,media_url,created_at FROM posts WHERE id=%s" if USE_POSTGRES else "SELECT username,text,media_url,created_at FROM posts WHERE id=?";c.execute(q,(r[5],));x=c.fetchone()
                 if x:shared={"username":x[0],"text":x[1],"media_url":x[2],"created_at":str(x[3])}
             except:pass
-        saved=False
-        try:
-            qs="SELECT 1 FROM saved_posts WHERE post_id=%s AND username=%s" if USE_POSTGRES else "SELECT 1 FROM saved_posts WHERE post_id=? AND username=?"
-            c.execute(qs,(pid,me)); saved=bool(c.fetchone())
-        except: pass
-        out.append({"id":pid,"username":r[1],"text":r[2],"media_url":r[3],"created_at":str(r[4]),"like_count":lc,"liked":liked,"saved":saved,"comment_count":cc,"share_count":sc,"shared_post_id":r[5],"media":media,"shared":shared})
+        out.append({"id":pid,"username":r[1],"text":r[2],"media_url":r[3],"created_at":str(r[4]),"like_count":lc,"liked":liked,"comment_count":cc,"share_count":sc,"shared_post_id":r[5],"media":media,"shared":shared})
     conn.close();return jsonify(out)
 
 @app.route('/api/post', methods=['POST'])
@@ -1196,39 +995,6 @@ def api_post_delete():
     conn=get_conn(); c=conn.cursor()
     c.execute("DELETE FROM posts WHERE id=%s AND username=%s" if USE_POSTGRES else "DELETE FROM posts WHERE id=? AND username=?", (pid,me)); conn.commit(); conn.close(); return jsonify({"ok":True})
 
-@app.route('/api/post/edit', methods=['POST'])
-def api_post_edit():
-    me=session.get('username'); data=request.json or {}; pid=data.get('id'); txt=(data.get('text') or '')[:500]
-    if not pid or not txt.strip(): return jsonify({"ok":False,"error":"Post text cannot be empty"}),400
-    conn=get_conn(); c=conn.cursor()
-    q="UPDATE posts SET text=%s, edited_at=%s WHERE id=%s AND username=%s" if USE_POSTGRES else "UPDATE posts SET text=?, edited_at=? WHERE id=? AND username=?"
-    c.execute(q,(txt.strip(),datetime.now().isoformat(),pid,me)); ok=c.rowcount>0; conn.commit(); conn.close()
-    return jsonify({"ok":ok})
-
-@app.route('/api/post/save', methods=['POST'])
-def api_post_save():
-    me=session.get('username'); data=request.json or {}; pid=data.get('post_id')
-    if not pid: return jsonify({"ok":False,"error":"Missing post"}),400
-    conn=get_conn(); c=conn.cursor()
-    q="SELECT 1 FROM saved_posts WHERE post_id=%s AND username=%s" if USE_POSTGRES else "SELECT 1 FROM saved_posts WHERE post_id=? AND username=?"
-    c.execute(q,(pid,me)); exists=bool(c.fetchone())
-    try:
-        if exists:
-            qd="DELETE FROM saved_posts WHERE post_id=%s AND username=%s" if USE_POSTGRES else "DELETE FROM saved_posts WHERE post_id=? AND username=?"; c.execute(qd,(pid,me)); saved=False
-        else:
-            qi="INSERT INTO saved_posts (post_id,username,created_at) VALUES (%s,%s,%s)" if USE_POSTGRES else "INSERT INTO saved_posts (post_id,username,created_at) VALUES (?,?,?)"; c.execute(qi,(pid,me,datetime.now().isoformat())); saved=True
-        conn.commit()
-    except Exception:
-        conn.rollback(); conn.close(); return jsonify({"ok":False,"error":"Could not save post"}),500
-    conn.close(); return jsonify({"ok":True,"saved":saved})
-
-@app.route('/api/post/saved')
-def api_saved_posts():
-    me=session.get('username'); conn=get_conn(); c=conn.cursor()
-    q="SELECT p.id,p.username,p.text,p.media_url,p.created_at FROM saved_posts s JOIN posts p ON p.id=s.post_id WHERE s.username=%s ORDER BY s.created_at DESC LIMIT 50" if USE_POSTGRES else "SELECT p.id,p.username,p.text,p.media_url,p.created_at FROM saved_posts s JOIN posts p ON p.id=s.post_id WHERE s.username=? ORDER BY s.created_at DESC LIMIT 50"
-    c.execute(q,(me,)); rows=c.fetchall(); conn.close()
-    return jsonify([{"id":r[0],"username":r[1],"text":r[2],"media_url":r[3],"created_at":str(r[4])} for r in rows])
-
 @app.route('/api/like', methods=['POST'])
 def api_like():
     me=session.get('username'); data=request.json; pid=data.get('post_id'); conn=get_conn(); c=conn.cursor()
@@ -1259,18 +1025,19 @@ def api_search():
         if q:
             like = f"%{q.lower()}%"
             c.execute(
-                "SELECT username,pic_url FROM profiles WHERE LOWER(username) LIKE %s ORDER BY LOWER(username) LIMIT 100"
+                "SELECT username,pic_url FROM profiles WHERE LOWER(username) LIKE %s AND username!=%s ORDER BY LOWER(username) LIMIT 100"
                 if USE_POSTGRES
                 else
-                "SELECT username,pic_url FROM profiles WHERE LOWER(username) LIKE ? ORDER BY LOWER(username) LIMIT 100",
-                (like,)
+                "SELECT username,pic_url FROM profiles WHERE LOWER(username) LIKE ? AND username!=? ORDER BY LOWER(username) LIMIT 100",
+                (like, me)
             )
         else:
             c.execute(
-                "SELECT username,pic_url FROM profiles ORDER BY LOWER(username) LIMIT 100"
+                "SELECT username,pic_url FROM profiles WHERE username!=%s ORDER BY LOWER(username) LIMIT 100"
                 if USE_POSTGRES
                 else
-                "SELECT username,pic_url FROM profiles ORDER BY LOWER(username) LIMIT 100"
+                "SELECT username,pic_url FROM profiles WHERE username!=? ORDER BY LOWER(username) LIMIT 100",
+                (me,)
             )
         rows = c.fetchall()
     except Exception as e:
