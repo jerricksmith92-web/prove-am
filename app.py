@@ -221,7 +221,6 @@ def create_perf_indexes():
         "CREATE INDEX IF NOT EXISTS idx_shares_post ON post_shares(post_id)",
         "CREATE INDEX IF NOT EXISTS idx_post_media_post ON post_media(post_id)",
         "CREATE INDEX IF NOT EXISTS idx_messages_pair ON messages(sender,receiver,id)",
-        "CREATE INDEX IF NOT EXISTS idx_message_reactions_message ON message_reactions(message_id)",
         "CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(username,is_read,id)",
         "CREATE INDEX IF NOT EXISTS idx_stories_expiry ON stories(expires_at,id)"
     ]
@@ -260,20 +259,21 @@ def get_mentions(text):
     import re
     return list(dict.fromkeys(re.findall(r'@([A-Za-z0-9_.-]{3,20})', text or '')))
 
-LOGIN_HTML="""<!DOCTYPE html><html><head><meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><link rel="icon" href="/app-icon.jpg"><link rel="apple-touch-icon" href="/app-icon.jpg"><style>body{background:#000;color:#fff;font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;padding:18px;box-sizing:border-box}.box{background:#111;padding:22px;border-radius:22px;width:min(360px,100%);text-align:center;border:1px solid #222;box-sizing:border-box;box-shadow:0 20px 60px rgba(0,0,0,.45)}.brand{width:100%;max-width:300px;border-radius:16px;display:block;margin:0 auto 16px;object-fit:cover}.mode{display:flex;background:#222;border-radius:12px;padding:4px;margin-bottom:10px}.mode button{flex:1;padding:10px;border:none;border-radius:9px;background:transparent;color:#aaa;font-weight:800}.mode button.active{background:#ffcc00;color:#000}input{width:100%;padding:13px;margin:7px 0;box-sizing:border-box;border-radius:12px;border:none;background:#222;color:#fff;font-size:16px;outline:none}button.main{width:100%;padding:13px;background:#ffcc00;border:none;border-radius:12px;font-weight:bold;margin-top:5px}.show{font-size:12px;color:#aaa;display:flex;align-items:center;justify-content:flex-end;gap:6px;margin:2px 2px 8px}.show input{width:auto;margin:0}#confirmWrap{display:none}#msg{min-height:20px;color:#ff5555;font-size:13px}</style></head><body><div class=box><img class=brand src="/app-logo.jpg" alt="PROVE AM"><div class=mode><button id=loginMode type=button class=active onclick="setMode('login')">Login</button><button id=signupMode type=button onclick="setMode('signup')">Sign Up</button></div><input id=u autocomplete=username placeholder=Username><input id=p type=password autocomplete=current-password placeholder="Type password"><div id=confirmWrap><input id=vp type=password autocomplete=new-password placeholder="Verify password"></div><label class=show><input id=showPass type=checkbox onchange="togglePass()"> Show password</label><button class=main id=submitBtn type=button onclick="submitAuth()">Login</button><p id=msg></p></div><script>let mode='login',submitting=false;const $=id=>document.getElementById(id);function setMode(m){mode=m;$('loginMode').classList.toggle('active',m==='login');$('signupMode').classList.toggle('active',m==='signup');$('confirmWrap').style.display=m==='signup'?'block':'none';$('p').autocomplete=m==='signup'?'new-password':'current-password';$('p').placeholder='Type password';$('vp').value='';$('msg').innerText='';$('submitBtn').innerText=m==='signup'?'Create account':'Login';}function togglePass(){let t=$('showPass').checked?'text':'password';$('p').type=t;$('vp').type=t;}async function submitAuth(){if(submitting)return;$('msg').innerText='';let username=$('u').value.trim(),password=$('p').value,verify=$('vp').value;if(!username||!password){$('msg').innerText='Enter username and password';return;}if(mode==='signup'){if(password.length<3){$('msg').innerText='Password must be at least 3 characters';return;}if(!verify){$('msg').innerText='Please verify your password';return;}if(password!==verify){$('msg').innerText='Passwords do not match';return;}}let endpoint=mode==='login'?'/login':'/signup';let body=mode==='login'?{username,password}:{username,password,verify_password:verify};try{submitting=true;$('submitBtn').disabled=true;let r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify(body)});let d=await r.json();if(d.ok)location.replace('/');else $('msg').innerText=d.error||'Could not continue';}catch(e){$('msg').innerText='Connection error. Please try again.';}finally{submitting=false;$('submitBtn').disabled=false;}}['u','p','vp'].forEach(id=>$(id).addEventListener('keydown',e=>{if(e.key==='Enter')submitAuth();}));</script></body></html>"""
-
+LOGIN_HTML="""<!DOCTYPE html><html><head><meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><link rel="icon" href="/app-icon.jpg"><link rel="apple-touch-icon" href="/app-icon.jpg"><style>body{background:#000;color:#fff;font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;padding:18px;box-sizing:border-box}.box{background:#111;padding:22px;border-radius:22px;width:min(360px,100%);text-align:center;border:1px solid #222;box-sizing:border-box;box-shadow:0 20px 60px rgba(0,0,0,.45)}.brand{width:100%;max-width:300px;border-radius:16px;display:block;margin:0 auto 16px;object-fit:cover}.mode{display:flex;background:#222;border-radius:12px;padding:4px;margin-bottom:10px}.mode button{flex:1;padding:10px;border:none;border-radius:9px;background:transparent;color:#aaa;font-weight:800}.mode button.active{background:#ffcc00;color:#000}input{width:100%;padding:13px;margin:7px 0;box-sizing:border-box;border-radius:12px;border:none;background:#222;color:#fff;font-size:16px;outline:none}button.main{width:100%;padding:13px;background:#ffcc00;border:none;border-radius:12px;font-weight:bold;margin-top:5px}.show{font-size:12px;color:#aaa;display:flex;align-items:center;justify-content:flex-end;gap:6px;margin:2px 2px 8px}.show input{width:auto;margin:0}#confirmWrap{display:none}#msg{min-height:20px;color:#ff5555;font-size:13px}</style></head><body><div class=box><img class=brand src="/app-logo.jpg" alt="PROVE AM"><div class=mode><button id=loginMode class=active onclick="setMode('login')">Login</button><button id=signupMode onclick="setMode('signup')">Sign Up</button></div><input id=u autocomplete=username placeholder=Username><input id=p type=password autocomplete=current-password placeholder="Password"><div id=confirmWrap><input id=vp type=password autocomplete=new-password placeholder="Verify password"></div><label class=show><input id=showPass type=checkbox onchange="togglePass()"> Show password</label><button class=main id=submitBtn onclick="submitAuth()">Login</button><p id=msg></p></div><script>let mode='login';function setMode(m){mode=m;loginMode.classList.toggle('active',m==='login');signupMode.classList.toggle('active',m==='signup');confirmWrap.style.display=m==='signup'?'block':'none';p.autocomplete=m==='signup'?'new-password':'current-password';p.placeholder=m==='signup'?'Password':'Password';vp.value='';msg.innerText='';submitBtn.innerText=m==='signup'?'Create account':'Login';}function togglePass(){let t=showPass.checked?'text':'password';p.type=t;if(vp)vp.type=t;}async function submitAuth(){msg.innerText='';let username=u.value.trim(),password=p.value,verify=vp.value;if(!username||!password){msg.innerText='Enter username and password';return;}if(mode==='signup'&&password!==verify){msg.innerText='Passwords do not match';return;}let endpoint=mode==='login'?'/login':'/signup';let body=mode==='login'?{username,password}:{username,password,verify_password:verify};try{submitBtn.disabled=true;let r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});let d=await r.json();if(d.ok)location.href='/';else msg.innerText=d.error||'Could not continue';}catch(e){msg.innerText='Connection error. Please try again.';}finally{submitBtn.disabled=false;}}u.addEventListener('keydown',e=>{if(e.key==='Enter')submitAuth()});p.addEventListener('keydown',e=>{if(e.key==='Enter')submitAuth()});vp.addEventListener('keydown',e=>{if(e.key==='Enter')submitAuth()});</script></body></html>"""
 
 MAIN_HTML="""<!DOCTYPE html><html><head><meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><link rel="icon" href="/app-icon.jpg"><link rel="apple-touch-icon" href="/app-icon.jpg"><link rel="preload" as="image" href="/app-icon.jpg"><style>
 :root{--bg:#f6f6f6;--card:#fff;--text:#000;--sec:#efefef;--border:#e5e5e5}
 body.dark{--bg:#000;--card:#111;--text:#fff;--sec:#222;--border:#222}
-body{background:var(--bg);color:var(--text);font-family:-apple-system,sans-serif;margin:0}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,sans-serif;margin:0;overflow-x:hidden}
+[style*="display:none"]{pointer-events:none!important}
+button,input,textarea,select,a{pointer-events:auto;touch-action:manipulation}
 .top{position:fixed;top:0;left:0;right:0;background:var(--card);padding:8px 10px;display:flex;align-items:center;justify-content:space-between;z-index:100;border-bottom:1px solid var(--border);height:50px;box-sizing:border-box}
 .logo{display:flex;align-items:center;gap:7px;font-weight:900;color:#c9a227;font-size:15px}.logo img{width:34px;height:34px;border-radius:50%;object-fit:cover}
 .logo-circle{width:34px;height:34px;border:2px solid #c9a227;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px}
 .tabs{position:fixed;top:50px;left:0;right:0;background:var(--card);display:flex;z-index:99;border-bottom:1px solid var(--border);height:50px}
 .tab{flex:1;display:flex;align-items:center;justify-content:center;font-weight:bold;color:#888;cursor:pointer;border-bottom:3px solid transparent;font-size:13px}
 .tab.active{color:var(--text);border-color:var(--text)}
-.content{margin-top:100px;padding-bottom:160px}/* Stable chat screen: header stays fixed while the message area scrolls normally. */
+.content{margin-top:100px;padding-bottom:160px;pointer-events:auto}/* Stable chat screen: header stays fixed while the message area scrolls normally. */
 .chat-page{touch-action:pan-y}
 .chat-screen{
   position:fixed;
@@ -284,6 +284,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,sans-serif
   background:var(--bg);
   z-index:98;
   overflow:hidden;
+  pointer-events:auto;
 }
 .chat-screen .chat-header{
   position:absolute;
@@ -378,7 +379,7 @@ input,textarea{width:100%;background:var(--sec);border:none;border-radius:12px;p
 .onlineDot{width:10px;height:10px;background:#00c853;border-radius:50%;display:inline-block;border:2px solid #fff}
 .offlineDot{width:10px;height:10px;background:#999;border-radius:50%;display:inline-block;border:2px solid #fff}
 .badge{background:red;color:#fff;border-radius:10px;padding:2px 6px;font-size:11px;margin-left:6px;font-weight:900}
-.replyBox{border-left:3px solid #ffcc00;background:#fff8e1;padding:6px;border-radius:8px;font-size:12px;margin-bottom:4px;color:#000}.voice-audio{width:125px;height:28px;max-width:125px;vertical-align:middle;margin-top:4px}
+.replyBox{border-left:3px solid #ffcc00;background:#fff8e1;padding:6px;border-radius:8px;font-size:12px;margin-bottom:4px;color:#000}.voice-audio{width:110px;height:26px;max-width:110px;vertical-align:middle;margin-top:5px}
 </style></head><body>
 <div class=top>
 <div class=logo style="gap:8px">
@@ -610,22 +611,23 @@ async function likePost(id){await fetch('/api/like',{method:'POST',headers:{'Con
 async function commentPost(id){let t=prompt('Comment:');if(!t)return;await fetch('/api/comment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id,text:t})});loadPosts();}
 function filterChat(){let q=document.getElementById('searchChat').value.toLowerCase();let filtered=allUsers.filter(u=>u.username.toLowerCase().includes(q));renderChatUsers(filtered);}
 async function renderChatUsers(users){
-  let h='';
-  for(let u of users){
-    if(u.username==curUser) continue;
-    // online check
-    let onlineHtml=''; let badge='';
+  const visible=users.filter(u=>u.username!==curUser);
+  const results=await Promise.all(visible.map(async u=>{
     try{
-      let sRes=await fetch('/api/status/get?user='+u.username); let st=await sRes.json();
-      onlineHtml=st.online?'<span class=onlineDot></span> <small style="color:#00c853;font-weight:700">online</small>':'<span class=offlineDot></span> <small style="color:#888">offline</small>';
-      let uRes=await fetch('/api/messages/unread_count?with='+u.username); let uc=await uRes.json();
-      if(uc.count>0) badge=`<span class=badge>${uc.count} unread</span>`;
-    }catch{}
-    let pic=u.pic_url?`<img src="${u.pic_url}">`:u.username[0];
-    h+=`<div class=card style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="openChat('${u.username}')"><div class=pic>${pic}</div><div><b onclick="event.stopPropagation();viewProfile('${u.username}')">${u.username}</b><br>${onlineHtml} ${badge}</div></div>`;
-  }
-  document.getElementById('chatUsers').innerHTML=h||'<div class=card style=color:#888">No friends yet - add in Search (needs approval)</div>';
+      const [sr,ur]=await Promise.all([
+        fetch('/api/status/get?user='+encodeURIComponent(u.username)),
+        fetch('/api/messages/unread_count?with='+encodeURIComponent(u.username))
+      ]);
+      const st=await sr.json(), uc=await ur.json();
+      const onlineHtml=st.online?'<span class=onlineDot></span> <small style="color:#00c853;font-weight:700">online</small>':'<span class=offlineDot></span> <small style="color:#888">offline</small>';
+      const badge=uc.count>0?`<span class=badge>${uc.count} unread</span>`:'';
+      const pic=u.pic_url?`<img src="${u.pic_url}" loading="lazy">`:escapeHtml(u.username[0]||'?');
+      return `<div class=card style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="openChat(${JSON.stringify(u.username)})"><div class=pic>${pic}</div><div><b onclick="event.stopPropagation();viewProfile(${JSON.stringify(u.username)})">${escapeHtml(u.username)}</b><br>${onlineHtml} ${badge}</div></div>`;
+    }catch(e){return `<div class=card style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="openChat(${JSON.stringify(u.username)})"><div class=pic>${escapeHtml((u.username||'?')[0])}</div><div><b>${escapeHtml(u.username)}</b></div></div>`;}
+  }));
+  const el=document.getElementById('chatUsers'); if(el)el.innerHTML=results.join('')||'<div class="card" style="color:#888">No friends yet - add in Search (needs approval)</div>';
 }
+
 async function loadChatUsers(){
   try{
     let r=await fetch('/api/friends/list'); let friends=await r.json();
@@ -689,7 +691,7 @@ async function sendMsg(){
     if(fileInput) fileInput.value='';
     if(typeof selectedChatFile!=='undefined') selectedChatFile=null;
     if(typeof cancelReply==='function') cancelReply();
-    await loadMsgs();
+    loadMsgs();
   }catch(e){
     console.error(e);
     alert('Could not send message. Please check the server connection.');
@@ -697,7 +699,9 @@ async function sendMsg(){
 }
 async function loadMsgs(){
   if(!chatWith)return;
-  let r=await fetch('/api/messages?with='+encodeURIComponent(chatWith)); let msgs=await r.json(); let h='';
+  if(window.msgAbort)window.msgAbort.abort();
+  window.msgAbort=new AbortController();
+  let r=await fetch('/api/messages?with='+encodeURIComponent(chatWith),{signal:window.msgAbort.signal}); let msgs=await r.json(); let h='';
   msgs.forEach(m=>{
     let mu=m.media_url||''; let low=mu.toLowerCase(); let media='';
     if(mu){ if(low.includes('.mp4')||low.includes('.mov')||low.includes('.webm')) media=`<br><video src="${mu}" controls playsinline style="max-width:220px;border-radius:12px;margin-top:6px"></video>`; else if(low.includes('.mp3')||low.includes('.wav')||low.includes('.ogg')||low.includes('.m4a')||m.media_type==='audio') media=`<br><audio src="${mu}" controls class="voice-audio" controlslist="nodownload noplaybackrate"></audio>`; else media=`<br><a href="${mu}" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px">📎 Open attachment</a>`; }
@@ -728,6 +732,7 @@ let swipeX=0,swipeY=0,swipeTarget=null,swipeStartedInsideMessages=false;
 document.addEventListener('touchstart',e=>{
   if(!e.touches||!e.touches[0])return;
   let t=e.target;
+  if(t.closest('button,input,textarea,select,a,[contenteditable="true"]')){swipeStartedInsideMessages=false;swipeTarget=null;return;}
   swipeX=e.touches[0].clientX;
   swipeY=e.touches[0].clientY;
   swipeTarget=t;
@@ -936,11 +941,11 @@ def enforce_session_version():
 
 @app.route('/app-logo.jpg')
 def app_logo():
-    return send_file(BytesIO(base64.b64decode(PROVE_AM_LOGO_B64)), mimetype='image/jpeg', max_age=604800, conditional=True)
+    return send_file(BytesIO(base64.b64decode(PROVE_AM_LOGO_B64)), mimetype='image/jpeg', max_age=86400)
 
 @app.route('/app-icon.jpg')
 def app_icon():
-    return send_file(BytesIO(base64.b64decode(PROVE_AM_ICON_B64)), mimetype='image/jpeg', max_age=604800, conditional=True)
+    return send_file(BytesIO(base64.b64decode(PROVE_AM_ICON_B64)), mimetype='image/jpeg', max_age=86400)
 
 @app.route('/')
 def home():
@@ -1390,9 +1395,8 @@ def api_messages():
     if not me or not other: return jsonify([])
     conn=get_conn(); c=conn.cursor()
     try:
-        q="SELECT id,sender,text,media_url,reply_to,read,deleted_at FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s) ORDER BY id DESC LIMIT 200" if USE_POSTGRES else "SELECT id,sender,text,media_url,reply_to,read,deleted_at FROM messages WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?) ORDER BY id DESC LIMIT 200"
-        c.execute(q,(me,other,other,me)); rows=c.fetchall()
-        rows.reverse()  # API returns only the newest 200, displayed oldest-to-newest
+        q="SELECT id,sender,text,media_url,reply_to,read,deleted_at FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s) ORDER BY id DESC LIMIT 100" if USE_POSTGRES else "SELECT id,sender,text,media_url,reply_to,read,deleted_at FROM messages WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?) ORDER BY id DESC LIMIT 100"
+        c.execute(q,(me,other,other,me)); rows=list(reversed(c.fetchall()))
         ids=[r[0] for r in rows]
         reactions_by={}
         if ids:
