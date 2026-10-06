@@ -16,7 +16,6 @@ cloudinary.config(
 )
 
 UPLOAD_FOLDER = "static/uploads"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def upload_to_cloud(file_storage):
     try:
@@ -29,22 +28,9 @@ def upload_to_cloud(file_storage):
         print(f"UPLOAD OK: {url}")
         return url
     except Exception as e:
-        print(f"CLOUD FAIL, trying local: {e}")
-        try:
-            file_storage.stream.seek(0)
-            original = os.path.basename(file_storage.filename or "")
-            ext = os.path.splitext(original)[1].lower()
-            allowed_exts = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp4", ".webm", ".mov", ".m4v", ".avi", ".mp3", ".wav", ".ogg", ".m4a", ".aac"}
-            if ext not in allowed_exts:
-                ext = ".bin"
-            fname = uuid.uuid4().hex + ext
-            path = os.path.join(UPLOAD_FOLDER, fname)
-            file_storage.save(path)
-            return "/static/uploads/" + fname
-        except Exception as e2:
-            print(f"LOCAL FAIL TOO: {e2}")
-            import traceback; traceback.print_exc()
-            return None
+        # Render's local filesystem is ephemeral, so do not save user media there.
+        print(f"CLOUDINARY UPLOAD FAILED: {e}")
+        return None
 
 
 # PROVE AM BRAND ASSETS (embedded so Render deployment needs no extra image files)
@@ -58,7 +44,7 @@ CORS(app, supports_credentials=True)
 app.secret_key = os.environ.get("SECRET","prove-am-v35-all-in-one")
 DB_URL = os.environ.get("DATABASE_URL","")
 USE_POSTGRES = DB_URL.startswith("postgres")
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
 
 def get_conn():
     if USE_POSTGRES:
@@ -639,9 +625,11 @@ async function openChat(username){
   chatWith=username;
   document.getElementById('chatUsers').style.display='none';document.getElementById('searchChat').style.display='none';
   let box=document.getElementById('chatBox');box.style.display='block';
-  fetch('/api/messages/mark_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({with:username})});
-  let statusRes=await fetch('/api/status/get?user='+username); let st=await statusRes.json();
-  let online=st.online?'<span class=onlineDot></span> online':'<span class=offlineDot></span> offline';
+  // Mark messages read without blocking the chat UI. Online status already comes
+  // from the batched chat-list response, so opening a chat needs no extra status request.
+  fetch('/api/messages/mark_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({with:username}),credentials:'same-origin'}).catch(()=>{});
+  let cachedUser=chatUsersCache.find(u=>u.username===username);
+  let online=cachedUser&&cachedUser.online?'<span class=onlineDot></span> online':'<span class=offlineDot></span> offline';
   box.innerHTML=`<div class="chat-header"><button onclick="backChat()" class="chat-back">← ${username} ${online}</button><button onclick="searchConversation()" class="small-btn chat-search-btn">🔎 Search</button></div><div id=replyPreview style="display:none;background:#fff8e1;padding:8px;margin:8px;border-radius:10px;border-left:3px solid #ffcc00;flex:0 0 auto"></div><div id=typingStatus class=typing style="flex:0 0 auto"></div><div id=msgs></div><div class=chat-bar><input id=chatText class=pill placeholder="Write message..." /><input type=file id=chatFileHidden accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" multiple style="display:none"><button class=sticker onclick="startRecording()">🎤</button><div class=sticker onclick="document.getElementById('chatFileHidden').click()">📎</div><button class=yellow onclick=sendMsg()>Send</button></div>`;
   document.getElementById('chatFileHidden').addEventListener('change',function(e){let f=e.target.files[0]; if(f)selectedChatFile=f;});
   let ci=document.getElementById('chatText'); ci.addEventListener('input',()=>sendTyping());
@@ -666,14 +654,21 @@ async function sendMsg(){
   const fileInput=document.getElementById('chatFileHidden');
   const text=input ? input.value.trim() : '';
   const file=(typeof selectedChatFile!=='undefined' && selectedChatFile) ? selectedChatFile : (fileInput && fileInput.files ? fileInput.files[0] : null);
-
   if(!text && !file) return;
 
+  const receiver=chatWith;
   const fd=new FormData();
-  fd.append('receiver',chatWith);
+  fd.append('receiver',receiver);
   fd.append('text',text);
   if(typeof replyToText!=='undefined' && replyToText) fd.append('reply_to',replyToText);
   if(file) fd.append('media',file);
+
+  // Clear the composer immediately so the UI feels responsive while the server
+  // saves/uploads the message in the background.
+  if(input) input.value='';
+  if(fileInput) fileInput.value='';
+  if(typeof selectedChatFile!=='undefined') selectedChatFile=null;
+  if(typeof cancelReply==='function') cancelReply();
 
   try{
     const r=await fetch('/api/send',{method:'POST',body:fd,credentials:'same-origin'});
@@ -685,36 +680,38 @@ async function sendMsg(){
       alert(d.error || ('Could not send message (HTTP '+r.status+').'));
       return;
     }
-    if(input) input.value='';
-    if(fileInput) fileInput.value='';
-    if(typeof selectedChatFile!=='undefined') selectedChatFile=null;
-    if(typeof cancelReply==='function') cancelReply();
-    await loadMsgs();
+    // The server returns the saved message, so don't immediately fetch the
+    // whole conversation again just because one message was sent.
+    if(receiver===chatWith && d.message) appendChatMessage(d.message);
   }catch(e){
     console.error(e);
     alert('Could not send message. Please check the server connection.');
   }
 }
+function messageHtml(m){
+  let mu=m.media_url||''; let low=mu.toLowerCase(); let media='';
+  if(mu){ if(low.includes('.mp4')||low.includes('.mov')||low.includes('.webm')) media=`<br><video src="${mu}" controls playsinline style="max-width:220px;border-radius:12px;margin-top:6px"></video>`; else if(low.includes('.mp3')||low.includes('.wav')||low.includes('.ogg')||low.includes('.m4a')||m.media_type==='audio') media=`<br><audio src="${mu}" controls class="voice-audio" controlslist="nodownload noplaybackrate"></audio>`; else media=`<br><a href="${mu}" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px">📎 Open attachment</a>`; }
+  let isMe=m.sender==curUser; let tick=isMe?(m.read?'<small style="color:#00c853">✓✓ read</small>':'<small style="color:#888">✓ sent</small>'):'';
+  let reply=m.reply_to?`<div class=replyBox>${escapeHtml(m.reply_to)}</div>`:'';
+  let reactions=(m.reactions||[]).map(x=>`${x.reaction} ${x.count}`).join(' · ');
+  let text=m.deleted?'This message was deleted':(m.text||'');
+  let edit=isMe&&!m.deleted?`<button onclick="editMsg(${m.id},${JSON.stringify(m.text||'')})">Edit</button>`:'';
+  let del=isMe&&!m.deleted?`<button onclick="deleteMsg(${m.id})">Delete</button>`:'';
+  return `<div class="chat-msg" data-message-id="${m.id}" style="margin:12px 0;text-align:${isMe?'right':'left'}"><span data-reply-text="${escapeHtml(text.slice(0,80))}" style="background:${isMe?'#000':'#eee'};color:${isMe?'#fff':'#000'};padding:12px 16px;border-radius:22px;display:inline-block;max-width:76%;word-break:break-word;cursor:pointer">${reply}${escapeHtml(text)}${media}<br>${tick}<div class=reaction-row>${escapeHtml(reactions)}</div><div class=msg-actions><button onclick="setReply(${JSON.stringify(text.slice(0,80))})">↩ Reply</button><button onclick="reactMsg(${m.id},'❤️')">❤️</button><button onclick="reactMsg(${m.id},'😂')">😂</button><button onclick="reactMsg(${m.id},'👍')">👍</button>${edit}${del}</div></span></div>`;
+}
+function appendChatMessage(m){
+  let el=document.getElementById('msgs'); if(!el)return;
+  let empty=el.querySelector('[data-chat-empty]'); if(empty)el.innerHTML='';
+  el.insertAdjacentHTML('beforeend',messageHtml(m));
+  requestAnimationFrame(()=>{el.scrollTop=el.scrollHeight;});
+}
 async function loadMsgs(){
   if(!chatWith)return;
-  let r=await fetch('/api/messages?with='+encodeURIComponent(chatWith)); let msgs=await r.json(); let h='';
-  msgs.forEach(m=>{
-    let mu=m.media_url||''; let low=mu.toLowerCase(); let media='';
-    if(mu){ if(low.includes('.mp4')||low.includes('.mov')||low.includes('.webm')) media=`<br><video src="${mu}" controls playsinline style="max-width:220px;border-radius:12px;margin-top:6px"></video>`; else if(low.includes('.mp3')||low.includes('.wav')||low.includes('.ogg')||low.includes('.m4a')||m.media_type==='audio') media=`<br><audio src="${mu}" controls class="voice-audio" controlslist="nodownload noplaybackrate"></audio>`; else media=`<br><a href="${mu}" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px">📎 Open attachment</a>`; }
-    let isMe=m.sender==curUser; let tick=isMe?(m.read?'<small style="color:#00c853">✓✓ read</small>':'<small style="color:#888">✓ sent</small>'):'';
-    let reply=m.reply_to?`<div class=replyBox>${escapeHtml(m.reply_to)}</div>`:'';
-    let reactions=(m.reactions||[]).map(x=>`${x.reaction} ${x.count}`).join(' · ');
-    let text=m.deleted?'This message was deleted':(m.text||'');
-    let edit=isMe&&!m.deleted?`<button onclick="editMsg(${m.id},${JSON.stringify(m.text||'')})">Edit</button>`:'';
-    let del=isMe&&!m.deleted?`<button onclick="deleteMsg(${m.id})">Delete</button>`:'';
-    h+=`<div style="margin:12px 0;text-align:${isMe?'right':'left'}"><span data-reply-text="${escapeHtml(text.slice(0,80))}" style="background:${isMe?'#000':'#eee'};color:${isMe?'#fff':'#000'};padding:12px 16px;border-radius:22px;display:inline-block;max-width:76%;word-break:break-word;cursor:pointer">${reply}${escapeHtml(text)}${media}<br>${tick}<div class=reaction-row>${escapeHtml(reactions)}</div><div class=msg-actions><button onclick="setReply(${JSON.stringify(text.slice(0,80))})">↩ Reply</button><button onclick="reactMsg(${m.id},'❤️')">❤️</button><button onclick="reactMsg(${m.id},'😂')">😂</button><button onclick="reactMsg(${m.id},'👍')">👍</button>${edit}${del}</div></span></div>`;
-  });
+  let r=await fetch('/api/messages?with='+encodeURIComponent(chatWith),{credentials:'same-origin'}); let msgs=await r.json(); let h='';
+  msgs.forEach(m=>{h+=messageHtml(m);});
   let el=document.getElementById('msgs');
-  if(el)el.innerHTML=h||'<div style="text-align:center;color:#888;padding:30px">Start the conversation</div>';
-  let mbox=document.getElementById('msgs');
-  if(mbox){
-    requestAnimationFrame(()=>{mbox.scrollTop=mbox.scrollHeight;});
-  }
+  if(el)el.innerHTML=h||'<div data-chat-empty style="text-align:center;color:#888;padding:30px">Start the conversation</div>';
+  if(el)requestAnimationFrame(()=>{el.scrollTop=el.scrollHeight;});
 }
 function escapeHtml(s){return String(s||'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
 async function reactMsg(id,reaction){let r=await fetch('/api/message/react',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,reaction})});let d=await r.json();if(d.ok)loadMsgs();}
@@ -1521,15 +1518,22 @@ def api_send():
             return jsonify({"ok":False,"error":"Recipient not found"}),404
 
         url = upload_to_cloud(f) if f and f.filename else ''
-        q = (
-            "INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at) VALUES (%s,%s,%s,%s,%s,0,%s)"
-            if USE_POSTGRES else
-            "INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at) VALUES (?,?,?,?,?,0,?)"
-        )
-        now=datetime.now().isoformat(); c.execute(q, (me,other,txt,url,reply_to,now))
+        if f and f.filename and not url:
+            return jsonify({"ok":False,"error":"Media upload failed. Please try again."}),500
+        now=datetime.now().isoformat()
+        if USE_POSTGRES:
+            q="INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at) VALUES (%s,%s,%s,%s,%s,0,%s) RETURNING id"
+            c.execute(q,(me,other,txt,url,reply_to,now)); mid=c.fetchone()[0]
+        else:
+            q="INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at) VALUES (?,?,?,?,?,0,?)"
+            c.execute(q,(me,other,txt,url,reply_to,now)); mid=c.lastrowid
         conn.commit()
-        notify(other,'message',me,me+' sent you a message')
-        return jsonify({"ok":True})
+        # Notification is best-effort and happens after the message is safely committed.
+        try: notify(other,'message',me,me+' sent you a message')
+        except Exception: pass
+        low=str(url or '').lower()
+        media_type='audio' if low.endswith(('.mp3','.wav','.ogg','.m4a','.aac','.webm')) else ''
+        return jsonify({"ok":True,"message":{"id":mid,"sender":me,"text":txt,"media_url":url or '',"reply_to":reply_to,"read":0,"deleted":False,"reactions":[],"media_type":media_type,"created_at":now}})
     except Exception:
         conn.rollback()
         print("SEND MESSAGE ERROR:")
