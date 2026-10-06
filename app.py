@@ -221,6 +221,7 @@ def create_perf_indexes():
         "CREATE INDEX IF NOT EXISTS idx_shares_post ON post_shares(post_id)",
         "CREATE INDEX IF NOT EXISTS idx_post_media_post ON post_media(post_id)",
         "CREATE INDEX IF NOT EXISTS idx_messages_pair ON messages(sender,receiver,id)",
+        "CREATE INDEX IF NOT EXISTS idx_messages_unread ON messages(receiver,sender,read,id)",
         "CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(username,is_read,id)",
         "CREATE INDEX IF NOT EXISTS idx_stories_expiry ON stories(expires_at,id)"
     ]
@@ -606,19 +607,18 @@ async function editPost(id,current){let t=prompt('Edit your post:',current||'');
 async function savePost(id){let r=await fetch('/api/post/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id})});let d=await r.json();if(!d.ok)alert(d.error||'Could not save');else loadPosts();}
 async function likePost(id){await fetch('/api/like',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id})});loadPosts();}
 async function commentPost(id){let t=prompt('Comment:');if(!t)return;await fetch('/api/comment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id,text:t})});loadPosts();}
-function filterChat(){let q=document.getElementById('searchChat').value.toLowerCase();let filtered=allUsers.filter(u=>u.username.toLowerCase().includes(q));renderChatUsers(filtered);}
-async function renderChatUsers(users){
+let chatUsersCache=[];
+function filterChat(){
+  let q=(document.getElementById('searchChat').value||'').toLowerCase().trim();
+  let filtered=chatUsersCache.filter(u=>u.username.toLowerCase().includes(q));
+  renderChatUsers(filtered);
+}
+function renderChatUsers(users){
   let h='';
   for(let u of users){
     if(u.username==curUser) continue;
-    // online check
-    let onlineHtml=''; let badge='';
-    try{
-      let sRes=await fetch('/api/status/get?user='+u.username); let st=await sRes.json();
-      onlineHtml=st.online?'<span class=onlineDot></span> <small style="color:#00c853;font-weight:700">online</small>':'<span class=offlineDot></span> <small style="color:#888">offline</small>';
-      let uRes=await fetch('/api/messages/unread_count?with='+u.username); let uc=await uRes.json();
-      if(uc.count>0) badge=`<span class=badge>${uc.count} unread</span>`;
-    }catch{}
+    let onlineHtml=u.online?'<span class=onlineDot></span> <small style="color:#00c853;font-weight:700">online</small>':'<span class=offlineDot></span> <small style="color:#888">offline</small>';
+    let badge=u.unread>0?`<span class=badge>${u.unread} unread</span>`:'';
     let pic=u.pic_url?`<img src="${u.pic_url}">`:u.username[0];
     h+=`<div class=card style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="openChat('${u.username}')"><div class=pic>${pic}</div><div><b onclick="event.stopPropagation();viewProfile('${u.username}')">${u.username}</b><br>${onlineHtml} ${badge}</div></div>`;
   }
@@ -626,12 +626,14 @@ async function renderChatUsers(users){
 }
 async function loadChatUsers(){
   try{
-    let r=await fetch('/api/friends/list'); let friends=await r.json();
-    if(friends.length==0){ renderChatUsers(allUsers); return;}
-    let friendNames = friends.map(f=>f.friend);
-    let filtered = allUsers.filter(u=> friendNames.includes(u.username));
-    renderChatUsers(filtered);
-  }catch(e){ renderChatUsers(allUsers); }
+    let r=await fetch('/api/chat/list',{credentials:'same-origin'});
+    if(!r.ok) throw new Error('chat list failed');
+    chatUsersCache=await r.json();
+    filterChat();
+  }catch(e){
+    chatUsersCache=[];
+    renderChatUsers([]);
+  }
 }
 async function openChat(username){
   chatWith=username;
@@ -1388,8 +1390,11 @@ def api_messages():
     if not me or not other: return jsonify([])
     conn=get_conn(); c=conn.cursor()
     try:
-        q="SELECT id,sender,text,media_url,reply_to,read,deleted_at FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s) ORDER BY id ASC" if USE_POSTGRES else "SELECT id,sender,text,media_url,reply_to,read,deleted_at FROM messages WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?) ORDER BY id ASC"
+        # Only load the newest 50 messages. Fetch newest first for the database,
+        # then reverse them so the chat still renders oldest -> newest.
+        q="SELECT id,sender,text,media_url,reply_to,read,deleted_at FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s) ORDER BY id DESC LIMIT 50" if USE_POSTGRES else "SELECT id,sender,text,media_url,reply_to,read,deleted_at FROM messages WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?) ORDER BY id DESC LIMIT 50"
         c.execute(q,(me,other,other,me)); rows=c.fetchall()
+        rows.reverse()
         ids=[r[0] for r in rows]
         reactions_by={}
         if ids:
@@ -1412,6 +1417,68 @@ def api_unread_count():
     me=session.get('username'); other=request.args.get('with',''); conn=get_conn(); c=conn.cursor()
     c.execute("SELECT COUNT(*) FROM messages WHERE receiver=%s AND sender=%s AND read=0" if USE_POSTGRES else "SELECT COUNT(*) FROM messages WHERE receiver=? AND sender=? AND read=0",(me,other))
     cnt=c.fetchone()[0]; conn.close(); return jsonify({"count":cnt})
+
+@app.route('/api/chat/list')
+def api_chat_list():
+    """Return the current user's chat list in a few batched DB queries.
+
+    The old frontend made two HTTP requests for every chat user (status + unread).
+    This endpoint keeps the same information but batches it so the chat tab does
+    not perform an N+1 request loop.
+    """
+    me=session.get('username')
+    if not me:
+        return jsonify([]), 401
+
+    conn=get_conn(); c=conn.cursor()
+    try:
+        qfriends=("SELECT sender,receiver FROM friends WHERE (sender=%s OR receiver=%s) AND status='accepted'"
+                  if USE_POSTGRES else
+                  "SELECT sender,receiver FROM friends WHERE (sender=? OR receiver=?) AND status='accepted'")
+        c.execute(qfriends,(me,me)); friend_rows=c.fetchall()
+        names=[]
+        for sender,receiver in friend_rows:
+            other=receiver if sender==me else sender
+            if other and other!=me and other not in names:
+                names.append(other)
+        if not names:
+            return jsonify([])
+
+        marks=','.join(['%s']*len(names)) if USE_POSTGRES else ','.join(['?']*len(names))
+
+        # One query for profile pictures and last-seen visibility.
+        c.execute(f"SELECT username,pic_url,show_last_seen FROM profiles WHERE username IN ({marks})",tuple(names))
+        profiles_by={r[0]:r for r in c.fetchall()}
+
+        # One query for all online/last-seen values.
+        c.execute(f"SELECT username,last_seen FROM user_status WHERE username IN ({marks})",tuple(names))
+        status_by={r[0]:r[1] for r in c.fetchall()}
+
+        # One grouped query for every unread badge instead of one request/query per user.
+        q_unread=(f"SELECT sender,COUNT(*) FROM messages WHERE receiver=%s AND read=0 AND sender IN ({marks}) GROUP BY sender"
+                  if USE_POSTGRES else
+                  f"SELECT sender,COUNT(*) FROM messages WHERE receiver=? AND read=0 AND sender IN ({marks}) GROUP BY sender")
+        c.execute(q_unread,(me,*names)); unread_by={r[0]:int(r[1]) for r in c.fetchall()}
+
+        now=time.time()
+        out=[]
+        for name in names:
+            pr=profiles_by.get(name)
+            show_last_seen=1 if not pr or pr[2] is None else int(pr[2])
+            last_seen=status_by.get(name)
+            online=bool(last_seen is not None and (now-float(last_seen))<40)
+            if show_last_seen==0:
+                online=False
+            out.append({
+                "username":name,
+                "pic_url":(pr[1] if pr else '') or '',
+                "online":online,
+                "unread":unread_by.get(name,0),
+                "hidden":bool(show_last_seen==0 and name!=me)
+            })
+        return jsonify(out)
+    finally:
+        conn.close()
 
 @app.route('/api/messages/mark_read', methods=['POST'])
 def api_mark_read():
