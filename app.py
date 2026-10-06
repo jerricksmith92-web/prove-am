@@ -16,6 +16,7 @@ cloudinary.config(
 )
 
 UPLOAD_FOLDER = "static/uploads"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def upload_to_cloud(file_storage):
     try:
@@ -28,9 +29,22 @@ def upload_to_cloud(file_storage):
         print(f"UPLOAD OK: {url}")
         return url
     except Exception as e:
-        # Render's local filesystem is ephemeral, so do not save user media there.
-        print(f"CLOUDINARY UPLOAD FAILED: {e}")
-        return None
+        print(f"CLOUD FAIL, trying local: {e}")
+        try:
+            file_storage.stream.seek(0)
+            original = os.path.basename(file_storage.filename or "")
+            ext = os.path.splitext(original)[1].lower()
+            allowed_exts = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp4", ".webm", ".mov", ".m4v", ".avi", ".mp3", ".wav", ".ogg", ".m4a", ".aac"}
+            if ext not in allowed_exts:
+                ext = ".bin"
+            fname = uuid.uuid4().hex + ext
+            path = os.path.join(UPLOAD_FOLDER, fname)
+            file_storage.save(path)
+            return "/static/uploads/" + fname
+        except Exception as e2:
+            print(f"LOCAL FAIL TOO: {e2}")
+            import traceback; traceback.print_exc()
+            return None
 
 
 # PROVE AM BRAND ASSETS (embedded so Render deployment needs no extra image files)
@@ -44,7 +58,7 @@ CORS(app, supports_credentials=True)
 app.secret_key = os.environ.get("SECRET","prove-am-v35-all-in-one")
 DB_URL = os.environ.get("DATABASE_URL","")
 USE_POSTGRES = DB_URL.startswith("postgres")
-app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 
 def get_conn():
     if USE_POSTGRES:
@@ -207,7 +221,6 @@ def create_perf_indexes():
         "CREATE INDEX IF NOT EXISTS idx_shares_post ON post_shares(post_id)",
         "CREATE INDEX IF NOT EXISTS idx_post_media_post ON post_media(post_id)",
         "CREATE INDEX IF NOT EXISTS idx_messages_pair ON messages(sender,receiver,id)",
-        "CREATE INDEX IF NOT EXISTS idx_messages_unread ON messages(receiver,sender,read,id)",
         "CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(username,is_read,id)",
         "CREATE INDEX IF NOT EXISTS idx_stories_expiry ON stories(expires_at,id)"
     ]
@@ -593,18 +606,19 @@ async function editPost(id,current){let t=prompt('Edit your post:',current||'');
 async function savePost(id){let r=await fetch('/api/post/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id})});let d=await r.json();if(!d.ok)alert(d.error||'Could not save');else loadPosts();}
 async function likePost(id){await fetch('/api/like',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id})});loadPosts();}
 async function commentPost(id){let t=prompt('Comment:');if(!t)return;await fetch('/api/comment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id,text:t})});loadPosts();}
-let chatUsersCache=[];
-function filterChat(){
-  let q=(document.getElementById('searchChat').value||'').toLowerCase().trim();
-  let filtered=chatUsersCache.filter(u=>u.username.toLowerCase().includes(q));
-  renderChatUsers(filtered);
-}
-function renderChatUsers(users){
+function filterChat(){let q=document.getElementById('searchChat').value.toLowerCase();let filtered=allUsers.filter(u=>u.username.toLowerCase().includes(q));renderChatUsers(filtered);}
+async function renderChatUsers(users){
   let h='';
   for(let u of users){
     if(u.username==curUser) continue;
-    let onlineHtml=u.online?'<span class=onlineDot></span> <small style="color:#00c853;font-weight:700">online</small>':'<span class=offlineDot></span> <small style="color:#888">offline</small>';
-    let badge=u.unread>0?`<span class=badge>${u.unread} unread</span>`:'';
+    // online check
+    let onlineHtml=''; let badge='';
+    try{
+      let sRes=await fetch('/api/status/get?user='+u.username); let st=await sRes.json();
+      onlineHtml=st.online?'<span class=onlineDot></span> <small style="color:#00c853;font-weight:700">online</small>':'<span class=offlineDot></span> <small style="color:#888">offline</small>';
+      let uRes=await fetch('/api/messages/unread_count?with='+u.username); let uc=await uRes.json();
+      if(uc.count>0) badge=`<span class=badge>${uc.count} unread</span>`;
+    }catch{}
     let pic=u.pic_url?`<img src="${u.pic_url}">`:u.username[0];
     h+=`<div class=card style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="openChat('${u.username}')"><div class=pic>${pic}</div><div><b onclick="event.stopPropagation();viewProfile('${u.username}')">${u.username}</b><br>${onlineHtml} ${badge}</div></div>`;
   }
@@ -612,24 +626,20 @@ function renderChatUsers(users){
 }
 async function loadChatUsers(){
   try{
-    let r=await fetch('/api/chat/list',{credentials:'same-origin'});
-    if(!r.ok) throw new Error('chat list failed');
-    chatUsersCache=await r.json();
-    filterChat();
-  }catch(e){
-    chatUsersCache=[];
-    renderChatUsers([]);
-  }
+    let r=await fetch('/api/friends/list'); let friends=await r.json();
+    if(friends.length==0){ renderChatUsers(allUsers); return;}
+    let friendNames = friends.map(f=>f.friend);
+    let filtered = allUsers.filter(u=> friendNames.includes(u.username));
+    renderChatUsers(filtered);
+  }catch(e){ renderChatUsers(allUsers); }
 }
 async function openChat(username){
   chatWith=username;
   document.getElementById('chatUsers').style.display='none';document.getElementById('searchChat').style.display='none';
   let box=document.getElementById('chatBox');box.style.display='block';
-  // Mark messages read without blocking the chat UI. Online status already comes
-  // from the batched chat-list response, so opening a chat needs no extra status request.
-  fetch('/api/messages/mark_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({with:username}),credentials:'same-origin'}).catch(()=>{});
-  let cachedUser=chatUsersCache.find(u=>u.username===username);
-  let online=cachedUser&&cachedUser.online?'<span class=onlineDot></span> online':'<span class=offlineDot></span> offline';
+  fetch('/api/messages/mark_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({with:username})});
+  let statusRes=await fetch('/api/status/get?user='+username); let st=await statusRes.json();
+  let online=st.online?'<span class=onlineDot></span> online':'<span class=offlineDot></span> offline';
   box.innerHTML=`<div class="chat-header"><button onclick="backChat()" class="chat-back">← ${username} ${online}</button><button onclick="searchConversation()" class="small-btn chat-search-btn">🔎 Search</button></div><div id=replyPreview style="display:none;background:#fff8e1;padding:8px;margin:8px;border-radius:10px;border-left:3px solid #ffcc00;flex:0 0 auto"></div><div id=typingStatus class=typing style="flex:0 0 auto"></div><div id=msgs></div><div class=chat-bar><input id=chatText class=pill placeholder="Write message..." /><input type=file id=chatFileHidden accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" multiple style="display:none"><button class=sticker onclick="startRecording()">🎤</button><div class=sticker onclick="document.getElementById('chatFileHidden').click()">📎</div><button class=yellow onclick=sendMsg()>Send</button></div>`;
   document.getElementById('chatFileHidden').addEventListener('change',function(e){let f=e.target.files[0]; if(f)selectedChatFile=f;});
   let ci=document.getElementById('chatText'); ci.addEventListener('input',()=>sendTyping());
@@ -683,30 +693,26 @@ async function sendMsg(){
     alert('Could not send message. Please check the server connection.');
   }
 }
-function messageHtml(m){
-  let mu=m.media_url||''; let low=mu.toLowerCase(); let media='';
-  if(mu){ if(low.includes('.mp4')||low.includes('.mov')||low.includes('.webm')) media=`<br><video src="${mu}" controls playsinline style="max-width:220px;border-radius:12px;margin-top:6px"></video>`; else if(low.includes('.mp3')||low.includes('.wav')||low.includes('.ogg')||low.includes('.m4a')||m.media_type==='audio') media=`<br><audio src="${mu}" controls class="voice-audio" controlslist="nodownload noplaybackrate"></audio>`; else media=`<br><a href="${mu}" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px">📎 Open attachment</a>`; }
-  let isMe=m.sender==curUser; let tick=isMe?(m.read?'<small style="color:#00c853">✓✓ read</small>':'<small style="color:#888">✓ sent</small>'):'';
-  let reply=m.reply_to?`<div class=replyBox>${escapeHtml(m.reply_to)}</div>`:'';
-  let reactions=(m.reactions||[]).map(x=>`${x.reaction} ${x.count}`).join(' · ');
-  let text=m.deleted?'This message was deleted':(m.text||'');
-  let edit=isMe&&!m.deleted?`<button onclick="editMsg(${m.id},${JSON.stringify(m.text||'')})">Edit</button>`:'';
-  let del=isMe&&!m.deleted?`<button onclick="deleteMsg(${m.id})">Delete</button>`:'';
-  return `<div class="chat-msg" data-message-id="${m.id}" style="margin:12px 0;text-align:${isMe?'right':'left'}"><span data-reply-text="${escapeHtml(text.slice(0,80))}" style="background:${isMe?'#000':'#eee'};color:${isMe?'#fff':'#000'};padding:12px 16px;border-radius:22px;display:inline-block;max-width:76%;word-break:break-word;cursor:pointer">${reply}${escapeHtml(text)}${media}<br>${tick}<div class=reaction-row>${escapeHtml(reactions)}</div><div class=msg-actions><button onclick="setReply(${JSON.stringify(text.slice(0,80))})">↩ Reply</button><button onclick="reactMsg(${m.id},'❤️')">❤️</button><button onclick="reactMsg(${m.id},'😂')">😂</button><button onclick="reactMsg(${m.id},'👍')">👍</button>${edit}${del}</div></span></div>`;
-}
-function appendChatMessage(m){
-  let el=document.getElementById('msgs'); if(!el)return;
-  let empty=el.querySelector('[data-chat-empty]'); if(empty)el.innerHTML='';
-  el.insertAdjacentHTML('beforeend',messageHtml(m));
-  requestAnimationFrame(()=>{el.scrollTop=el.scrollHeight;});
-}
 async function loadMsgs(){
   if(!chatWith)return;
-  let r=await fetch('/api/messages?with='+encodeURIComponent(chatWith),{credentials:'same-origin'}); let msgs=await r.json(); let h='';
-  msgs.forEach(m=>{h+=messageHtml(m);});
+  let r=await fetch('/api/messages?with='+encodeURIComponent(chatWith)); let msgs=await r.json(); let h='';
+  msgs.forEach(m=>{
+    let mu=m.media_url||''; let low=mu.toLowerCase(); let media='';
+    if(mu){ if(low.includes('.mp4')||low.includes('.mov')||low.includes('.webm')) media=`<br><video src="${mu}" controls playsinline style="max-width:220px;border-radius:12px;margin-top:6px"></video>`; else if(low.includes('.mp3')||low.includes('.wav')||low.includes('.ogg')||low.includes('.m4a')||m.media_type==='audio') media=`<br><audio src="${mu}" controls class="voice-audio" controlslist="nodownload noplaybackrate"></audio>`; else media=`<br><a href="${mu}" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px">📎 Open attachment</a>`; }
+    let isMe=m.sender==curUser; let tick=isMe?(m.read?'<small style="color:#00c853">✓✓ read</small>':'<small style="color:#888">✓ sent</small>'):'';
+    let reply=m.reply_to?`<div class=replyBox>${escapeHtml(m.reply_to)}</div>`:'';
+    let reactions=(m.reactions||[]).map(x=>`${x.reaction} ${x.count}`).join(' · ');
+    let text=m.deleted?'This message was deleted':(m.text||'');
+    let edit=isMe&&!m.deleted?`<button onclick="editMsg(${m.id},${JSON.stringify(m.text||'')})">Edit</button>`:'';
+    let del=isMe&&!m.deleted?`<button onclick="deleteMsg(${m.id})">Delete</button>`:'';
+    h+=`<div style="margin:12px 0;text-align:${isMe?'right':'left'}"><span data-reply-text="${escapeHtml(text.slice(0,80))}" style="background:${isMe?'#000':'#eee'};color:${isMe?'#fff':'#000'};padding:12px 16px;border-radius:22px;display:inline-block;max-width:76%;word-break:break-word;cursor:pointer">${reply}${escapeHtml(text)}${media}<br>${tick}<div class=reaction-row>${escapeHtml(reactions)}</div><div class=msg-actions><button onclick="setReply(${JSON.stringify(text.slice(0,80))})">↩ Reply</button><button onclick="reactMsg(${m.id},'❤️')">❤️</button><button onclick="reactMsg(${m.id},'😂')">😂</button><button onclick="reactMsg(${m.id},'👍')">👍</button>${edit}${del}</div></span></div>`;
+  });
   let el=document.getElementById('msgs');
-  if(el)el.innerHTML=h||'<div data-chat-empty style="text-align:center;color:#888;padding:30px">Start the conversation</div>';
-  if(el)requestAnimationFrame(()=>{el.scrollTop=el.scrollHeight;});
+  if(el)el.innerHTML=h||'<div style="text-align:center;color:#888;padding:30px">Start the conversation</div>';
+  let mbox=document.getElementById('msgs');
+  if(mbox){
+    requestAnimationFrame(()=>{mbox.scrollTop=mbox.scrollHeight;});
+  }
 }
 function escapeHtml(s){return String(s||'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
 async function reactMsg(id,reaction){let r=await fetch('/api/message/react',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,reaction})});let d=await r.json();if(d.ok)loadMsgs();}
@@ -1382,11 +1388,8 @@ def api_messages():
     if not me or not other: return jsonify([])
     conn=get_conn(); c=conn.cursor()
     try:
-        # Only load the newest 50 messages. Fetch newest first for the database,
-        # then reverse them so the chat still renders oldest -> newest.
-        q="SELECT id,sender,text,media_url,reply_to,read,deleted_at FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s) ORDER BY id DESC LIMIT 50" if USE_POSTGRES else "SELECT id,sender,text,media_url,reply_to,read,deleted_at FROM messages WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?) ORDER BY id DESC LIMIT 50"
+        q="SELECT id,sender,text,media_url,reply_to,read,deleted_at FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s) ORDER BY id ASC" if USE_POSTGRES else "SELECT id,sender,text,media_url,reply_to,read,deleted_at FROM messages WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?) ORDER BY id ASC"
         c.execute(q,(me,other,other,me)); rows=c.fetchall()
-        rows.reverse()
         ids=[r[0] for r in rows]
         reactions_by={}
         if ids:
@@ -1409,68 +1412,6 @@ def api_unread_count():
     me=session.get('username'); other=request.args.get('with',''); conn=get_conn(); c=conn.cursor()
     c.execute("SELECT COUNT(*) FROM messages WHERE receiver=%s AND sender=%s AND read=0" if USE_POSTGRES else "SELECT COUNT(*) FROM messages WHERE receiver=? AND sender=? AND read=0",(me,other))
     cnt=c.fetchone()[0]; conn.close(); return jsonify({"count":cnt})
-
-@app.route('/api/chat/list')
-def api_chat_list():
-    """Return the current user's chat list in a few batched DB queries.
-
-    The old frontend made two HTTP requests for every chat user (status + unread).
-    This endpoint keeps the same information but batches it so the chat tab does
-    not perform an N+1 request loop.
-    """
-    me=session.get('username')
-    if not me:
-        return jsonify([]), 401
-
-    conn=get_conn(); c=conn.cursor()
-    try:
-        qfriends=("SELECT sender,receiver FROM friends WHERE (sender=%s OR receiver=%s) AND status='accepted'"
-                  if USE_POSTGRES else
-                  "SELECT sender,receiver FROM friends WHERE (sender=? OR receiver=?) AND status='accepted'")
-        c.execute(qfriends,(me,me)); friend_rows=c.fetchall()
-        names=[]
-        for sender,receiver in friend_rows:
-            other=receiver if sender==me else sender
-            if other and other!=me and other not in names:
-                names.append(other)
-        if not names:
-            return jsonify([])
-
-        marks=','.join(['%s']*len(names)) if USE_POSTGRES else ','.join(['?']*len(names))
-
-        # One query for profile pictures and last-seen visibility.
-        c.execute(f"SELECT username,pic_url,show_last_seen FROM profiles WHERE username IN ({marks})",tuple(names))
-        profiles_by={r[0]:r for r in c.fetchall()}
-
-        # One query for all online/last-seen values.
-        c.execute(f"SELECT username,last_seen FROM user_status WHERE username IN ({marks})",tuple(names))
-        status_by={r[0]:r[1] for r in c.fetchall()}
-
-        # One grouped query for every unread badge instead of one request/query per user.
-        q_unread=(f"SELECT sender,COUNT(*) FROM messages WHERE receiver=%s AND read=0 AND sender IN ({marks}) GROUP BY sender"
-                  if USE_POSTGRES else
-                  f"SELECT sender,COUNT(*) FROM messages WHERE receiver=? AND read=0 AND sender IN ({marks}) GROUP BY sender")
-        c.execute(q_unread,(me,*names)); unread_by={r[0]:int(r[1]) for r in c.fetchall()}
-
-        now=time.time()
-        out=[]
-        for name in names:
-            pr=profiles_by.get(name)
-            show_last_seen=1 if not pr or pr[2] is None else int(pr[2])
-            last_seen=status_by.get(name)
-            online=bool(last_seen is not None and (now-float(last_seen))<40)
-            if show_last_seen==0:
-                online=False
-            out.append({
-                "username":name,
-                "pic_url":(pr[1] if pr else '') or '',
-                "online":online,
-                "unread":unread_by.get(name,0),
-                "hidden":bool(show_last_seen==0 and name!=me)
-            })
-        return jsonify(out)
-    finally:
-        conn.close()
 
 @app.route('/api/messages/mark_read', methods=['POST'])
 def api_mark_read():
@@ -1513,8 +1454,6 @@ def api_send():
             return jsonify({"ok":False,"error":"Recipient not found"}),404
 
         url = upload_to_cloud(f) if f and f.filename else ''
-        if f and f.filename and not url:
-            return jsonify({"ok":False,"error":"Media upload failed. Please try again."}),500
         q = (
             "INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at) VALUES (%s,%s,%s,%s,%s,0,%s)"
             if USE_POSTGRES else
@@ -1522,10 +1461,7 @@ def api_send():
         )
         now=datetime.now().isoformat(); c.execute(q, (me,other,txt,url,reply_to,now))
         conn.commit()
-        try:
-            notify(other,'message',me,me+' sent you a message')
-        except Exception:
-            pass
+        notify(other,'message',me,me+' sent you a message')
         return jsonify({"ok":True})
     except Exception:
         conn.rollback()
