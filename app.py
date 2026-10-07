@@ -7,6 +7,11 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import cloudinary
 import cloudinary.uploader
 
+try:
+    import socketio
+except Exception:
+    socketio = None
+
 # CONFIGURE CLOUDINARY - THIS WAS MISSING
 cloudinary.config(
     cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME"),
@@ -56,6 +61,16 @@ PROVE_AM_ICON_DATA = "data:image/jpeg;base64," + PROVE_AM_ICON_B64
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
 app.secret_key = os.environ.get("SECRET","prove-am-v35-all-in-one")
+
+sio = None
+socket_app = app
+if socketio is not None:
+    try:
+        sio = socketio.Server(async_mode="threading", cors_allowed_origins="*", logger=False, engineio_logger=False, manage_session=True)
+        socket_app = socketio.WSGIApp(sio, app)
+    except Exception:
+        sio = None
+        socket_app = app
 DB_URL = os.environ.get("DATABASE_URL","")
 USE_POSTGRES = DB_URL.startswith("postgres")
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
@@ -232,6 +247,20 @@ def create_perf_indexes():
     conn.close()
 
 create_perf_indexes()
+
+# Fast lookup indexes for the existing Prove Am chat/friend tables.
+def create_chat_indexes():
+    try:
+        conn=get_conn(); c=conn.cursor()
+        c.execute("CREATE INDEX IF NOT EXISTS idx_messages_pair_id ON messages(sender,receiver,id DESC)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_messages_receiver_read ON messages(receiver,sender,read)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_friends_pair_status ON friends(sender,receiver,status)")
+        conn.commit(); conn.close()
+    except Exception:
+        try: conn.close()
+        except Exception: pass
+
+create_chat_indexes()
 
 def notify(username, ntype, from_user='', text=''):
     if not username or username==from_user: return
@@ -507,7 +536,17 @@ input,textarea{width:100%;background:var(--sec);border:none;border-radius:12px;p
 <button onclick="reactStory('❤️')" style="background:#222;color:#fff;border:none;border-radius:20px;padding:10px 12px">❤️</button><button onclick="reactStory('😂')" style="background:#222;color:#fff;border:none;border-radius:20px;padding:10px 12px">😂</button><button onclick="replyStory()" style="background:#ffcc00;border:none;border-radius:20px;padding:10px 16px;font-weight:800">Send</button>
 </div>
 </div>
-<script>
+<script src="/socket.io/socket.io.js"></script><script>
+let realtimeSocket=null;
+function connectRealtime(){
+  if(typeof io!=='function')return;
+  try{
+    realtimeSocket=io({transports:['polling','websocket'],reconnection:true,reconnectionDelay:250});
+    realtimeSocket.on('chat_message',m=>{if(m&&chatWith===m.sender)loadMsgs(true);else if(m)loadChatUsers();});
+    realtimeSocket.on('chat_read',d=>{if(d&&chatWith===d.by)loadMsgs(true);});
+    realtimeSocket.on('chat_typing',d=>{if(d&&chatWith===d.from){let el=document.getElementById('typingStatus');if(el)el.innerText=d.typing?(d.from+' is typing…'):'';}});
+  }catch(e){console.warn('Realtime chat unavailable; REST fallback active',e);}
+}
 let curUser='',chatWith='',stories=[],groupedStories={},currentGroup=[],currentGroupIdx=0,storyTimer=null,allUsers=[],profiles={},selectedStoryFile=null,selectedPostFile=null,selectedChatFile=null,selectedProfileFile=null,replyToText='';
 let lowData = localStorage.getItem('lowData')=='1';
 let dark=localStorage.getItem('theme')=='dark'; if(dark)document.body.classList.add('dark');
@@ -703,7 +742,7 @@ function backChat(){
 }
 
 function appendOptimisticMessage(text,reply){const el=document.getElementById('msgs');if(!el)return null;const row=document.createElement('div');row.className='msg-row me';row.innerHTML=`<span class="msg-bubble out pending-msg">${reply?`<div class=reply-quote><b>You</b>${escapeHtml(reply)}</div>`:''}${escapeHtml(text)}<span class=msg-time>${new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span><span class=msg-tick>✓</span></span>`;el.appendChild(row);el.scrollTop=el.scrollHeight;return row;}
-async function sendMsg(){if(!chatWith){alert('Please select a user first.');return;}const input=document.getElementById('chatText'),fileInput=document.getElementById('chatFileHidden');const text=input?input.value.trim():'';const file=(typeof selectedChatFile!=='undefined'&&selectedChatFile)?selectedChatFile:(fileInput&&fileInput.files?fileInput.files[0]:null);if(!text&&!file)return;const receiver=chatWith,reply=(typeof replyToText!=='undefined'&&replyToText)?replyToText:'';const optimistic=!file?appendOptimisticMessage(text,reply):null;if(input)input.value='';if(fileInput)fileInput.value='';if(typeof selectedChatFile!=='undefined')selectedChatFile=null;if(typeof cancelReply==='function')cancelReply();const fd=new FormData();fd.append('receiver',receiver);fd.append('text',text);if(reply)fd.append('reply_to',reply);if(file)fd.append('media',file);try{const r=await fetch('/api/send',{method:'POST',body:fd,credentials:'same-origin'});const d=await r.json().catch(()=>({}));if(!r.ok||!d.ok){if(optimistic)optimistic.remove();alert(d.error||'Could not send message');return;}if(optimistic){optimistic.querySelector('.msg-bubble')?.classList.remove('pending-msg');let tick=optimistic.querySelector('.msg-tick');if(tick)tick.innerText='✓✓';}setTimeout(()=>{if(chatWith===receiver)loadMsgs(true);},1200);}catch(e){if(optimistic)optimistic.remove();alert('Could not send message. Please check the server connection.');}}
+async function sendMsg(){if(!chatWith){alert('Please select a user first.');return;}const input=document.getElementById('chatText'),fileInput=document.getElementById('chatFileHidden');const text=input?input.value.trim():'';const file=(typeof selectedChatFile!=='undefined'&&selectedChatFile)?selectedChatFile:(fileInput&&fileInput.files?fileInput.files[0]:null);if(!text&&!file)return;const receiver=chatWith,reply=(typeof replyToText!=='undefined'&&replyToText)?replyToText:'';const optimistic=!file?appendOptimisticMessage(text,reply):null;if(input)input.value='';if(fileInput)fileInput.value='';if(typeof selectedChatFile!=='undefined')selectedChatFile=null;if(typeof cancelReply==='function')cancelReply();const fd=new FormData();fd.append('receiver',receiver);fd.append('text',text);if(reply)fd.append('reply_to',reply);if(file)fd.append('media',file);try{const r=await fetch('/api/send',{method:'POST',body:fd,credentials:'same-origin'});const d=await r.json().catch(()=>({}));if(!r.ok||!d.ok){if(optimistic)optimistic.remove();alert(d.error||'Could not send message');return;}if(optimistic){optimistic.querySelector('.msg-bubble')?.classList.remove('pending-msg');let tick=optimistic.querySelector('.msg-tick');if(tick)tick.innerText='✓✓';}if(file && chatWith===receiver) loadMsgs(true);}catch(e){if(optimistic)optimistic.remove();alert('Could not send message. Please check the server connection.');}}
 async function loadMsgs(silent=false){if(!chatWith)return;if(window.msgAbort)window.msgAbort.abort();window.msgAbort=new AbortController();try{let r=await fetch('/api/messages?with='+encodeURIComponent(chatWith),{signal:window.msgAbort.signal});let msgs=await r.json();let h='';msgs.forEach(m=>{let mu=m.media_url||'',low=mu.toLowerCase(),media='';if(mu){if(/\.(mp4|mov|webm|m4v)(\?|$)/i.test(low))media=`<br><video src="${mu}" controls playsinline style="max-width:240px;border-radius:14px;margin-top:7px"></video>`;else if(/\.(mp3|wav|ogg|m4a|aac|webm)(\?|$)/i.test(low)||m.media_type==='audio')media=`<br><audio src="${mu}" controls class=voice-audio controlslist="nodownload noplaybackrate"></audio>`;else media=`<br><a href="${mu}" target="_blank" rel="noopener" style="display:inline-block;margin-top:7px;color:inherit">📎 Open attachment</a>`;}let isMe=m.sender==curUser,tick=isMe?(m.read?'✓✓':'✓'):'',text=m.deleted?'This message was deleted':(m.text||'');let reply=m.reply_to?`<div class=reply-quote><b>${escapeHtml(m.sender)}</b>${escapeHtml(m.reply_to)}<span class=swipe-hint>↩ Swipe to reply</span></div>`:`<span class=swipe-hint>↩ Swipe to reply</span>`;let reactions=(m.reactions||[]).map(x=>`${x.reaction} ${x.count}`).join(' · ');let edit=isMe&&!m.deleted?`<button onclick="event.stopPropagation();editMsg(${m.id},${JSON.stringify(m.text||'')})">Edit</button>`:'';let del=isMe&&!m.deleted?`<button onclick="event.stopPropagation();deleteMsg(${m.id})">Delete</button>`:'';h+=`<div class="msg-row ${isMe?'me':''}"><span data-reply-text="${escapeHtml(text.slice(0,80))}" class="msg-bubble ${isMe?'out':'in'}" onclick="setReply(${JSON.stringify(text.slice(0,80))})">${reply}${escapeHtml(text)}${media}<div><span class=msg-time>${escapeHtml((m.created_at||'').slice(11,16))}</span><span class=msg-tick>${tick}</span></div><div class=reaction-row>${escapeHtml(reactions)}</div><div class=msg-actions><button onclick="event.stopPropagation();setReply(${JSON.stringify(text.slice(0,80))})">↩ Reply</button><button onclick="event.stopPropagation();reactMsg(${m.id},'❤️')">❤️</button><button onclick="event.stopPropagation();reactMsg(${m.id},'😂')">😂</button><button onclick="event.stopPropagation();reactMsg(${m.id},'👍')">👍</button>${edit}${del}</div></span></div>`;});let el=document.getElementById('msgs');if(!el)return;let nearBottom=el.scrollHeight-el.scrollTop-el.clientHeight<80;el.innerHTML=h||'<div style="text-align:center;color:#888;padding:30px">Start the conversation</div>';if(!silent||nearBottom)requestAnimationFrame(()=>{el.scrollTop=el.scrollHeight;});}catch(e){if(e.name!=='AbortError')console.error(e);}}
 function escapeHtml(s){return String(s||'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
 async function reactMsg(id,reaction){let r=await fetch('/api/message/react',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,reaction})});let d=await r.json();if(d.ok)loadMsgs();}
@@ -908,7 +947,7 @@ async function blockUser(u){let r=await fetch('/api/block',{method:'POST',header
 async function reportTarget(type,id){let reason=prompt('Reason for report?');if(!reason)return;let r=await fetch('/api/report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target_type:type,target_id:String(id),reason})});let d=await r.json();alert(d.ok?'Report submitted':'Could not submit report');}
 
 async function logout(){await fetch('/logout');location.href='/login'}
-loadMe();switchTab('stories');
+loadMe();switchTab('stories');connectRealtime();
 </script></body></html>"""
 
 
@@ -1374,6 +1413,30 @@ def api_profile_pic():
     c.execute("UPDATE profiles SET pic_url=%s WHERE username=%s" if USE_POSTGRES else "UPDATE profiles SET pic_url=? WHERE username=?",(url,me)); conn.commit(); conn.close()
     return jsonify({"ok":True,"url":url})
 
+# Private Socket.IO rooms are keyed to existing Prove Am usernames.
+if sio is not None:
+    @sio.event
+    def connect(sid, environ, auth=None):
+        try:
+            me=session.get('username')
+            if not me: return False
+            sio.enter_room(sid,'pm:'+me)
+            sio.save_session(sid,{'username':me})
+            return True
+        except Exception:
+            return False
+
+    @sio.event
+    def identify(sid):
+        try:
+            me=session.get('username') or (sio.get_session(sid) or {}).get('username')
+            if me: sio.enter_room(sid,'pm:'+me)
+        except Exception: pass
+
+    @sio.event
+    def disconnect(sid):
+        pass
+
 @app.route('/api/messages')
 def api_messages():
     me=session.get('username'); other=request.args.get('with','')
@@ -1409,7 +1472,11 @@ def api_unread_count():
 def api_mark_read():
     me=session.get('username'); other=request.json.get('with'); conn=get_conn(); c=conn.cursor()
     c.execute("UPDATE messages SET read=1 WHERE receiver=%s AND sender=%s" if USE_POSTGRES else "UPDATE messages SET read=1 WHERE receiver=? AND sender=?",(me,other))
-    conn.commit(); conn.close(); return jsonify({"ok":True})
+    conn.commit(); conn.close()
+    if sio is not None and me and other:
+        try: sio.emit('chat_read', {'by':me}, room='pm:'+other)
+        except Exception: pass
+    return jsonify({"ok":True})
 
 @app.route('/api/messages/search')
 def api_messages_search():
@@ -1454,7 +1521,12 @@ def api_send():
         now=datetime.now().isoformat(); c.execute(q, (me,other,txt,url,reply_to,now))
         conn.commit()
         notify_async(other,'message',me,me+' sent you a message')
-        return jsonify({"ok":True,"id":c.lastrowid if not USE_POSTGRES else None,"created_at":now,"media_url":url})
+        msg_id = c.lastrowid if not USE_POSTGRES else None
+        if sio is not None:
+            try:
+                sio.emit('chat_message', {'id':msg_id,'sender':me,'receiver':other,'text':txt,'media_url':url or '', 'reply_to':reply_to,'read':0,'deleted':False,'created_at':now,'media_type':('audio' if (url or '').lower().split('?')[0].endswith(('.mp3','.wav','.ogg','.m4a','.aac','.webm')) else '')}, room='pm:'+other)
+            except Exception: pass
+        return jsonify({"ok":True,"id":msg_id,"created_at":now,"media_url":url})
     except Exception:
         conn.rollback()
         print("SEND MESSAGE ERROR:")
@@ -1574,7 +1646,11 @@ def api_message_edit():
 
 @app.route('/api/typing',methods=['POST'])
 def api_typing():
-    me=session.get('username');peer=(request.get_json(silent=True) or {}).get('peer','');conn=get_conn();c=conn.cursor();now=time.time();q="INSERT INTO user_typing (username,peer,last_seen) VALUES (%s,%s,%s) ON CONFLICT (username,peer) DO UPDATE SET last_seen=%s" if USE_POSTGRES else "INSERT OR REPLACE INTO user_typing (username,peer,last_seen) VALUES (?,?,?)";c.execute(q,(me,peer,now,now) if USE_POSTGRES else (me,peer,now));conn.commit();conn.close();return jsonify({"ok":True})
+    me=session.get('username');peer=(request.get_json(silent=True) or {}).get('peer','');conn=get_conn();c=conn.cursor();now=time.time();q="INSERT INTO user_typing (username,peer,last_seen) VALUES (%s,%s,%s) ON CONFLICT (username,peer) DO UPDATE SET last_seen=%s" if USE_POSTGRES else "INSERT OR REPLACE INTO user_typing (username,peer,last_seen) VALUES (?,?,?)";c.execute(q,(me,peer,now,now) if USE_POSTGRES else (me,peer,now));conn.commit();conn.close()
+    if sio is not None and me and peer:
+        try: sio.emit('chat_typing', {'from':me,'typing':True}, room='pm:'+peer)
+        except Exception: pass
+    return jsonify({"ok":True})
 
 @app.route('/api/typing')
 def api_typing_get():
@@ -1603,5 +1679,12 @@ def api_global_search():
 @app.route('/static/uploads/<path:filename>')
 def uploads(filename): return send_from_directory('static/uploads', filename)
 
+application = socket_app
+
 if __name__=='__main__':
-    port=int(os.environ.get("PORT",5000)); app.run(host='0.0.0.0',port=port)
+    port=int(os.environ.get("PORT",5000))
+    if sio is not None:
+        from werkzeug.serving import run_simple
+        run_simple('0.0.0.0',port,socket_app,threaded=True)
+    else:
+        app.run(host='0.0.0.0',port=port,threaded=True)
