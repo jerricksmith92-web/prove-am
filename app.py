@@ -534,7 +534,7 @@ input,textarea{width:100%;background:var(--sec);border:none;border-radius:12px;p
 </div>
 <div class=content>
 <div id=storiesDiv>
-<div class=wa-status-head><b>Status</b><button onclick="document.getElementById('storyFile').click()">＋ My status</button><input type=file id=storyFile accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" multiple style=display:none></div>
+<div class=wa-status-head><button onclick="document.getElementById('storyFile').click()">＋ My status</button><input type=file id=storyFile accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" multiple style=display:none></div>
 <div class=wa-my-status id=myStatusRow></div>
 <div class=wa-section-title>RECENT UPDATES</div>
 <div id=storyBar class=wa-status-list></div>
