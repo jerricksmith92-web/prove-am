@@ -625,7 +625,7 @@ input,textarea{width:100%;background:var(--sec);border:none;border-radius:12px;p
 <button onclick="reactStory('❤️')" style="background:#222;color:#fff;border:none;border-radius:20px;padding:10px 12px">❤️</button><button onclick="reactStory('😂')" style="background:#222;color:#fff;border:none;border-radius:20px;padding:10px 12px">😂</button><button onclick="replyStory()" style="background:#ffcc00;border:none;border-radius:20px;padding:10px 16px;font-weight:800">Send</button>
 </div>
 </div>
-<script src="/socket.io/socket.io.js"></script><script>
+<script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script><script>
 let realtimeSocket=null;
 function connectRealtime(){
   if(typeof io!=='function')return;
@@ -869,8 +869,8 @@ function appendRealtimeMessage(m){
  if(!el||!m||chatWith!==m.sender)return;
  const row=document.createElement('div');
  row.className='msg-row';
- const reply=m.reply_to?\`<div class="reply-quote"><b>\${escapeHtml(m.sender)}</b>\${escapeHtml(m.reply_to)}</div>\`:'';
- row.innerHTML=\`<span class="msg-bubble in">\${reply}\${escapeHtml(m.text||'')}<div><span class="msg-time">\${escapeHtml((m.created_at||'').slice(11,16))}</span></div></span>\`;
+ const reply=m.reply_to?`<div class="reply-quote"><b>${escapeHtml(m.sender)}</b>${escapeHtml(m.reply_to)}</div>`:'';
+ row.innerHTML=`<span class="msg-bubble in">${reply}${escapeHtml(m.text||'')}<div><span class="msg-time">${escapeHtml((m.created_at||'').slice(11,16))}</span></div></span>`;
  el.appendChild(row);
  el.scrollTop=el.scrollHeight;
  window.chatHtmlCache=window.chatHtmlCache||{};
@@ -903,7 +903,7 @@ async function sendMsg(){
      const tick=optimistic.querySelector('.msg-tick');if(tick)tick.innerText='✓';
    }
    const chatList=document.getElementById('chatUsers');
-   const sentRow=chatList?.querySelector(\`[data-chat-user="\${CSS.escape(receiver)}"]\`);
+   const sentRow=chatList?.querySelector(`[data-chat-user="${CSS.escape(receiver)}"]`);
    if(sentRow&&chatList)chatList.prepend(sentRow);
    loadChatUsers();
  };
