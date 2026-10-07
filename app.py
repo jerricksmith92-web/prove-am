@@ -632,7 +632,15 @@ function connectRealtime(){
   try{
     realtimeSocket=io({transports:['websocket','polling'],reconnection:true,reconnectionAttempts:Infinity,reconnectionDelay:250,timeout:5000});
     realtimeSocket.on('connect',()=>realtimeSocket.emit('identify'));
-    realtimeSocket.on('chat_message',m=>{if(m&&chatWith===m.sender)loadMsgs(true);else if(m)loadChatUsers();});
+    realtimeSocket.on('chat_message',m=>{
+      if(!m)return;
+      if(chatWith===m.sender){
+        appendRealtimeMessage(m);
+        fetch('/api/messages/mark_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({with:m.sender}),credentials:'same-origin'}).catch(()=>{});
+      }else{
+        loadChatUsers();
+      }
+    });
     realtimeSocket.on('chat_read',d=>{if(d&&chatWith===d.by)loadMsgs(true);});
     realtimeSocket.on('chat_typing',d=>{if(d&&chatWith===d.from){let el=document.getElementById('typingStatus');if(el)el.innerText=d.typing?(d.from+' is typing…'):'';}});
   }catch(e){console.warn('Realtime chat unavailable; REST fallback active',e);}
@@ -856,6 +864,18 @@ function backChat(){
   loadChatUsers();
 }
 
+function appendRealtimeMessage(m){
+ const el=document.getElementById('msgs');
+ if(!el||!m||chatWith!==m.sender)return;
+ const row=document.createElement('div');
+ row.className='msg-row';
+ const reply=m.reply_to?\`<div class="reply-quote"><b>\${escapeHtml(m.sender)}</b>\${escapeHtml(m.reply_to)}</div>\`:'';
+ row.innerHTML=\`<span class="msg-bubble in">\${reply}\${escapeHtml(m.text||'')}<div><span class="msg-time">\${escapeHtml((m.created_at||'').slice(11,16))}</span></div></span>\`;
+ el.appendChild(row);
+ el.scrollTop=el.scrollHeight;
+ window.chatHtmlCache=window.chatHtmlCache||{};
+ window.chatHtmlCache[chatWith]=null;
+}
 function appendOptimisticMessage(text,reply){const el=document.getElementById('msgs');if(!el)return null;const row=document.createElement('div');row.className='msg-row me';row.innerHTML=`<span class="msg-bubble out pending-msg">${reply?`<div class=reply-quote><b>You</b>${escapeHtml(reply)}</div>`:''}${escapeHtml(text)}<span class=msg-time>${new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span><span class=msg-tick>✓</span></span>`;el.appendChild(row);el.scrollTop=el.scrollHeight;return row;}
 let mediaRecorder=null,recordChunks=[],recordedAudioFile=null;
 function updateSendButton(){const b=document.getElementById('sendBtn');if(!b)return;const ready=!!(recordedAudioFile||selectedChatFile||((document.getElementById('chatText')||{}).value||'').trim());b.innerText=ready?'➤':'🎤';b.title=ready?'Send':'Record voice';b.classList.toggle('mic-mode',!ready);b.classList.toggle('ready',ready);}
@@ -867,7 +887,6 @@ async function sendMsg(){
  if(!text&&!file)return;
  const receiver=chatWith,reply=replyToText||'',isAudio=!!recordedAudioFile;
  const optimistic=!file?appendOptimisticMessage(text,reply):null;
- // Clear the composer immediately after the send action so the typed text cannot remain visible.
  if(input)input.value='';
  if(fileInput)fileInput.value='';
  selectedChatFile=null; recordedAudioFile=null;
@@ -875,23 +894,53 @@ async function sendMsg(){
  const ready=document.getElementById('chatVoiceReady');if(ready)ready.style.display='none';
  const audio=document.getElementById('voicePreview');if(audio){audio.pause();audio.removeAttribute('src');audio.load();}
  updateSendButton();
- const fd=new FormData();fd.append('receiver',receiver);fd.append('text',text);if(reply)fd.append('reply_to',reply);
- if(file){fd.append('media',file);fd.append('media_type',isAudio?'audio':((file.type||'').startsWith('video/')?'video':'image'));}
  const sendBtn=document.getElementById('sendBtn');if(sendBtn)sendBtn.disabled=true;
+
+ const finishSuccess=(d)=>{
+   cancelReply();
+   if(optimistic){
+     optimistic.querySelector('.msg-bubble')?.classList.remove('pending-msg');
+     const tick=optimistic.querySelector('.msg-tick');if(tick)tick.innerText='✓';
+   }
+   const chatList=document.getElementById('chatUsers');
+   const sentRow=chatList?.querySelector(\`[data-chat-user="\${CSS.escape(receiver)}"]\`);
+   if(sentRow&&chatList)chatList.prepend(sentRow);
+   loadChatUsers();
+ };
+
  try{
-  const r=await fetch('/api/send',{method:'POST',body:fd,credentials:'same-origin'});const d=await r.json().catch(()=>({}));
-  if(!r.ok||!d.ok){if(optimistic)optimistic.remove();alert(d.error||'Could not send message');return;}
-  cancelReply();
-  if(optimistic){optimistic.querySelector('.msg-bubble')?.classList.remove('pending-msg');const tick=optimistic.querySelector('.msg-tick');if(tick)tick.innerText='✓✓';}
-  // The conversation just became the most recently used one. Keep it at #1
-  // immediately; the next list refresh will also use the persisted timestamp.
-  const chatList=document.getElementById('chatUsers');
-  const sentRow=chatList?.querySelector(`[data-chat-user="${CSS.escape(receiver)}"]`);
-  if(sentRow && chatList) chatList.prepend(sentRow);
-  if(file) await loadMsgs(true);
-  loadChatUsers();
- }catch(e){if(optimistic)optimistic.remove();alert('Could not send message. Please check the server connection.');}
- finally{if(sendBtn)sendBtn.disabled=false;updateSendButton();}
+   if(!file && realtimeSocket && realtimeSocket.connected){
+     await new Promise((resolve,reject)=>{
+       let settled=false;
+       const timer=setTimeout(()=>{if(!settled){settled=true;reject(new Error('socket timeout'));}},5000);
+       realtimeSocket.emit('send_message',{receiver,text,reply_to:reply},d=>{
+         if(settled)return;
+         settled=true;clearTimeout(timer);
+         if(!d||!d.ok)reject(new Error(d?.error||'Could not send message'));
+         else{finishSuccess(d);resolve(d);}
+       });
+     });
+     return;
+   }
+
+   const fd=new FormData();fd.append('receiver',receiver);fd.append('text',text);if(reply)fd.append('reply_to',reply);
+   if(file)fd.append('media',file);if(file)fd.append('media_type',isAudio?'audio':((file?.type||'').startsWith('video/')?'video':'image'));
+   const r=await fetch('/api/send',{method:'POST',body:fd,credentials:'same-origin'});
+   const d=await r.json().catch(()=>({}));
+   if(!r.ok||!d.ok)throw new Error(d.error||'Could not send message');
+   finishSuccess(d);
+   if(file)await loadMsgs(true);
+ }catch(e){
+   if(optimistic)optimistic.remove();
+   if(e?.message==='socket timeout' && realtimeSocket?.connected){
+     realtimeSocket.disconnect();
+     setTimeout(connectRealtime,50);
+   }
+   alert(e?.message||'Could not send message. Please check the server connection.');
+ }finally{
+   if(sendBtn)sendBtn.disabled=false;
+   updateSendButton();
+ }
 }
 
 async function loadMsgs(silent=false){
@@ -1606,6 +1655,69 @@ if sio is not None:
             me=session.get('username') or (sio.get_session(sid) or {}).get('username')
             if me: sio.enter_room(sid,'pm:'+me)
         except Exception: pass
+
+    @sio.event
+    def send_message(sid, data):
+        """Fast text-message path: save + deliver over the already-open Socket.IO connection."""
+        try:
+            sess = sio.get_session(sid) or {}
+            me = session.get('username') or sess.get('username')
+            data = data or {}
+            other = str(data.get('receiver') or '').strip()
+            txt = str(data.get('text') or '')[:500]
+            reply_to = str(data.get('reply_to') or '')[:100]
+            if not me or not other or other == me or not txt:
+                return {'ok': False, 'error': 'Invalid message'}
+
+            conn = get_conn()
+            c = conn.cursor()
+            try:
+                if is_blocked(me, other) or is_blocked(other, me):
+                    return {'ok': False, 'error': 'Messaging is unavailable between these accounts'}
+
+                qp = "SELECT message_privacy FROM profiles WHERE username=%s" if USE_POSTGRES else "SELECT message_privacy FROM profiles WHERE username=?"
+                c.execute(qp, (other,))
+                pr = c.fetchone()
+                if pr and (pr[0] or 'friends') == 'friends' and not is_friend(me, other):
+                    return {'ok': False, 'error': 'This user only accepts messages from friends'}
+
+                qu = "SELECT username FROM auth WHERE username=%s" if USE_POSTGRES else "SELECT username FROM auth WHERE username=?"
+                c.execute(qu, (other,))
+                if not c.fetchone():
+                    return {'ok': False, 'error': 'Recipient not found'}
+
+                now = datetime.now().isoformat()
+                if USE_POSTGRES:
+                    c.execute(
+                        "INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at,media_type) VALUES (%s,%s,%s,'',%s,0,%s,'') RETURNING id",
+                        (me, other, txt, reply_to, now)
+                    )
+                    row = c.fetchone()
+                    msg_id = row[0] if row else None
+                else:
+                    c.execute(
+                        "INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at,media_type) VALUES (?,?,?,?,?,0,?,?)",
+                        (me, other, txt, '', reply_to, now, '')
+                    )
+                    msg_id = c.lastrowid
+
+                conn.commit()
+                payload = {
+                    'ok': True, 'id': msg_id, 'sender': me, 'receiver': other,
+                    'text': txt, 'media_url': '', 'reply_to': reply_to, 'read': 0,
+                    'deleted': False, 'created_at': now, 'media_type': ''
+                }
+                sio.emit('chat_message', payload, room='pm:'+other)
+                notify_async(other, 'message', me, me+' sent you a message')
+                return payload
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+        except Exception:
+            traceback.print_exc()
+            return {'ok': False, 'error': 'Server could not save the message'}
 
     @sio.event
     def disconnect(sid):
