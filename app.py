@@ -446,6 +446,25 @@ button,input,textarea,select,a{pointer-events:auto;touch-action:manipulation}
 .msg-time{font-size:10px;opacity:.58;margin-left:8px;white-space:nowrap}.msg-tick{font-size:10px;margin-left:5px}.reply-quote{border-left:3px solid #ffcc19;background:rgba(0,0,0,.18);padding:7px 9px;border-radius:9px;margin:-2px 0 7px;font-size:12px}.reply-quote b{display:block;margin-bottom:2px}.swipe-hint{display:block;color:#ffcc19;font-size:11px;font-weight:800;margin-top:3px}.msg-actions{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}.msg-actions button{font-size:11px;padding:4px 7px;border-radius:9px;border:1px solid rgba(128,128,128,.35);background:rgba(0,0,0,.12);color:inherit}
 .chat-bar{background:rgba(8,8,8,.94)!important;border-top:1px solid #292929!important;padding:8px!important}.chat-bar .pill{background:#1b1d20;color:#fff;border:1px solid #303236;padding:12px 14px}.chat-bar .yellow{min-width:72px;background:#ffcc19;color:#111}.voice-audio{width:125px;height:28px;max-width:125px}
 .sheet-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:1200;display:none;align-items:flex-end}.sheet{width:100%;max-height:78vh;background:#24272b;color:#fff;border-radius:28px 28px 0 0;padding:10px 0 18px;box-shadow:0 -15px 50px rgba(0,0,0,.45);overflow:hidden}.sheet-handle{width:42px;height:4px;border-radius:8px;background:#aaa;margin:2px auto 14px}.sheet-title{font-size:20px;font-weight:900;text-align:center;padding:0 18px 12px}.comment-list,.viewer-list{max-height:55vh;overflow:auto;padding:0 18px}.comment-item,.viewer-person{display:flex;gap:10px;padding:14px 0;border-bottom:1px solid #34383d}.comment-avatar{width:38px;height:38px;border-radius:50%;background:#111;flex:0 0 38px;overflow:hidden;display:flex;align-items:center;justify-content:center}.comment-avatar img{width:100%;height:100%;object-fit:cover}.comment-main{min-width:0;flex:1}.comment-user{font-weight:900;font-size:14px}.comment-time{font-size:11px;color:#9da3aa;margin-left:5px}.comment-text{font-size:15px;margin-top:3px;line-height:1.35}.comment-reply{font-size:12px;color:#aeb4bb;font-weight:800;margin-top:8px}.comment-input-row{display:flex;gap:8px;align-items:center;padding:12px 14px 0}.comment-input-row input{margin:0;background:#1a1c1f;color:#fff;border:1px solid #36393d;border-radius:24px;padding:12px 15px}.comment-send{width:44px;height:44px;border-radius:50%;border:0;background:#ffcc19;font-weight:900}.viewer-counter-btn{border:0;background:rgba(255,255,255,.12);color:#fff;border-radius:18px;padding:5px 9px;font-weight:800}
+.comments-sheet{max-height:82vh;background:#fff;color:#111;border-radius:22px 22px 0 0;padding-bottom:calc(12px + env(safe-area-inset-bottom));}
+body.dark .comments-sheet{background:#101010;color:#fff}
+.comments-head{display:flex;align-items:center;justify-content:center;position:relative;padding:4px 18px 14px;font-size:18px;border-bottom:1px solid #e5e5e5}
+body.dark .comments-head{border-bottom-color:#292929}
+.comments-head button{position:absolute;right:12px;top:0;border:0;background:transparent;color:inherit;font-size:20px;padding:8px}
+.comments-sheet .comment-list{max-height:58vh;padding:0 16px;overflow:auto}
+.comments-sheet .comment-item{display:flex;gap:10px;padding:13px 0;border-bottom:0}
+.comments-sheet .comment-avatar{width:38px;height:38px;flex:0 0 38px;border-radius:50%;background:#ddd;color:#111;font-weight:800}
+.comments-sheet .comment-user{font-size:13px}
+.comments-sheet .comment-time{font-size:10px;color:#8b8b8b}
+.comments-sheet .comment-text{font-size:14px;margin-top:2px}
+.comments-sheet .comment-reply{font-size:12px;color:#777;margin-top:6px;cursor:pointer}
+.comments-sheet .comment-like-btn{font-size:20px;color:#777}
+.comments-sheet .comment-like-btn.liked{color:#ed4956}
+.comments-sheet .comment-input-row{border-top:1px solid #ddd;padding:10px 14px 4px;background:inherit}
+body.dark .comments-sheet .comment-input-row{border-top-color:#292929}
+.comments-sheet .comment-input-row input{flex:1;border:1px solid #ddd;background:#f5f5f5;color:#111;margin:0;padding:11px 15px}
+body.dark .comments-sheet .comment-input-row input{border-color:#333;background:#1b1b1b;color:#fff}
+
 /* FINAL REFERENCE CHAT / COMMENTS UI */
 .chat-screen .chat-header{height:72px!important;padding:8px 12px!important;gap:8px!important;border-bottom:1px solid rgba(255,255,255,.12)!important;background:rgba(5,5,5,.88)!important;backdrop-filter:blur(14px)!important;display:flex!important;align-items:center!important}
 .chat-screen .chat-back{width:48px!important;height:48px!important;min-height:48px!important;border-radius:50%!important;padding:0!important;display:flex!important;align-items:center!important;justify-content:center!important;font-size:24px!important;background:rgba(35,35,35,.72)!important;color:#fff!important;border:1px solid #555!important}
@@ -579,7 +598,7 @@ input,textarea{width:100%;background:var(--sec);border:none;border-radius:12px;p
 </div>
 </div>
 <div id="profileModal" class="profile-modal" onclick="if(event.target.id==='profileModal')closeProfileModal()"><div class="profile-sheet"><button class="small-btn" style="float:right" onclick="closeProfileModal()">Close</button><div id="publicProfile"></div></div></div>
-<div id=commentsModal class=sheet-backdrop onclick=closeComments(event)><div class=sheet onclick=event.stopPropagation()><div class=sheet-handle></div><div class=sheet-title>Comments</div><div id=commentList class=comment-list></div><div class=comment-input-row><input id=commentInput placeholder="Add a comment..."><button class=comment-send onclick=sendComment()>➤</button></div></div></div>
+<div id=commentsModal class="sheet-backdrop comments-modal" onclick="closeComments(event)"><div class="sheet comments-sheet" onclick="event.stopPropagation()"><div class=sheet-handle></div><div class=comments-head><b>Comments</b><button onclick="document.getElementById('commentsModal').style.display='none'">✕</button></div><div id=commentList class=comment-list></div><div class=comment-input-row><input id=commentInput placeholder="Add a comment..." autocomplete="off"><button class=comment-send onclick=sendComment()>➤</button></div></div></div>
 <div id=storyViewersModal class=sheet-backdrop onclick=closeStoryViewers(event)><div class=sheet onclick=event.stopPropagation()><div class=sheet-handle></div><div class=sheet-title>Story viewers</div><div id=storyViewerList class=viewer-list></div></div></div>
 <div class=viewer id=viewerModal style="position:fixed;top:0;left:0;right:0;bottom:0;background:#000;z-index:999;display:none;flex-direction:column">
 <div class=bar id=progressBar></div>
@@ -712,7 +731,7 @@ async function loadPosts(){
   posts.forEach(p=>{
     let pic=profiles[p.username];let picHtml=pic?`<img src="${pic}">`:p.username[0]; let media=(p.media||[]).map(x=>{let u=x.url||'',low=u.toLowerCase();if((x.type||'').startsWith('video')||['.mp4','.mov','.webm','.m4v'].some(z=>low.includes(z)))return `<video src="${u}" controls style="width:100%;max-height:400px"></video>`;return `<img src="${u}" style="width:100%;max-height:400px;object-fit:cover">`;}).join(''); if(p.shared){media+=`<div class=card style="margin:8px;background:var(--sec)"><b>Shared from @${p.shared.username}</b><p>${escapeHtml(p.shared.text||'')}</p>${p.shared.media_url?`<img src="${p.shared.media_url}" style="width:100%;max-height:240px;object-fit:cover">`:''}</div>`;}
     let del=p.username==curUser?`<span class=del onclick="deletePost(${p.id})">🗑️</span>`:''; let edit=p.username==curUser?`<span onclick="editPost(${p.id},${JSON.stringify(p.text||'').replace(/</g,'&lt;')})" style="cursor:pointer">✏️ Edit</span>`:'';
-    let text=linkify(p.text||''); let actions=`<span onclick="likePost(${p.id})" style="cursor:pointer">${p.liked?'❤️':'🤍'} ${p.like_count||0}</span><span onclick="commentPost(${p.id})" style="cursor:pointer">💬 ${p.comment_count||0}</span><span onclick="sharePost(${p.id})" style="cursor:pointer">🔄 ${p.share_count||0}</span><span onclick="savePost(${p.id})" style="cursor:pointer">${p.saved?'🔖':'🔖'} ${p.saved?'Saved':'Save'}</span><span onclick="openComments(${p.id})" style="cursor:pointer">Comments</span><span onclick="reportTarget('post',${p.id})" style="cursor:pointer">🚩</span>${edit}`;
+    let text=linkify(p.text||''); let actions=`<span onclick="likePost(${p.id})" style="cursor:pointer">${p.liked?'❤️':'🤍'} ${p.like_count||0}</span><span onclick="openComments(${p.id})" style="cursor:pointer">💬 ${p.comment_count||0}</span><span onclick="sharePost(${p.id})" style="cursor:pointer">🔄 ${p.share_count||0}</span><span onclick="savePost(${p.id})" style="cursor:pointer">${p.saved?'🔖':'🔖'} ${p.saved?'Saved':'Save'}</span><span onclick="openComments(${p.id})" style="cursor:pointer">Comments</span><span onclick="reportTarget('post',${p.id})" style="cursor:pointer">🚩</span>${edit}`;
     h+=`<div class=card style="padding:0;overflow:hidden"><div style="padding:10px;display:flex;align-items:center;gap:8px"><div class=pic>${picHtml}</div><b onclick="viewProfile('${p.username}')" style="cursor:pointer">${p.username}</b><small style="margin-left:auto">${(p.created_at||'').slice(0,16)}</small>${del}</div>${p.text?`<div style="padding:0 12px 8px">${text}</div>`:''}${media}<div style="padding:10px;display:flex;gap:12px;flex-wrap:wrap">${actions}</div></div>`;
   });
   document.getElementById('postsList').innerHTML=h;
@@ -821,12 +840,31 @@ let mediaRecorder=null,recordChunks=[],recordedAudioFile=null;
 function updateSendButton(){const b=document.getElementById('sendBtn');if(!b)return;const ready=!!(recordedAudioFile||selectedChatFile||((document.getElementById('chatText')||{}).value||'').trim());b.innerText=ready?'➤':'🎤';b.title=ready?'Send':'Record voice';b.classList.toggle('mic-mode',!ready);b.classList.toggle('ready',ready);}
 function setRecordingUi(on){const b=document.getElementById('sendBtn');if(!b)return;b.classList.toggle('recording',on);b.innerText=on?'■':((recordedAudioFile||selectedChatFile||((document.getElementById('chatText')||{}).value||'').trim())?'➤':'🎤');b.title=on?'Stop recording':(b.innerText==='➤'?'Send':'Record voice');}
 async function sendMsg(){
- if(!chatWith){alert('Please select a user first.');return;} const input=document.getElementById('chatText'),fileInput=document.getElementById('chatFileHidden'); const text=(input?.value||'').trim(); const file=recordedAudioFile||selectedChatFile; if(!text&&!file)return;
- const receiver=chatWith,reply=replyToText||'',isAudio=!!recordedAudioFile; const optimistic=!file?appendOptimisticMessage(text,reply):null; const fd=new FormData();fd.append('receiver',receiver);fd.append('text',text);if(reply)fd.append('reply_to',reply);if(file){fd.append('media',file);fd.append('media_type',isAudio?'audio':((file.type||'').startsWith('video/')?'video':'image'));}
+ if(!chatWith){alert('Please select a user first.');return;}
+ const input=document.getElementById('chatText'),fileInput=document.getElementById('chatFileHidden');
+ const text=(input?.value||'').trim(); const file=recordedAudioFile||selectedChatFile;
+ if(!text&&!file)return;
+ const receiver=chatWith,reply=replyToText||'',isAudio=!!recordedAudioFile;
+ const optimistic=!file?appendOptimisticMessage(text,reply):null;
+ // Clear the composer immediately after the send action so the typed text cannot remain visible.
+ if(input)input.value='';
+ if(fileInput)fileInput.value='';
+ selectedChatFile=null; recordedAudioFile=null;
+ const preview=document.getElementById('chatMediaPreview');if(preview){preview.style.display='none';preview.innerHTML='';}
+ const ready=document.getElementById('chatVoiceReady');if(ready)ready.style.display='none';
+ const audio=document.getElementById('voicePreview');if(audio){audio.pause();audio.removeAttribute('src');audio.load();}
+ updateSendButton();
+ const fd=new FormData();fd.append('receiver',receiver);fd.append('text',text);if(reply)fd.append('reply_to',reply);
+ if(file){fd.append('media',file);fd.append('media_type',isAudio?'audio':((file.type||'').startsWith('video/')?'video':'image'));}
  const sendBtn=document.getElementById('sendBtn');if(sendBtn)sendBtn.disabled=true;
- try{const r=await fetch('/api/send',{method:'POST',body:fd,credentials:'same-origin'});const d=await r.json().catch(()=>({}));if(!r.ok||!d.ok){if(optimistic)optimistic.remove();alert(d.error||'Could not send message');return;}
-  if(input)input.value='';if(fileInput)fileInput.value='';selectedChatFile=null;recordedAudioFile=null;cancelReply();const preview=document.getElementById('chatMediaPreview');if(preview){preview.style.display='none';preview.innerHTML='';}const ready=document.getElementById('chatVoiceReady');if(ready)ready.style.display='none';const audio=document.getElementById('voicePreview');if(audio){audio.pause();audio.removeAttribute('src');audio.load();}updateSendButton();if(optimistic){optimistic.querySelector('.msg-bubble')?.classList.remove('pending-msg');const tick=optimistic.querySelector('.msg-tick');if(tick)tick.innerText='✓✓';}await loadMsgs(true);
- }catch(e){if(optimistic)optimistic.remove();alert('Could not send message. Please check the server connection.');}finally{if(sendBtn)sendBtn.disabled=false;updateSendButton();}
+ try{
+  const r=await fetch('/api/send',{method:'POST',body:fd,credentials:'same-origin'});const d=await r.json().catch(()=>({}));
+  if(!r.ok||!d.ok){if(optimistic)optimistic.remove();alert(d.error||'Could not send message');return;}
+  cancelReply();
+  if(optimistic){optimistic.querySelector('.msg-bubble')?.classList.remove('pending-msg');const tick=optimistic.querySelector('.msg-tick');if(tick)tick.innerText='✓✓';}
+  await loadMsgs(true);
+ }catch(e){if(optimistic)optimistic.remove();alert('Could not send message. Please check the server connection.');}
+ finally{if(sendBtn)sendBtn.disabled=false;updateSendButton();}
 }
 
 async function loadMsgs(silent=false){
@@ -858,46 +896,8 @@ async function startRecording(){
     mediaRecorder.start();setRecordingUi(true);
   }catch(e){setRecordingUi(false);alert('Microphone permission was denied or unavailable');}
 }
-let swipeX=0,swipeY=0,swipeTarget=null,swipeStartedInsideMessages=false;
-document.addEventListener('touchstart',e=>{
-  if(!e.touches||!e.touches[0])return;
-  let t=e.target;
-  if(t.closest('button,input,textarea,select,a,[contenteditable="true"]')){swipeStartedInsideMessages=false;swipeTarget=null;return;}
-  swipeX=e.touches[0].clientX;
-  swipeY=e.touches[0].clientY;
-  swipeTarget=t;
-  swipeStartedInsideMessages=!!t.closest('#msgs');
-},{passive:true});
-document.addEventListener('touchend',e=>{
-  if(!e.changedTouches||!e.changedTouches[0])return;
-  let endX=e.changedTouches[0].clientX,endY=e.changedTouches[0].clientY;
-  let dx=endX-swipeX,dy=endY-swipeY;
-  let absX=Math.abs(dx),absY=Math.abs(dy);
+// Page and message swipe navigation intentionally disabled. Normal vertical scrolling remains enabled.
 
-  /* Inside a conversation: keep the existing swipe-right-to-reply behavior. */
-  if(swipeStartedInsideMessages){
-    let el=swipeTarget&&swipeTarget.closest('#msgs [data-reply-text]');
-    if(el&&swipeX-endX>70&&absX>absY)setReply(el.dataset.replyText||'');
-    /* Vertical movement belongs entirely to the message scroller. */
-    swipeX=swipeY=0;swipeTarget=null;swipeStartedInsideMessages=false;
-    return;
-  }
-
-  /* Do not change pages while interacting with inputs, buttons, modals,
-     story bars, viewers, or other horizontally-scrollable controls. */
-  let blocked=swipeTarget&&swipeTarget.closest('input,textarea,button,a,select,[contenteditable="true"],.story-bar,.viewer,.profile-modal,.chat-screen');
-  if(!blocked && absX>=70 && absX>absY*1.25){
-    let current=document.querySelector('.tab.active');
-    let order=['stories','post','chat','search'];
-    let currentId=current?current.id.replace(/^t/,'').toLowerCase():'stories';
-    let i=order.indexOf(currentId);
-    if(i<0)i=0;
-    /* Swipe left = next page; swipe right = previous page. */
-    let next=dx<0?Math.min(order.length-1,i+1):Math.max(0,i-1);
-    if(next!==i)switchTab(order[next]);
-  }
-  swipeX=swipeY=0;swipeTarget=null;swipeStartedInsideMessages=false;
-},{passive:true});
 function setReply(t){replyToText=t;let p=document.getElementById('replyPreview');p.style.display='block';p.innerHTML=`Replying to: ${t} <span onclick="cancelReply()" style="float:right;cursor:pointer;color:red">✕</span>`;}
 function cancelReply(){replyToText='';document.getElementById('replyPreview').style.display='none';}
 async function searchUsers(){
