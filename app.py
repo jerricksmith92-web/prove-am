@@ -377,6 +377,14 @@ button,input,textarea,select,a{pointer-events:auto;touch-action:manipulation}
   .chat-screen #msgs{top:54px;bottom:64px;padding-bottom:24px!important}
 }
 
+
+/* Exact GH NOT-inspired mobile conversation layout */
+.chat-screen{background:#020202;color:#fff;}
+.gh-header{height:68px!important;padding:7px 9px!important;gap:9px!important;border-bottom:1px solid #222;}
+.gh-back{width:42px!important;height:42px!important;min-height:42px!important;border-radius:50%!important;font-size:32px!important;line-height:1!important;padding:0!important;display:flex!important;align-items:center;justify-content:center;}
+.chat-head-avatar{width:48px;height:48px;border-radius:50%;border:3px solid #ffcc19;background:#111;position:relative;display:flex;align-items:center;justify-content:center;font-weight:900;overflow:visible;flex:0 0 48px}.chat-head-avatar-img{width:100%;height:100%;object-fit:cover;border-radius:50%}.head-dot{position:absolute;right:-1px;bottom:1px;width:13px;height:13px;background:#16d34a;border:2px solid #030303;border-radius:50%}.head-dot.offline{background:#777}.chat-head-info{min-width:0;flex:1;display:flex;flex-direction:column;justify-content:center}.chat-head-info b{font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.chat-head-info small{font-size:12px;color:#bbb;margin-top:2px}.chat-head-actions{display:flex;gap:5px}.gh-head-btn{width:40px;height:40px;border-radius:50%;background:#111;border:1px solid #2f2f2f;color:#fff;font-size:20px}.chat-screen #msgs{top:68px!important;bottom:156px!important;padding:12px 11px 18px!important;background:transparent}.msg-row{gap:7px;margin:8px 0;align-items:flex-end}.msg-row.me{flex-direction:row-reverse}.msg-avatar{width:32px;height:32px;border-radius:50%;background:#151515;overflow:hidden;flex:0 0 32px;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:13px}.msg-avatar img{width:100%;height:100%;object-fit:cover}.msg-column{max-width:82%;display:flex;flex-direction:column}.msg-row.me .msg-column{align-items:flex-end}.msg-bubble{max-width:100%!important;padding:10px 12px!important;border-radius:19px!important;font-size:15px;line-height:1.3}.msg-bubble.in{background:#1e2125;border:1px solid #30343a;border-bottom-left-radius:6px!important}.msg-bubble.out{background:#ffc919;border:1px solid #e3b200;border-bottom-right-radius:6px!important;color:#080808}.msg-text{white-space:pre-wrap}.msg-meta{display:flex;justify-content:flex-end;gap:5px;margin-top:5px;font-size:10px;opacity:.65}.msg-tick{color:#147bff;font-weight:900}.image-bubble img{display:block;width:min(310px,72vw);max-height:330px;object-fit:cover;border-radius:13px;margin-top:3px}.video-bubble{position:relative;margin-top:3px}.video-bubble video{display:block;width:min(310px,72vw);max-height:330px;border-radius:13px;background:#000}.video-share{position:absolute;right:10px;bottom:10px;width:35px;height:35px;border-radius:50%;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center}.voice-bubble{display:flex;align-items:center;gap:8px;min-width:205px;padding:3px 2px}.voice-play{width:36px;height:36px;border:0;border-radius:50%;background:#111;color:#fff;font-size:14px;flex:0 0 36px}.msg-bubble.out .voice-play{background:#191919}.waveform{display:flex;align-items:center;gap:2px;height:30px;flex:1}.waveform i{display:block;width:2px;border-radius:3px;background:currentColor;opacity:.75}.voice-len{font-size:11px;min-width:28px}.reaction-row{margin:-5px 8px 0;padding:3px 7px;border:1px solid #333;border-radius:12px;background:#111;display:inline-flex;width:max-content;font-size:13px}.reply-quote{border-left:3px solid #ffcc19!important;background:rgba(0,0,0,.24)!important;padding:7px 8px!important;margin:0 0 6px!important;border-radius:7px!important;font-size:12px!important}.reply-quote b,.reply-quote span{display:block}.chat-reply-preview{position:absolute;left:9px;right:9px;bottom:157px;z-index:60;background:#17191c;border:1px solid #333;border-left:3px solid #ffcc19;color:#fff;border-radius:12px;padding:8px 10px}.chat-reply-preview b,.chat-reply-preview span{display:block}.chat-reply-preview span{font-size:12px;color:#bbb;margin-top:2px}.gh-composer{position:absolute;left:9px;right:9px;bottom:65px;height:53px;padding:5px;border:1px solid #2d2d2d;background:rgba(10,10,10,.96);border-radius:28px;gap:5px}.composer-icon{width:38px;height:38px;flex:0 0 38px;border:0;border-radius:50%;background:transparent;color:#fff;font-size:19px}.composer-icon.camera{background:#151515;color:#ffcc19}.chat-input-wrap{height:42px;min-height:42px;border-radius:23px;padding:0 7px 0 13px;background:#191b1e;border:1px solid #292c30}.chat-input-wrap input{height:40px;font-size:15px}.chat-input-wrap button{font-size:20px}.chat-circle{width:43px;height:43px;flex:0 0 43px}.chat-circle.send{background:#ffc919}.chat-circle.voice{background:#ffc919;color:#111;border:0}.chat-circle.voice.recording{background:#d52b2b;color:#fff}.chat-circle.send.ready{background:#ffc919}.chat-tools-row{position:absolute;left:9px;right:9px;bottom:7px;height:49px;display:flex;align-items:center;justify-content:space-between;gap:8px}.hold-record{height:42px;border:1px solid #3a3a3a;background:#18191c;border-radius:23px;padding:0 13px;display:flex;align-items:center;gap:9px;color:#ddd;font-size:13px;white-space:nowrap}.quick-reactions{display:flex;gap:5px}.quick-reactions button{width:38px;height:38px;border-radius:50%;border:1px solid #333;background:#111;color:#fff;font-size:17px}.chat-media-preview{left:10px;right:10px;bottom:120px}.chat-voice-ready{left:10px;right:10px;bottom:120px}.msg-sheet-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:2000;display:flex;align-items:flex-end}.msg-sheet{width:100%;background:#1c1e21;border-radius:25px 25px 0 0;padding:10px 15px 24px;box-shadow:0 -15px 50px #000}.msg-sheet .sheet-handle{width:42px;height:4px;background:#777;border-radius:5px;margin:3px auto 13px}.sheet-msg-preview{padding:11px;background:#121315;border-radius:13px;color:#ddd;margin-bottom:10px}.reaction-pills{display:flex;gap:8px;justify-content:center;padding:5px 0 12px}.reaction-pills button{width:46px;height:46px;border-radius:50%;border:1px solid #333;background:#111;font-size:21px}.sheet-action{width:100%;border:0;border-top:1px solid #303236;background:transparent;color:#fff;text-align:left;padding:15px 4px;font-size:16px}.sheet-action.danger{color:#ff6868}.mini-cancel{border:0;background:#333;color:#fff;border-radius:10px;padding:7px}
+@media(max-width:600px){.chat-screen .chat-header{height:68px!important}.chat-screen #msgs{top:68px!important;bottom:156px!important}.chat-head-actions .gh-head-btn{width:36px;height:36px}.chat-head-avatar{width:46px;height:46px;flex-basis:46px}.hold-record{font-size:12px}.quick-reactions button{width:34px;height:34px;font-size:15px}.gh-composer{bottom:65px}}
+
 /* Reference-style GH NOT chat UI */
 .chat-screen{background:#030303;background-image:radial-gradient(circle at 50% 45%,rgba(201,162,39,.08),transparent 42%),linear-gradient(rgba(0,0,0,.86),rgba(0,0,0,.92)),url('/app-icon.jpg');background-size:auto,auto,260px;background-repeat:no-repeat;background-position:center;}
 .chat-screen .chat-header{background:rgba(10,10,10,.92);backdrop-filter:blur(10px);height:58px;padding:7px 10px;display:flex;gap:8px;align-items:center;}
@@ -735,19 +743,54 @@ function openChat(username){
   const users=document.getElementById('chatUsers'), search=document.getElementById('searchChat'), box=document.getElementById('chatBox');
   if(users)users.style.display='none'; if(search)search.style.display='none'; if(!box)return;
   box.style.display='block';
-  box.innerHTML=`<div class=chat-header><button onclick=backChat() class=chat-back>← ${escapeHtml(username)} <span id=chatOnlineState></span></button><button onclick=searchConversation() class="small-btn chat-search-btn">🔎</button></div><div id=replyPreview style="display:none;background:#17191c;color:#fff;padding:8px 10px;margin:8px;border-radius:12px;border-left:3px solid #ffcc19;position:absolute;top:58px;left:8px;right:8px;z-index:35"></div><div id=typingStatus class=typing style="position:absolute;top:64px;left:20px;right:20px;z-index:30;color:#aaa"></div><div id=msgs></div><div id=chatMediaPreview class=chat-media-preview></div><div id=chatVoiceReady class=chat-voice-ready><span class=voice-label>🎤 Voice message ready</span><audio id=voicePreview controls></audio><button onclick=clearRecordedAudio() style="border:0;background:#333;color:#fff;border-radius:10px;padding:7px">✕</button></div><div class=chat-bar><div class=chat-composer><button class="chat-circle voice" id=recordBtn onclick=startRecording() title="Record voice">🎤</button><div class=chat-input-wrap><input id=chatText placeholder="Type a message..." autocomplete=off><button onclick=toggleChatEmoji() title="Emoji">😊</button><button onclick=document.getElementById('chatFileHidden').click() title="Attach">📎</button><button onclick=document.getElementById('chatFileHidden').click() title="Photo / video">🖼️</button></div><input type=file id=chatFileHidden accept="image/*,video/*" style=display:none><button class="chat-circle send" id=sendBtn onclick=sendMsg title="Send">➤</button></div></div>`;
+  const pic=profiles[username]||'';
+  const avatar=pic?`<img src="${pic}" class="chat-head-avatar-img">`:`<span>${escapeHtml((username||'?')[0].toUpperCase())}</span>`;
+  box.innerHTML=`
+    <div class="chat-header gh-header">
+      <button onclick="backChat()" class="chat-back gh-back" aria-label="Back">‹</button>
+      <div class="chat-head-avatar">${avatar}<span id="chatHeadDot" class="head-dot"></span></div>
+      <div class="chat-head-info"><b>${escapeHtml(username)}</b><small id="chatOnlineState">Checking…</small></div>
+      <div class="chat-head-actions">
+        <button class="gh-head-btn" onclick="alert('Voice calls will be connected here.')">☎</button>
+        <button class="gh-head-btn" onclick="alert('Video calls will be connected here.')">▣</button>
+        <button class="gh-head-btn" onclick="chatMoreMenu()">⋮</button>
+      </div>
+    </div>
+    <div id="replyPreview" class="chat-reply-preview" style="display:none"></div>
+    <div id="typingStatus" class="typing"></div>
+    <div id="msgs"></div>
+    <div id="chatMediaPreview" class="chat-media-preview"></div>
+    <div id="chatVoiceReady" class="chat-voice-ready"><span class="voice-label">🎤 Voice message ready</span><audio id="voicePreview" controls></audio><button onclick="clearRecordedAudio()" class="mini-cancel">✕</button></div>
+    <div class="chat-bar">
+      <div class="chat-composer gh-composer">
+        <button class="composer-icon camera" onclick="document.getElementById('chatCameraHidden').click()" title="Camera">📷</button>
+        <div class="chat-input-wrap">
+          <input id="chatText" placeholder="Type a message..." autocomplete="off">
+          <button onclick="toggleChatEmoji()" title="Emoji">☺</button>
+        </div>
+        <button class="composer-icon" onclick="document.getElementById('chatFileHidden').click()" title="Attach">📎</button>
+        <button class="composer-icon" onclick="document.getElementById('chatFileHidden').click()" title="Photo / video">▣</button>
+        <input type="file" id="chatFileHidden" accept="image/*,video/*" style="display:none">
+        <input type="file" id="chatCameraHidden" accept="image/*" capture="environment" style="display:none">
+        <button class="chat-circle send" id="sendBtn" onclick="composerAction()" title="Send">🎤</button>
+      </div>
+      <div class="chat-tools-row"><button class="hold-record" id="holdRecordBtn" onclick="startRecording()"><span>🎤</span> Hold to record voice message</button><div class="quick-reactions"><button onclick="insertChatEmoji('❤️')">❤️</button><button onclick="insertChatEmoji('😂')">😂</button><button onclick="insertChatEmoji('👍')">👍</button><button onclick="insertChatEmoji('🔥')">🔥</button><button onclick="insertChatEmoji('😊')">＋</button></div></div>
+    </div>`;
   document.getElementById('chatFileHidden').addEventListener('change',function(e){let f=e.target.files[0];if(f){selectedChatFile=f;showSelectedChatFile(f);}});
-  document.getElementById('chatText').addEventListener('input',()=>sendTyping());
+  document.getElementById('chatCameraHidden').addEventListener('change',function(e){let f=e.target.files[0];if(f){selectedChatFile=f;showSelectedChatFile(f);}});
+  document.getElementById('chatText').addEventListener('input',()=>{sendTyping();updateSendButton();});
   document.getElementById('chatText').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}});
   if(window.typingTimer)clearInterval(window.typingTimer); window.typingTimer=setInterval(pollTyping,3500);
   loadMsgs();
-  fetch('/api/status/get?user='+encodeURIComponent(username)).then(r=>r.json()).then(st=>{let x=document.getElementById('chatOnlineState');if(x)x.innerHTML=st.online?'<span class=onlineDot></span> online':'<span class=offlineDot></span> offline';}).catch(()=>{});
+  fetch('/api/status/get?user='+encodeURIComponent(username)).then(r=>r.json()).then(st=>{let x=document.getElementById('chatOnlineState'),dot=document.getElementById('chatHeadDot');if(x)x.innerText=st.online?'Online':'Offline';if(dot)dot.classList.toggle('offline',!st.online);}).catch(()=>{});
   fetch('/api/messages/mark_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({with:username})}).catch(()=>{});
 }
+function insertChatEmoji(e){const i=document.getElementById('chatText');if(i){i.value+=(i.value?' ':'')+e;i.focus();sendTyping();}}
+function chatMoreMenu(){const c=chatWith;if(!c)return;const action=prompt('Chat options:\n1. Search conversation\n2. Clear local view\n3. Cancel','1');if(action==='1')searchConversation();else if(action==='2')document.getElementById('msgs').innerHTML='';}
 function toggleChatEmoji(){const input=document.getElementById('chatText');if(input){input.value += '😊';input.focus();sendTyping();}}
-function showSelectedChatFile(f){const box=document.getElementById('chatMediaPreview');if(!box)return;box.style.display='block';box.innerHTML=`<b>${f.type.startsWith('video/')?'🎬 Video':'🖼️ Photo'}</b> ${escapeHtml(f.name)} <span style="float:right;cursor:pointer" onclick="clearSelectedChatFile()">✕</span>`;if(f.type.startsWith('image/')){const u=URL.createObjectURL(f);box.innerHTML+=`<br><img src="${u}">`;}else if(f.type.startsWith('video/')){const u=URL.createObjectURL(f);box.innerHTML+=`<br><video src="${u}" muted playsinline></video>`;}document.getElementById('sendBtn')?.classList.add('ready');}
-function clearSelectedChatFile(){selectedChatFile=null;const i=document.getElementById('chatFileHidden');if(i)i.value='';const b=document.getElementById('chatMediaPreview');if(b){b.style.display='none';b.innerHTML='';}document.getElementById('sendBtn')?.classList.remove('ready');}
-function clearRecordedAudio(){recordedAudioFile=null;const b=document.getElementById('chatVoiceReady');if(b)b.style.display='none';const a=document.getElementById('voicePreview');if(a){a.pause();a.removeAttribute('src');a.load();}document.getElementById('sendBtn')?.classList.remove('ready');}
+function showSelectedChatFile(f){const box=document.getElementById('chatMediaPreview');if(!box)return;box.style.display='block';box.innerHTML=`<b>${f.type.startsWith('video/')?'🎬 Video':'🖼️ Photo'}</b> ${escapeHtml(f.name)} <span style="float:right;cursor:pointer" onclick="clearSelectedChatFile()">✕</span>`;if(f.type.startsWith('image/')){const u=URL.createObjectURL(f);box.innerHTML+=`<br><img src="${u}">`;}else if(f.type.startsWith('video/')){const u=URL.createObjectURL(f);box.innerHTML+=`<br><video src="${u}" muted playsinline></video>`;}updateSendButton();}
+function clearSelectedChatFile(){selectedChatFile=null;const i=document.getElementById('chatFileHidden');if(i)i.value='';const b=document.getElementById('chatMediaPreview');if(b){b.style.display='none';b.innerHTML='';}updateSendButton();}
+function clearRecordedAudio(){recordedAudioFile=null;const b=document.getElementById('chatVoiceReady');if(b)b.style.display='none';const a=document.getElementById('voicePreview');if(a){a.pause();a.removeAttribute('src');a.load();}updateSendButton();}
 async function searchConversation(){if(!chatWith)return;let q=prompt('Search this conversation:');if(!q)return;let r=await fetch('/api/messages/search?with='+encodeURIComponent(chatWith)+'&q='+encodeURIComponent(q));let d=await r.json();alert(d.map(m=>(m.sender===curUser?'You':m.sender)+': '+m.text).join('\\n')||'No matching messages');}
 function backChat(){
   chatWith='';
@@ -761,8 +804,9 @@ function backChat(){
 
 function appendOptimisticMessage(text,reply){const el=document.getElementById('msgs');if(!el)return null;const row=document.createElement('div');row.className='msg-row me';row.innerHTML=`<span class="msg-bubble out pending-msg">${reply?`<div class=reply-quote><b>You</b>${escapeHtml(reply)}</div>`:''}${escapeHtml(text)}<span class=msg-time>${new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span><span class=msg-tick>✓</span></span>`;el.appendChild(row);el.scrollTop=el.scrollHeight;return row;}
 let mediaRecorder=null,recordChunks=[],recordedAudioFile=null;
-function updateSendButton(){const b=document.getElementById('sendBtn');if(b)b.innerText=(recordedAudioFile||selectedChatFile||((document.getElementById('chatText')||{}).value||'').trim())?'➤':'➤';}
-function setRecordingUi(on){const b=document.getElementById('recordBtn');if(!b)return;b.classList.toggle('recording',on);b.innerText=on?'■':'🎤';b.title=on?'Stop recording':'Record voice';}
+function updateSendButton(){const b=document.getElementById('sendBtn');if(!b)return;const has=!!(recordedAudioFile||selectedChatFile||((document.getElementById('chatText')||{}).value||'').trim());b.innerText=has?'➤':'🎤';b.title=has?'Send':'Record voice';b.classList.toggle('ready',has);}
+function composerAction(){const b=document.getElementById('sendBtn');if(mediaRecorder&&mediaRecorder.state==='recording'){try{mediaRecorder.stop();}catch(e){}return;}if(recordedAudioFile||selectedChatFile||((document.getElementById('chatText')||{}).value||'').trim()){sendMsg();}else{startRecording();}}
+function setRecordingUi(on){const b=document.getElementById('sendBtn'),h=document.getElementById('holdRecordBtn');if(b){b.innerText=on?'■':'🎤';b.title=on?'Stop recording':'Record voice';b.classList.toggle('recording',on);}if(h){h.classList.toggle('recording',on);h.innerHTML=on?'⏹ Stop recording':'<span>🎤</span> Hold to record voice message';}}
 async function sendMsg(){
   if(!chatWith){alert('Please select a user first.');return;}
   const input=document.getElementById('chatText'), fileInput=document.getElementById('chatFileHidden');
@@ -776,6 +820,7 @@ async function sendMsg(){
   if(selectedChatFile)clearSelectedChatFile();
   if(recordedAudioFile)clearRecordedAudio();
   cancelReply();
+  updateSendButton();
   const fd=new FormData();fd.append('receiver',receiver);fd.append('text',text);if(reply)fd.append('reply_to',reply);if(file){fd.append('media',file);fd.append('media_type',isAudio?'audio':(file.type.startsWith('video/')?'video':'image'));}
   try{
     const r=await fetch('/api/send',{method:'POST',body:fd,credentials:'same-origin'});const d=await r.json().catch(()=>({}));
@@ -784,8 +829,46 @@ async function sendMsg(){
     setTimeout(()=>{if(chatWith===receiver)loadMsgs(true);},250);
   }catch(e){if(optimistic)optimistic.remove();alert('Could not send message. Please check the server connection.');}
 }
-async function loadMsgs(silent=false){if(!chatWith)return;if(window.msgAbort)window.msgAbort.abort();window.msgAbort=new AbortController();try{let r=await fetch('/api/messages?with='+encodeURIComponent(chatWith),{signal:window.msgAbort.signal});let msgs=await r.json();let h='';msgs.forEach(m=>{let mu=m.media_url||'',low=mu.toLowerCase(),media='';if(mu){if(m.media_type==='video'||/\.(mp4|mov|webm|m4v|avi)(\?|$)/i.test(low))media=`<br><video src="${mu}" controls playsinline style="width:min(260px,100%);max-height:300px;border-radius:14px;margin-top:7px"></video>`;else if(m.media_type==='audio'||/\.(mp3|wav|ogg|m4a|aac|webm)(\?|$)/i.test(low))media=`<br><audio src="${mu}" controls class=voice-audio controlslist="nodownload noplaybackrate"></audio>`;else media=`<br><img src="${mu}" loading="lazy" style="max-width:260px;max-height:300px;border-radius:14px;margin-top:7px;object-fit:cover">`;}let isMe=m.sender==curUser,tick=isMe?(m.read?'✓✓':'✓'):'',text=m.deleted?'This message was deleted':(m.text||'');let reply=m.reply_to?`<div class=reply-quote><b>${escapeHtml(m.sender)}</b>${escapeHtml(m.reply_to)}<span class=swipe-hint>↩ Swipe to reply</span></div>`:`<span class=swipe-hint>↩ Swipe to reply</span>`;let reactions=(m.reactions||[]).map(x=>`${x.reaction} ${x.count}`).join(' · ');let edit=isMe&&!m.deleted?`<button onclick="event.stopPropagation();editMsg(${m.id},${JSON.stringify(m.text||'')})">Edit</button>`:'';let del=isMe&&!m.deleted?`<button onclick="event.stopPropagation();deleteMsg(${m.id})">Delete</button>`:'';h+=`<div class="msg-row ${isMe?'me':''}"><span data-reply-text="${escapeHtml(text.slice(0,80))}" class="msg-bubble ${isMe?'out':'in'}" onclick="setReply(${JSON.stringify(text.slice(0,80))})">${reply}${escapeHtml(text)}${media}<div><span class=msg-time>${escapeHtml((m.created_at||'').slice(11,16))}</span><span class=msg-tick>${tick}</span></div><div class=reaction-row>${escapeHtml(reactions)}</div><div class=msg-actions><button onclick="event.stopPropagation();setReply(${JSON.stringify(text.slice(0,80))})">↩ Reply</button><button onclick="event.stopPropagation();reactMsg(${m.id},'❤️')">❤️</button><button onclick="event.stopPropagation();reactMsg(${m.id},'😂')">😂</button><button onclick="event.stopPropagation();reactMsg(${m.id},'👍')">👍</button>${edit}${del}</div></span></div>`;});let el=document.getElementById('msgs');if(!el)return;let nearBottom=el.scrollHeight-el.scrollTop-el.clientHeight<80;el.innerHTML=h||'<div style="text-align:center;color:#888;padding:30px">Start the conversation</div>';if(!silent||nearBottom)requestAnimationFrame(()=>{el.scrollTop=el.scrollHeight;});}catch(e){if(e.name!=='AbortError')console.error(e);}}
-function escapeHtml(s){return String(s||'').replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]));}
+function renderAudioBubble(m){
+  const aid='aud_'+m.id;
+  const bars=Array.from({length:24},(_,i)=>`<i style="height:${8+(i%7)*3}px"></i>`).join('');
+  return `<div class="voice-bubble"><button class="voice-play" onclick="event.stopPropagation();toggleVoice('${aid}',this)">▶</button><div class="waveform">${bars}</div><span class="voice-len" id="${aid}_len">0:00</span><audio id="${aid}" src="${escapeHtml(m.media_url||'')}" preload="metadata" onloadedmetadata="setAudioDuration('${aid}',this.duration)" ontimeupdate="setAudioProgress('${aid}',this.currentTime)"></audio></div>`;
+}
+function toggleVoice(id,btn){const a=document.getElementById(id);if(!a)return;if(a.paused){document.querySelectorAll('#msgs audio').forEach(x=>{if(x!==a)x.pause()});a.play();btn.innerText='❚❚';}else{a.pause();btn.innerText='▶';}}
+function setAudioDuration(id,d){if(!isFinite(d))return;const el=document.getElementById(id+'_len');if(el)el.innerText=formatAudioTime(d);}
+function setAudioProgress(id,t){const el=document.getElementById(id+'_len');if(el&&isFinite(t))el.innerText=formatAudioTime(t);}
+function formatAudioTime(v){v=Math.max(0,Math.floor(v||0));return Math.floor(v/60)+':'+String(v%60).padStart(2,'0');}
+function showMessageActions(id,sender,text,canEdit){
+  document.getElementById('msgActionSheet')?.remove();
+  const own=sender===curUser;
+  const sheet=document.createElement('div');sheet.id='msgActionSheet';sheet.className='msg-sheet-backdrop';
+  sheet.innerHTML=`<div class="msg-sheet" onclick="event.stopPropagation()"><div class="sheet-handle"></div><div class="sheet-msg-preview">${escapeHtml((text||'This message was deleted').slice(0,180))}</div><div class="reaction-pills"><button onclick="reactMsg(${id},'❤️');closeMsgSheet()">❤️</button><button onclick="reactMsg(${id},'😂');closeMsgSheet()">😂</button><button onclick="reactMsg(${id},'👍');closeMsgSheet()">👍</button><button onclick="reactMsg(${id},'🔥');closeMsgSheet()">🔥</button><button onclick="reactMsg(${id},'😮');closeMsgSheet()">😮</button></div><button class="sheet-action" onclick="setReply(${JSON.stringify((text||'').slice(0,120))});closeMsgSheet()">↩ Reply</button>${own&&!text.includes('deleted')&&canEdit?`<button class="sheet-action" onclick="editMsg(${id},${JSON.stringify(text||'')});closeMsgSheet()">✏️ Edit</button>`:''}${own?`<button class="sheet-action danger" onclick="deleteMsg(${id});closeMsgSheet()">🗑 Delete</button>`:''}<button class="sheet-action" onclick="closeMsgSheet()">Cancel</button></div>`;
+  sheet.onclick=closeMsgSheet;document.body.appendChild(sheet);
+}
+function closeMsgSheet(){document.getElementById('msgActionSheet')?.remove();}
+async function loadMsgs(silent=false){
+  if(!chatWith)return;if(window.msgAbort)window.msgAbort.abort();window.msgAbort=new AbortController();
+  try{
+    let r=await fetch('/api/messages?with='+encodeURIComponent(chatWith),{signal:window.msgAbort.signal});let msgs=await r.json();let h='';
+    msgs.forEach(m=>{
+      const mu=m.media_url||'',low=mu.toLowerCase();const isMe=m.sender===curUser;
+      let media='';
+      if(mu){
+        if(m.media_type==='video'||/\.(mp4|mov|webm|m4v|avi)(\?|$)/i.test(low)) media=`<div class="video-bubble"><video src="${escapeHtml(mu)}" controls playsinline preload="metadata"></video><span class="video-share">↗</span></div>`;
+        else if(m.media_type==='audio'||/\.(mp3|wav|ogg|m4a|aac|webm)(\?|$)/i.test(low)) media=renderAudioBubble(m);
+        else media=`<div class="image-bubble"><img src="${escapeHtml(mu)}" loading="lazy"></div>`;
+      }
+      const tick=isMe?(m.read?'✓✓':'✓'):'';const text=m.deleted?'This message was deleted':(m.text||'');
+      let reply=m.reply_to?`<div class="reply-quote"><b>${escapeHtml(m.sender)}</b><span>${escapeHtml(m.reply_to)}</span></div>`:'';
+      let reactions=(m.reactions||[]).map(x=>`${x.reaction}${x.count>1?' '+x.count:''}`).join(' ');
+      const time=(m.created_at||'').slice(11,16);const bubbleClass=isMe?'out':'in';
+      h+=`<div class="msg-row ${isMe?'me':''}" data-mid="${m.id}"><div class="msg-avatar">${profiles[m.sender]?`<img src="${profiles[m.sender]}" loading="lazy">`:`${escapeHtml((m.sender||'?')[0].toUpperCase())}`}</div><div class="msg-column"><div class="msg-bubble ${bubbleClass}" data-reply-text="${escapeHtml(text.slice(0,120))}" ontouchstart="beginMsgSwipe(event,${m.id},${JSON.stringify(text.slice(0,120))})" onclick="showMessageActions(${m.id},${JSON.stringify(m.sender)},${JSON.stringify(text)},${!m.deleted})">${reply}${text?`<div class="msg-text">${escapeHtml(text)}</div>`:''}${media}<div class="msg-meta"><span>${escapeHtml(time)}</span>${isMe?`<span class="msg-tick">${tick}</span>`:''}</div></div>${reactions?`<div class="reaction-row">${escapeHtml(reactions)}</div>`:''}</div></div>`;
+    });
+    const el=document.getElementById('msgs');if(!el)return;const nearBottom=el.scrollHeight-el.scrollTop-el.clientHeight<100;el.innerHTML=h||'<div class="empty-chat">Start the conversation</div>';if(!silent||nearBottom)requestAnimationFrame(()=>{el.scrollTop=el.scrollHeight;});
+  }catch(e){if(e.name!=='AbortError')console.error(e);}
+}
+function beginMsgSwipe(ev,id,text){const t=ev.touches?.[0];if(!t)return;window.msgSwipe={x:t.clientX,y:t.clientY,id,text};}
+document.addEventListener('touchend',function(e){const s=window.msgSwipe;if(!s||!e.changedTouches?.[0])return;const t=e.changedTouches[0],dx=t.clientX-s.x,dy=t.clientY-s.y;if(Math.abs(dx)>70&&Math.abs(dx)>Math.abs(dy)){setReply(s.text);const p=document.getElementById('replyPreview');if(p){p.style.display='block';p.innerHTML=`<b>Replying to message</b><span>${escapeHtml(s.text)}</span>`;}}window.msgSwipe=null;},{passive:true});
 async function reactMsg(id,reaction){let r=await fetch('/api/message/react',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,reaction})});let d=await r.json();if(d.ok)loadMsgs();}
 async function editMsg(id,current){let t=prompt('Edit message:',current||'');if(t===null)return;let r=await fetch('/api/message/edit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,text:t})});let d=await r.json();if(!d.ok)alert(d.error||'Could not edit');loadMsgs();}
 async function deleteMsg(id){if(!confirm('Delete this message?'))return;let r=await fetch('/api/message/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});let d=await r.json();if(!d.ok)alert(d.error||'Could not delete');loadMsgs();}
@@ -1094,8 +1177,23 @@ def api_friend_request():
         # be missing even though the login account exists.
         q_user = "SELECT username FROM auth WHERE username=%s" if USE_POSTGRES else "SELECT username FROM auth WHERE username=?"
         c.execute(q_user, (to,))
-        if not c.fetchone():
-            return jsonify({"ok":False,"error":"User not found"}),404
+        account_exists = bool(c.fetchone())
+        if not account_exists:
+            # Older Prove Am installs may have a profile row for a visible user
+            # even when the legacy auth row is missing. A friend request should
+            # still be stored against the existing visible account.
+            qp_exists = "SELECT username FROM profiles WHERE username=%s" if USE_POSTGRES else "SELECT username FROM profiles WHERE username=?"
+            c.execute(qp_exists, (to,))
+            if not c.fetchone():
+                return jsonify({"ok":False,"error":"User not found"}),404
+
+        # Some older accounts have an auth row but no profile row. Create it so the
+        # search/friends UI and the request can use the same account consistently.
+        try:
+            qp="INSERT INTO profiles (username,pic_url,last_seen) VALUES (%s,%s,%s) ON CONFLICT (username) DO NOTHING" if USE_POSTGRES else "INSERT OR IGNORE INTO profiles (username,pic_url,last_seen) VALUES (?,?,?)"
+            c.execute(qp,(to,"",datetime.now().isoformat()))
+        except Exception:
+            pass
 
         q = (
             "SELECT sender,receiver,status FROM friends WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s)"
@@ -1543,6 +1641,9 @@ def api_send():
     reply_to = (request.form.get('reply_to') or '')[:100]
     f = request.files.get('media')
     media_type = (request.form.get('media_type') or '').strip().lower()[:20]
+    if not media_type and f and f.filename:
+        mt=(f.mimetype or '').lower()
+        media_type='audio' if mt.startswith('audio/') else ('video' if mt.startswith('video/') else 'image')
 
     if not me:
         return jsonify({"ok":False,"error":"Not logged in"}),401
