@@ -2113,6 +2113,58 @@ def api_global_search():
 @app.route('/static/uploads/<path:filename>')
 def uploads(filename): return send_from_directory('static/uploads', filename)
 
+# PROVE_AM_PWA_BEGIN
+# Minimal PWA layer: installability only. It does not intercept requests or cache
+# application data, so existing chat/story/realtime behavior remains unchanged.
+@app.route('/manifest.json')
+def pwa_manifest():
+    return jsonify({
+        "name": "Prove-am",
+        "short_name": "Prove-am",
+        "start_url": "/",
+        "scope": "/",
+        "display": "standalone",
+        "background_color": "#ffffff",
+        "theme_color": "#111111",
+        "description": "Prove-am messaging and social app",
+        "icons": [
+            {"src": "/pwa-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": "/pwa-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+        ]
+    })
+
+@app.route('/pwa-icon-192.png')
+def pwa_icon_192():
+    return send_file(BytesIO(base64.b64decode(PROVE_AM_LOGO_B64)), mimetype='image/jpeg')
+
+@app.route('/pwa-icon-512.png')
+def pwa_icon_512():
+    return send_file(BytesIO(base64.b64decode(PROVE_AM_LOGO_B64)), mimetype='image/jpeg')
+
+@app.route('/sw.js')
+def pwa_service_worker():
+    return Response(
+        """self.addEventListener('install', event => self.skipWaiting());
+self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));
+""",
+        mimetype='application/javascript'
+    )
+
+@app.after_request
+def add_pwa_install_tags(response):
+    try:
+        if response.content_type and response.content_type.startswith('text/html'):
+            html = response.get_data(as_text=True)
+            if 'rel="manifest"' not in html and '</head>' in html.lower():
+                tag = '''<link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#111111"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Prove-am"><script>if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}));}</script>'''
+                pos = html.lower().find('</head>')
+                html = html[:pos] + tag + html[pos:]
+                response.set_data(html)
+    except Exception:
+        pass
+    return response
+# PROVE_AM_PWA_END
+
 application = socket_app
 
 # Render currently starts `app:app`. Expose the Socket.IO WSGI wrapper there so
