@@ -1683,7 +1683,7 @@ if sio is not None:
 
     @sio.event
     def send_message(sid, data):
-        """Fast text-message path: save + deliver over the already-open Socket.IO connection."""
+        """Low-latency text-message path: one DB connection, one validation query, then immediate Socket.IO delivery."""
         try:
             sess = sio.get_session(sid) or {}
             me = session.get('username') or sess.get('username')
@@ -1697,19 +1697,54 @@ if sio is not None:
             conn = get_conn()
             c = conn.cursor()
             try:
-                if is_blocked(me, other) or is_blocked(other, me):
-                    return {'ok': False, 'error': 'Messaging is unavailable between these accounts'}
-
-                qp = "SELECT message_privacy FROM profiles WHERE username=%s" if USE_POSTGRES else "SELECT message_privacy FROM profiles WHERE username=?"
-                c.execute(qp, (other,))
-                pr = c.fetchone()
-                if pr and (pr[0] or 'friends') == 'friends' and not is_friend(me, other):
+                # Validate the recipient, privacy and friendship in the same DB round-trip.
+                if USE_POSTGRES:
+                    c.execute(
+                        """SELECT a.username, COALESCE(p.message_privacy,'friends'),
+                                  EXISTS(
+                                    SELECT 1 FROM friends f
+                                    WHERE ((f.sender=%s AND f.receiver=%s) OR
+                                           (f.sender=%s AND f.receiver=%s))
+                                      AND f.status='accepted'
+                                  )
+                           FROM auth a
+                           LEFT JOIN profiles p ON p.username=a.username
+                           WHERE a.username=%s
+                           LIMIT 1""",
+                        (me, other, other, me, other)
+                    )
+                else:
+                    c.execute(
+                        """SELECT a.username, COALESCE(p.message_privacy,'friends'),
+                                  EXISTS(
+                                    SELECT 1 FROM friends f
+                                    WHERE ((f.sender=? AND f.receiver=?) OR
+                                           (f.sender=? AND f.receiver=?))
+                                      AND f.status='accepted'
+                                  )
+                           FROM auth a
+                           LEFT JOIN profiles p ON p.username=a.username
+                           WHERE a.username=?
+                           LIMIT 1""",
+                        (me, other, other, me, other)
+                    )
+                recipient = c.fetchone()
+                if not recipient:
+                    return {'ok': False, 'error': 'Recipient not found'}
+                privacy = recipient[1] or 'friends'
+                friend = bool(recipient[2])
+                if privacy == 'friends' and not friend:
                     return {'ok': False, 'error': 'This user only accepts messages from friends'}
 
-                qu = "SELECT username FROM auth WHERE username=%s" if USE_POSTGRES else "SELECT username FROM auth WHERE username=?"
-                c.execute(qu, (other,))
-                if not c.fetchone():
-                    return {'ok': False, 'error': 'Recipient not found'}
+                # Check both block directions without opening another connection.
+                qb = (
+                    "SELECT 1 FROM blocked_users WHERE (blocker=%s AND blocked=%s) OR (blocker=%s AND blocked=%s) LIMIT 1"
+                    if USE_POSTGRES else
+                    "SELECT 1 FROM blocked_users WHERE (blocker=? AND blocked=?) OR (blocker=? AND blocked=?) LIMIT 1"
+                )
+                c.execute(qb, (me, other, other, me))
+                if c.fetchone():
+                    return {'ok': False, 'error': 'Messaging is unavailable between these accounts'}
 
                 now = datetime.now().isoformat()
                 if USE_POSTGRES:
@@ -1725,13 +1760,14 @@ if sio is not None:
                         (me, other, txt, '', reply_to, now, '')
                     )
                     msg_id = c.lastrowid
-
                 conn.commit()
+
                 payload = {
                     'ok': True, 'id': msg_id, 'sender': me, 'receiver': other,
                     'text': txt, 'media_url': '', 'reply_to': reply_to, 'read': 0,
                     'deleted': False, 'created_at': now, 'media_type': ''
                 }
+                # Deliver first; notification persistence happens in the background.
                 sio.emit('chat_message', payload, room='pm:'+other)
                 notify_async(other, 'message', me, me+' sent you a message')
                 return payload
