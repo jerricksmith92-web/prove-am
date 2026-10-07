@@ -104,7 +104,7 @@ def nuclear_repair():
                 "CREATE TABLE IF NOT EXISTS posts (id SERIAL PRIMARY KEY, username TEXT, text TEXT, media_url TEXT, created_at TEXT)",
                 "CREATE TABLE IF NOT EXISTS post_likes (post_id INT, username TEXT, PRIMARY KEY(post_id,username))",
                 "CREATE TABLE IF NOT EXISTS comments (id SERIAL PRIMARY KEY, post_id INT, username TEXT, text TEXT, created_at TEXT)",
-                "CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, sender TEXT, receiver TEXT, text TEXT, media_url TEXT, created_at TEXT, read INT DEFAULT 0, reply_to TEXT)",
+                "CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, sender TEXT, receiver TEXT, text TEXT, media_url TEXT, created_at TEXT, read INT DEFAULT 0, reply_to TEXT, media_type TEXT)",
                 "CREATE TABLE IF NOT EXISTS stories (id SERIAL PRIMARY KEY, username TEXT, media_url TEXT, text TEXT, created_at TEXT, expires_at TEXT)",
                 "CREATE TABLE IF NOT EXISTS story_views (story_id INT, viewer TEXT, PRIMARY KEY(story_id,viewer))",
                 "CREATE TABLE IF NOT EXISTS friends (id SERIAL PRIMARY KEY, sender TEXT, receiver TEXT, status TEXT, created_at TEXT)",
@@ -125,7 +125,7 @@ def nuclear_repair():
                 "CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, text TEXT, media_url TEXT, created_at TEXT)",
                 "CREATE TABLE IF NOT EXISTS post_likes (post_id INT, username TEXT, PRIMARY KEY(post_id,username))",
                 "CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INT, username TEXT, text TEXT, created_at TEXT)",
-                "CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, sender TEXT, receiver TEXT, text TEXT, media_url TEXT, created_at TEXT, read INT DEFAULT 0, reply_to TEXT)",
+                "CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, sender TEXT, receiver TEXT, text TEXT, media_url TEXT, created_at TEXT, read INT DEFAULT 0, reply_to TEXT, media_type TEXT)",
                 "CREATE TABLE IF NOT EXISTS stories (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, media_url TEXT, text TEXT, created_at TEXT, expires_at TEXT)",
                 "CREATE TABLE IF NOT EXISTS story_views (story_id INT, viewer TEXT, PRIMARY KEY(story_id,viewer))",
                 "CREATE TABLE IF NOT EXISTS friends (id INTEGER PRIMARY KEY AUTOINCREMENT, sender TEXT, receiver TEXT, status TEXT, created_at TEXT)",
@@ -147,7 +147,7 @@ def nuclear_repair():
         conn.close()
     cols=[
         ("profiles","cover_url","TEXT"),("profiles","private_account","INT DEFAULT 0"),("profiles","message_privacy","TEXT DEFAULT 'friends'"),("profiles","show_last_seen","INT DEFAULT 1"),("profiles","show_read_receipts","INT DEFAULT 1"),
-        ("messages","edited_at","TEXT"),("messages","deleted_at","TEXT"),("posts","shared_post_id","INT"),("posts","edited_at","TEXT"),("auth","session_version","INT DEFAULT 1")]
+        ("messages","edited_at","TEXT"),("messages","deleted_at","TEXT"),("messages","media_type","TEXT"),("posts","shared_post_id","INT"),("posts","edited_at","TEXT"),("auth","session_version","INT DEFAULT 1")]
     for tbl,col,typ in cols:
         run_alter(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col} {typ}" if USE_POSTGRES else f"ALTER TABLE {tbl} ADD COLUMN {col} {typ}")
     print("DATABASE REPAIR COMPLETE")
@@ -162,7 +162,7 @@ def init_db():
         c.execute("CREATE TABLE IF NOT EXISTS posts (id SERIAL PRIMARY KEY, username TEXT, text TEXT, media_url TEXT, created_at TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS post_likes (post_id INT, username TEXT, PRIMARY KEY(post_id,username))")
         c.execute("CREATE TABLE IF NOT EXISTS comments (id SERIAL PRIMARY KEY, post_id INT, username TEXT, text TEXT, created_at TEXT)")
-        c.execute("CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, sender TEXT, receiver TEXT, text TEXT, media_url TEXT, created_at TEXT, read INT DEFAULT 0, reply_to TEXT)")
+        c.execute("CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, sender TEXT, receiver TEXT, text TEXT, media_url TEXT, created_at TEXT, read INT DEFAULT 0, reply_to TEXT, media_type TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS stories (id SERIAL PRIMARY KEY, username TEXT, media_url TEXT, text TEXT, created_at TEXT, expires_at TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS story_views (story_id INT, viewer TEXT, PRIMARY KEY(story_id,viewer))")
         c.execute("CREATE TABLE IF NOT EXISTS story_reactions (story_id INT, username TEXT, reaction TEXT, PRIMARY KEY(story_id,username))")
@@ -175,7 +175,7 @@ def init_db():
         c.execute("CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, text TEXT, media_url TEXT, created_at TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS post_likes (post_id INT, username TEXT, PRIMARY KEY(post_id,username))")
         c.execute("CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INT, username TEXT, text TEXT, created_at TEXT)")
-        c.execute("CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, sender TEXT, receiver TEXT, text TEXT, media_url TEXT, created_at TEXT, read INT DEFAULT 0, reply_to TEXT)")
+        c.execute("CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, sender TEXT, receiver TEXT, text TEXT, media_url TEXT, created_at TEXT, read INT DEFAULT 0, reply_to TEXT, media_type TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS stories (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, media_url TEXT, text TEXT, created_at TEXT, expires_at TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS story_views (story_id INT, viewer TEXT, PRIMARY KEY(story_id,viewer))")
         c.execute("CREATE TABLE IF NOT EXISTS story_reactions (story_id INT, username TEXT, reaction TEXT, PRIMARY KEY(story_id,username))")
@@ -206,7 +206,7 @@ def init_db():
         c.execute("CREATE TABLE IF NOT EXISTS user_typing (username TEXT, peer TEXT, last_seen REAL, PRIMARY KEY(username,peer))")
         c.execute("CREATE TABLE IF NOT EXISTS user_settings (username TEXT PRIMARY KEY, private_account INT DEFAULT 0, message_privacy TEXT DEFAULT 'friends', show_last_seen INT DEFAULT 1, show_read_receipts INT DEFAULT 1)")
     # New profile/message/auth columns for upgraded installs.
-    for tbl,col,typ in [("profiles","cover_url","TEXT"),("profiles","private_account","INT DEFAULT 0"),("profiles","message_privacy","TEXT DEFAULT 'friends'"),("profiles","show_last_seen","INT DEFAULT 1"),("profiles","show_read_receipts","INT DEFAULT 1"),("messages","edited_at","TEXT"),("messages","deleted_at","TEXT"),("posts","shared_post_id","INT") ,("posts","edited_at","TEXT"),("auth","session_version","INT DEFAULT 1")]:
+    for tbl,col,typ in [("profiles","cover_url","TEXT"),("profiles","private_account","INT DEFAULT 0"),("profiles","message_privacy","TEXT DEFAULT 'friends'"),("profiles","show_last_seen","INT DEFAULT 1"),("profiles","show_read_receipts","INT DEFAULT 1"),("messages","edited_at","TEXT"),("messages","deleted_at","TEXT"),("messages","media_type","TEXT"),("posts","shared_post_id","INT") ,("posts","edited_at","TEXT"),("auth","session_version","INT DEFAULT 1")]:
         try:
             c.execute((f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col} {typ}") if USE_POSTGRES else (f"ALTER TABLE {tbl} ADD COLUMN {col} {typ}"))
         except Exception:
@@ -377,7 +377,20 @@ button,input,textarea,select,a{pointer-events:auto;touch-action:manipulation}
   .chat-screen #msgs{top:54px;bottom:64px;padding-bottom:24px!important}
 }
 
-/* Reference-style chat UI */
+/* Reference-style GH NOT chat UI */
+.chat-screen{background:#030303;background-image:radial-gradient(circle at 50% 45%,rgba(201,162,39,.08),transparent 42%),linear-gradient(rgba(0,0,0,.86),rgba(0,0,0,.92)),url('/app-icon.jpg');background-size:auto,auto,260px;background-repeat:no-repeat;background-position:center;}
+.chat-screen .chat-header{background:rgba(10,10,10,.92);backdrop-filter:blur(10px);height:58px;padding:7px 10px;display:flex;gap:8px;align-items:center;}
+.chat-screen .chat-header .chat-back{background:#151515;color:#fff;border-color:#2d2d2d;border-radius:14px;min-height:42px;}
+.chat-screen #msgs{padding:12px 12px 112px!important;}
+.msg-row{display:flex;margin:8px 0;width:100%;touch-action:pan-y}.msg-row.me{justify-content:flex-end}
+.msg-bubble{position:relative;display:inline-block;max-width:min(80%,430px);padding:9px 12px;border-radius:18px;word-break:break-word;box-shadow:0 2px 10px rgba(0,0,0,.18);cursor:pointer;pointer-events:auto;font-size:15px;line-height:1.28}.msg-bubble.in{background:#24272b;color:#fff;border:1px solid #34383d;border-bottom-left-radius:7px}.msg-bubble.out{background:#ffcc19;color:#090909;border:1px solid #e7b800;border-bottom-right-radius:7px}
+.msg-time{font-size:10px;opacity:.58;margin-left:7px;white-space:nowrap}.msg-tick{font-size:10px;margin-left:4px}.reply-quote{border-left:3px solid #ffcc19;background:rgba(0,0,0,.18);padding:6px 8px;border-radius:8px;margin:-1px 0 6px;font-size:12px}.reply-quote b{display:block;margin-bottom:2px}.swipe-hint{display:block;color:#ffcc19;font-size:10px;font-weight:800;margin-top:3px}.msg-actions{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px}.msg-actions button{font-size:10px;padding:4px 7px;border-radius:10px;border:1px solid rgba(128,128,128,.35);background:rgba(0,0,0,.12);color:inherit}
+.reaction-row{font-size:12px;margin-top:3px;opacity:.95}
+.chat-composer{position:absolute;left:8px;right:8px;bottom:8px;z-index:50;display:flex;align-items:center;gap:7px;padding:6px;border:1px solid #333;background:rgba(12,12,12,.96);border-radius:28px;box-shadow:0 4px 24px rgba(0,0,0,.35)}
+.chat-input-wrap{min-width:0;flex:1;display:flex;align-items:center;gap:5px;background:#1b1d20;border:1px solid #303236;border-radius:23px;padding:0 7px 0 12px;min-height:43px}.chat-input-wrap input{min-width:0;flex:1;background:transparent;border:0;outline:0;color:#fff;font-size:15px;height:41px}.chat-input-wrap button{border:0;background:transparent;color:#fff;font-size:19px;padding:4px;line-height:1}.chat-circle{width:43px;height:43px;flex:0 0 43px;border:0;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer}.chat-circle.voice{background:#181a1d;color:#fff;border:1px solid #34373b}.chat-circle.voice.recording{background:#b91c1c;color:#fff}.chat-circle.send{background:#ffcc19;color:#111;font-size:20px}.chat-circle.send.ready{box-shadow:0 0 0 2px rgba(255,204,25,.18)}
+.chat-media-preview{position:absolute;left:12px;right:12px;bottom:62px;z-index:45;background:#17191c;border:1px solid #333;border-radius:14px;padding:7px;display:none;color:#fff;font-size:12px}.chat-media-preview img,.chat-media-preview video{max-width:110px;max-height:75px;border-radius:9px;vertical-align:middle}.chat-voice-ready{position:absolute;left:12px;right:12px;bottom:62px;z-index:44;background:#17191c;border:1px solid #333;border-radius:14px;padding:8px;display:none;color:#fff;align-items:center;gap:8px}.chat-voice-ready .voice-label{flex:1;font-size:12px}.chat-voice-ready audio{width:145px;height:28px}
+.chat-bar{position:absolute!important;left:0;right:0;bottom:0;padding:0!important;background:transparent!important;border:0!important;height:0!important}.voice-audio{width:150px;height:30px;max-width:150px}
+
 .chat-screen{background:#030303;background-image:radial-gradient(circle at 50% 45%,rgba(201,162,39,.08),transparent 42%),linear-gradient(rgba(0,0,0,.86),rgba(0,0,0,.92)),url('/app-icon.jpg');background-size:auto,auto,260px;background-repeat:no-repeat;background-position:center;}
 .chat-screen .chat-header{background:rgba(10,10,10,.88);backdrop-filter:blur(10px)}
 .chat-screen .chat-header .chat-back{background:#151515;color:#fff;border-color:#2d2d2d}
@@ -542,6 +555,7 @@ function connectRealtime(){
   if(typeof io!=='function')return;
   try{
     realtimeSocket=io({transports:['polling','websocket'],reconnection:true,reconnectionDelay:250});
+    realtimeSocket.on('connect',()=>realtimeSocket.emit('identify'));
     realtimeSocket.on('chat_message',m=>{if(m&&chatWith===m.sender)loadMsgs(true);else if(m)loadChatUsers();});
     realtimeSocket.on('chat_read',d=>{if(d&&chatWith===d.by)loadMsgs(true);});
     realtimeSocket.on('chat_typing',d=>{if(d&&chatWith===d.from){let el=document.getElementById('typingStatus');if(el)el.innerText=d.typing?(d.from+' is typing…'):'';}});
@@ -721,15 +735,19 @@ function openChat(username){
   const users=document.getElementById('chatUsers'), search=document.getElementById('searchChat'), box=document.getElementById('chatBox');
   if(users)users.style.display='none'; if(search)search.style.display='none'; if(!box)return;
   box.style.display='block';
-  // Draw the chat immediately. Status is intentionally loaded in the background.
-  box.innerHTML=`<div class=chat-header><button onclick=backChat() class=chat-back>← ${escapeHtml(username)} <span id=chatOnlineState></span></button><button onclick=searchConversation() class=small-btn chat-search-btn>🔎 Search</button></div><div id=replyPreview style="display:none;background:#24272b;color:#fff;padding:8px;margin:8px;border-radius:10px;border-left:3px solid #ffcc19;flex:0 0 auto"></div><div id=typingStatus class=typing style="flex:0 0 auto"></div><div id=msgs></div><div class=chat-bar><input id=chatText class=pill placeholder="Type a message..." autocomplete=off /><input type=file id=chatFileHidden accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" multiple style=display:none><button class=sticker onclick=startRecording()>🎤</button><div class=sticker onclick="document.getElementById('chatFileHidden').click()">📎</div><button class=yellow onclick=sendMsg()>Send</button></div>`;
-  document.getElementById('chatFileHidden').addEventListener('change',function(e){let f=e.target.files[0];if(f)selectedChatFile=f;});
-  document.getElementById('chatText').addEventListener('input',()=>sendTyping());document.getElementById('chatText').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}});
+  box.innerHTML=`<div class=chat-header><button onclick=backChat() class=chat-back>← ${escapeHtml(username)} <span id=chatOnlineState></span></button><button onclick=searchConversation() class="small-btn chat-search-btn">🔎</button></div><div id=replyPreview style="display:none;background:#17191c;color:#fff;padding:8px 10px;margin:8px;border-radius:12px;border-left:3px solid #ffcc19;position:absolute;top:58px;left:8px;right:8px;z-index:35"></div><div id=typingStatus class=typing style="position:absolute;top:64px;left:20px;right:20px;z-index:30;color:#aaa"></div><div id=msgs></div><div id=chatMediaPreview class=chat-media-preview></div><div id=chatVoiceReady class=chat-voice-ready><span class=voice-label>🎤 Voice message ready</span><audio id=voicePreview controls></audio><button onclick=clearRecordedAudio() style="border:0;background:#333;color:#fff;border-radius:10px;padding:7px">✕</button></div><div class=chat-bar><div class=chat-composer><button class="chat-circle voice" id=recordBtn onclick=startRecording() title="Record voice">🎤</button><div class=chat-input-wrap><input id=chatText placeholder="Type a message..." autocomplete=off><button onclick=toggleChatEmoji() title="Emoji">😊</button><button onclick=document.getElementById('chatFileHidden').click() title="Attach">📎</button><button onclick=document.getElementById('chatFileHidden').click() title="Photo / video">🖼️</button></div><input type=file id=chatFileHidden accept="image/*,video/*" style=display:none><button class="chat-circle send" id=sendBtn onclick=sendMsg title="Send">➤</button></div></div>`;
+  document.getElementById('chatFileHidden').addEventListener('change',function(e){let f=e.target.files[0];if(f){selectedChatFile=f;showSelectedChatFile(f);}});
+  document.getElementById('chatText').addEventListener('input',()=>sendTyping());
+  document.getElementById('chatText').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}});
   if(window.typingTimer)clearInterval(window.typingTimer); window.typingTimer=setInterval(pollTyping,3500);
   loadMsgs();
   fetch('/api/status/get?user='+encodeURIComponent(username)).then(r=>r.json()).then(st=>{let x=document.getElementById('chatOnlineState');if(x)x.innerHTML=st.online?'<span class=onlineDot></span> online':'<span class=offlineDot></span> offline';}).catch(()=>{});
   fetch('/api/messages/mark_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({with:username})}).catch(()=>{});
 }
+function toggleChatEmoji(){const input=document.getElementById('chatText');if(input){input.value += '😊';input.focus();sendTyping();}}
+function showSelectedChatFile(f){const box=document.getElementById('chatMediaPreview');if(!box)return;box.style.display='block';box.innerHTML=`<b>${f.type.startsWith('video/')?'🎬 Video':'🖼️ Photo'}</b> ${escapeHtml(f.name)} <span style="float:right;cursor:pointer" onclick="clearSelectedChatFile()">✕</span>`;if(f.type.startsWith('image/')){const u=URL.createObjectURL(f);box.innerHTML+=`<br><img src="${u}">`;}else if(f.type.startsWith('video/')){const u=URL.createObjectURL(f);box.innerHTML+=`<br><video src="${u}" muted playsinline></video>`;}document.getElementById('sendBtn')?.classList.add('ready');}
+function clearSelectedChatFile(){selectedChatFile=null;const i=document.getElementById('chatFileHidden');if(i)i.value='';const b=document.getElementById('chatMediaPreview');if(b){b.style.display='none';b.innerHTML='';}document.getElementById('sendBtn')?.classList.remove('ready');}
+function clearRecordedAudio(){recordedAudioFile=null;const b=document.getElementById('chatVoiceReady');if(b)b.style.display='none';const a=document.getElementById('voicePreview');if(a){a.pause();a.removeAttribute('src');a.load();}document.getElementById('sendBtn')?.classList.remove('ready');}
 async function searchConversation(){if(!chatWith)return;let q=prompt('Search this conversation:');if(!q)return;let r=await fetch('/api/messages/search?with='+encodeURIComponent(chatWith)+'&q='+encodeURIComponent(q));let d=await r.json();alert(d.map(m=>(m.sender===curUser?'You':m.sender)+': '+m.text).join('\\n')||'No matching messages');}
 function backChat(){
   chatWith='';
@@ -742,16 +760,49 @@ function backChat(){
 }
 
 function appendOptimisticMessage(text,reply){const el=document.getElementById('msgs');if(!el)return null;const row=document.createElement('div');row.className='msg-row me';row.innerHTML=`<span class="msg-bubble out pending-msg">${reply?`<div class=reply-quote><b>You</b>${escapeHtml(reply)}</div>`:''}${escapeHtml(text)}<span class=msg-time>${new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span><span class=msg-tick>✓</span></span>`;el.appendChild(row);el.scrollTop=el.scrollHeight;return row;}
-async function sendMsg(){if(!chatWith){alert('Please select a user first.');return;}const input=document.getElementById('chatText'),fileInput=document.getElementById('chatFileHidden');const text=input?input.value.trim():'';const file=(typeof selectedChatFile!=='undefined'&&selectedChatFile)?selectedChatFile:(fileInput&&fileInput.files?fileInput.files[0]:null);if(!text&&!file)return;const receiver=chatWith,reply=(typeof replyToText!=='undefined'&&replyToText)?replyToText:'';const optimistic=!file?appendOptimisticMessage(text,reply):null;if(input)input.value='';if(fileInput)fileInput.value='';if(typeof selectedChatFile!=='undefined')selectedChatFile=null;if(typeof cancelReply==='function')cancelReply();const fd=new FormData();fd.append('receiver',receiver);fd.append('text',text);if(reply)fd.append('reply_to',reply);if(file)fd.append('media',file);try{const r=await fetch('/api/send',{method:'POST',body:fd,credentials:'same-origin'});const d=await r.json().catch(()=>({}));if(!r.ok||!d.ok){if(optimistic)optimistic.remove();alert(d.error||'Could not send message');return;}if(optimistic){optimistic.querySelector('.msg-bubble')?.classList.remove('pending-msg');let tick=optimistic.querySelector('.msg-tick');if(tick)tick.innerText='✓✓';}if(file && chatWith===receiver) loadMsgs(true);}catch(e){if(optimistic)optimistic.remove();alert('Could not send message. Please check the server connection.');}}
-async function loadMsgs(silent=false){if(!chatWith)return;if(window.msgAbort)window.msgAbort.abort();window.msgAbort=new AbortController();try{let r=await fetch('/api/messages?with='+encodeURIComponent(chatWith),{signal:window.msgAbort.signal});let msgs=await r.json();let h='';msgs.forEach(m=>{let mu=m.media_url||'',low=mu.toLowerCase(),media='';if(mu){if(/\.(mp4|mov|webm|m4v)(\?|$)/i.test(low))media=`<br><video src="${mu}" controls playsinline style="max-width:240px;border-radius:14px;margin-top:7px"></video>`;else if(/\.(mp3|wav|ogg|m4a|aac|webm)(\?|$)/i.test(low)||m.media_type==='audio')media=`<br><audio src="${mu}" controls class=voice-audio controlslist="nodownload noplaybackrate"></audio>`;else media=`<br><a href="${mu}" target="_blank" rel="noopener" style="display:inline-block;margin-top:7px;color:inherit">📎 Open attachment</a>`;}let isMe=m.sender==curUser,tick=isMe?(m.read?'✓✓':'✓'):'',text=m.deleted?'This message was deleted':(m.text||'');let reply=m.reply_to?`<div class=reply-quote><b>${escapeHtml(m.sender)}</b>${escapeHtml(m.reply_to)}<span class=swipe-hint>↩ Swipe to reply</span></div>`:`<span class=swipe-hint>↩ Swipe to reply</span>`;let reactions=(m.reactions||[]).map(x=>`${x.reaction} ${x.count}`).join(' · ');let edit=isMe&&!m.deleted?`<button onclick="event.stopPropagation();editMsg(${m.id},${JSON.stringify(m.text||'')})">Edit</button>`:'';let del=isMe&&!m.deleted?`<button onclick="event.stopPropagation();deleteMsg(${m.id})">Delete</button>`:'';h+=`<div class="msg-row ${isMe?'me':''}"><span data-reply-text="${escapeHtml(text.slice(0,80))}" class="msg-bubble ${isMe?'out':'in'}" onclick="setReply(${JSON.stringify(text.slice(0,80))})">${reply}${escapeHtml(text)}${media}<div><span class=msg-time>${escapeHtml((m.created_at||'').slice(11,16))}</span><span class=msg-tick>${tick}</span></div><div class=reaction-row>${escapeHtml(reactions)}</div><div class=msg-actions><button onclick="event.stopPropagation();setReply(${JSON.stringify(text.slice(0,80))})">↩ Reply</button><button onclick="event.stopPropagation();reactMsg(${m.id},'❤️')">❤️</button><button onclick="event.stopPropagation();reactMsg(${m.id},'😂')">😂</button><button onclick="event.stopPropagation();reactMsg(${m.id},'👍')">👍</button>${edit}${del}</div></span></div>`;});let el=document.getElementById('msgs');if(!el)return;let nearBottom=el.scrollHeight-el.scrollTop-el.clientHeight<80;el.innerHTML=h||'<div style="text-align:center;color:#888;padding:30px">Start the conversation</div>';if(!silent||nearBottom)requestAnimationFrame(()=>{el.scrollTop=el.scrollHeight;});}catch(e){if(e.name!=='AbortError')console.error(e);}}
-function escapeHtml(s){return String(s||'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
+let mediaRecorder=null,recordChunks=[],recordedAudioFile=null;
+function updateSendButton(){const b=document.getElementById('sendBtn');if(b)b.innerText=(recordedAudioFile||selectedChatFile||((document.getElementById('chatText')||{}).value||'').trim())?'➤':'➤';}
+function setRecordingUi(on){const b=document.getElementById('recordBtn');if(!b)return;b.classList.toggle('recording',on);b.innerText=on?'■':'🎤';b.title=on?'Stop recording':'Record voice';}
+async function sendMsg(){
+  if(!chatWith){alert('Please select a user first.');return;}
+  const input=document.getElementById('chatText'), fileInput=document.getElementById('chatFileHidden');
+  const text=input?input.value.trim():'';
+  const file=recordedAudioFile||selectedChatFile;
+  if(!text&&!file)return;
+  const receiver=chatWith,reply=replyToText||'';
+  const isAudio=!!recordedAudioFile;
+  const optimistic=!file?appendOptimisticMessage(text,reply):null;
+  if(input)input.value=''; if(fileInput)fileInput.value='';
+  if(selectedChatFile)clearSelectedChatFile();
+  if(recordedAudioFile)clearRecordedAudio();
+  cancelReply();
+  const fd=new FormData();fd.append('receiver',receiver);fd.append('text',text);if(reply)fd.append('reply_to',reply);if(file){fd.append('media',file);fd.append('media_type',isAudio?'audio':(file.type.startsWith('video/')?'video':'image'));}
+  try{
+    const r=await fetch('/api/send',{method:'POST',body:fd,credentials:'same-origin'});const d=await r.json().catch(()=>({}));
+    if(!r.ok||!d.ok){if(optimistic)optimistic.remove();alert(d.error||'Could not send message');return;}
+    if(optimistic){optimistic.querySelector('.msg-bubble')?.classList.remove('pending-msg');let tick=optimistic.querySelector('.msg-tick');if(tick)tick.innerText='✓✓';}
+    setTimeout(()=>{if(chatWith===receiver)loadMsgs(true);},250);
+  }catch(e){if(optimistic)optimistic.remove();alert('Could not send message. Please check the server connection.');}
+}
+async function loadMsgs(silent=false){if(!chatWith)return;if(window.msgAbort)window.msgAbort.abort();window.msgAbort=new AbortController();try{let r=await fetch('/api/messages?with='+encodeURIComponent(chatWith),{signal:window.msgAbort.signal});let msgs=await r.json();let h='';msgs.forEach(m=>{let mu=m.media_url||'',low=mu.toLowerCase(),media='';if(mu){if(m.media_type==='video'||/\.(mp4|mov|webm|m4v|avi)(\?|$)/i.test(low))media=`<br><video src="${mu}" controls playsinline style="width:min(260px,100%);max-height:300px;border-radius:14px;margin-top:7px"></video>`;else if(m.media_type==='audio'||/\.(mp3|wav|ogg|m4a|aac|webm)(\?|$)/i.test(low))media=`<br><audio src="${mu}" controls class=voice-audio controlslist="nodownload noplaybackrate"></audio>`;else media=`<br><img src="${mu}" loading="lazy" style="max-width:260px;max-height:300px;border-radius:14px;margin-top:7px;object-fit:cover">`;}let isMe=m.sender==curUser,tick=isMe?(m.read?'✓✓':'✓'):'',text=m.deleted?'This message was deleted':(m.text||'');let reply=m.reply_to?`<div class=reply-quote><b>${escapeHtml(m.sender)}</b>${escapeHtml(m.reply_to)}<span class=swipe-hint>↩ Swipe to reply</span></div>`:`<span class=swipe-hint>↩ Swipe to reply</span>`;let reactions=(m.reactions||[]).map(x=>`${x.reaction} ${x.count}`).join(' · ');let edit=isMe&&!m.deleted?`<button onclick="event.stopPropagation();editMsg(${m.id},${JSON.stringify(m.text||'')})">Edit</button>`:'';let del=isMe&&!m.deleted?`<button onclick="event.stopPropagation();deleteMsg(${m.id})">Delete</button>`:'';h+=`<div class="msg-row ${isMe?'me':''}"><span data-reply-text="${escapeHtml(text.slice(0,80))}" class="msg-bubble ${isMe?'out':'in'}" onclick="setReply(${JSON.stringify(text.slice(0,80))})">${reply}${escapeHtml(text)}${media}<div><span class=msg-time>${escapeHtml((m.created_at||'').slice(11,16))}</span><span class=msg-tick>${tick}</span></div><div class=reaction-row>${escapeHtml(reactions)}</div><div class=msg-actions><button onclick="event.stopPropagation();setReply(${JSON.stringify(text.slice(0,80))})">↩ Reply</button><button onclick="event.stopPropagation();reactMsg(${m.id},'❤️')">❤️</button><button onclick="event.stopPropagation();reactMsg(${m.id},'😂')">😂</button><button onclick="event.stopPropagation();reactMsg(${m.id},'👍')">👍</button>${edit}${del}</div></span></div>`;});let el=document.getElementById('msgs');if(!el)return;let nearBottom=el.scrollHeight-el.scrollTop-el.clientHeight<80;el.innerHTML=h||'<div style="text-align:center;color:#888;padding:30px">Start the conversation</div>';if(!silent||nearBottom)requestAnimationFrame(()=>{el.scrollTop=el.scrollHeight;});}catch(e){if(e.name!=='AbortError')console.error(e);}}
+function escapeHtml(s){return String(s||'').replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]));}
 async function reactMsg(id,reaction){let r=await fetch('/api/message/react',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,reaction})});let d=await r.json();if(d.ok)loadMsgs();}
 async function editMsg(id,current){let t=prompt('Edit message:',current||'');if(t===null)return;let r=await fetch('/api/message/edit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,text:t})});let d=await r.json();if(!d.ok)alert(d.error||'Could not edit');loadMsgs();}
 async function deleteMsg(id){if(!confirm('Delete this message?'))return;let r=await fetch('/api/message/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});let d=await r.json();if(!d.ok)alert(d.error||'Could not delete');loadMsgs();}
-let typingSendTimer=0;function sendTyping(){if(!chatWith)return;clearTimeout(typingSendTimer);typingSendTimer=setTimeout(()=>{fetch('/api/typing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({peer:chatWith})}).catch(()=>{});},450);}
+let typingSendTimer=0;function sendTyping(){if(!chatWith)return;clearTimeout(typingSendTimer);typingSendTimer=setTimeout(()=>{fetch('/api/typing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({peer:chatWith})}).catch(()=>{});},350);}
 async function pollTyping(){if(!chatWith)return;try{let d=await (await fetch('/api/typing?peer='+encodeURIComponent(chatWith))).json();let el=document.getElementById('typingStatus');if(el)el.innerText=d.typing?chatWith+' is typing…':'';}catch(e){}}
-let mediaRecorder=null,recordChunks=[];
-async function startRecording(){if(mediaRecorder&&mediaRecorder.state==='recording'){mediaRecorder.stop();return;}if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){alert('Voice recording is not supported by this browser');return;}try{let stream=await navigator.mediaDevices.getUserMedia({audio:true});mediaRecorder=new MediaRecorder(stream);recordChunks=[];mediaRecorder.ondataavailable=e=>{if(e.data.size)recordChunks.push(e.data)};mediaRecorder.onstop=async()=>{stream.getTracks().forEach(t=>t.stop());let blob=new Blob(recordChunks,{type:mediaRecorder.mimeType||'audio/webm'});let file=new File([blob],'voice-'+Date.now()+'.webm',{type:blob.type});let fd=new FormData();fd.append('receiver',chatWith);fd.append('text','');fd.append('media',file);fd.append('media_type','audio');let r=await fetch('/api/send',{method:'POST',body:fd});let d=await r.json();if(!d.ok)alert(d.error||'Could not send voice message');else loadMsgs();};mediaRecorder.start();alert('Recording... tap 🎤 again to stop');}catch(e){alert('Microphone permission was denied or unavailable');}}
+async function startRecording(){
+  if(mediaRecorder&&mediaRecorder.state==='recording'){try{mediaRecorder.stop();}catch(e){}return;}
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){alert('Voice recording is not supported by this browser');return;}
+  try{
+    let stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    let mt=MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported('audio/webm;codecs=opus')?'audio/webm;codecs=opus':(MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported('audio/mp4')?'audio/mp4':'');
+    mediaRecorder=mt?new MediaRecorder(stream,{mimeType:mt}):new MediaRecorder(stream);recordChunks=[];
+    mediaRecorder.ondataavailable=e=>{if(e.data.size)recordChunks.push(e.data)};
+    mediaRecorder.onstop=()=>{stream.getTracks().forEach(t=>t.stop());let blob=new Blob(recordChunks,{type:mediaRecorder.mimeType||'audio/webm'});recordedAudioFile=new File([blob],'voice-'+Date.now()+'.webm',{type:blob.type||'audio/webm'});let url=URL.createObjectURL(blob);let a=document.getElementById('voicePreview');if(a){a.src=url;a.load();}let box=document.getElementById('chatVoiceReady');if(box)box.style.display='flex';setRecordingUi(false);document.getElementById('sendBtn')?.classList.add('ready');};
+    mediaRecorder.start();setRecordingUi(true);
+  }catch(e){setRecordingUi(false);alert('Microphone permission was denied or unavailable');}
+}
 let swipeX=0,swipeY=0,swipeTarget=null,swipeStartedInsideMessages=false;
 document.addEventListener('touchstart',e=>{
   if(!e.touches||!e.touches[0])return;
@@ -1082,7 +1133,7 @@ def api_friend_request():
             pass
 
         conn.commit()
-        return jsonify({"ok":True,"id":c.lastrowid if not USE_POSTGRES else None,"created_at":now,"media_url":url})
+        return jsonify({"ok":True})
     except Exception:
         conn.rollback()
         print("FRIEND REQUEST ERROR:")
@@ -1443,7 +1494,7 @@ def api_messages():
     if not me or not other: return jsonify([])
     conn=get_conn(); c=conn.cursor()
     try:
-        q="SELECT id,sender,text,media_url,reply_to,read,deleted_at,created_at FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s) ORDER BY id DESC LIMIT 100" if USE_POSTGRES else "SELECT id,sender,text,media_url,reply_to,read,deleted_at,created_at FROM messages WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?) ORDER BY id DESC LIMIT 100"
+        q="SELECT id,sender,text,media_url,reply_to,read,deleted_at,created_at,media_type FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s) ORDER BY id DESC LIMIT 100" if USE_POSTGRES else "SELECT id,sender,text,media_url,reply_to,read,deleted_at,created_at,media_type FROM messages WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?) ORDER BY id DESC LIMIT 100"
         c.execute(q,(me,other,other,me)); rows=list(reversed(c.fetchall()))
         ids=[r[0] for r in rows]
         reactions_by={}
@@ -1456,8 +1507,10 @@ def api_messages():
         for r in rows:
             media_url=str(r[3] or '')
             low=media_url.lower()
-            is_audio=low.endswith(('.mp3','.wav','.ogg','.m4a','.aac','.webm'))
-            out.append({"id":r[0],"sender":r[1],"text":r[2],"media_url":r[3],"reply_to":r[4],"read":r[5],"deleted":bool(r[6]),"created_at":str(r[7] or ""),"reactions":reactions_by.get(r[0],[]),"media_type":"audio" if is_audio else ""})
+            media_type=str(r[8] or '')
+            is_audio=media_type=='audio' or low.endswith(('.mp3','.wav','.ogg','.m4a','.aac','.webm'))
+            is_video=media_type=='video' or low.endswith(('.mp4','.mov','.m4v','.avi'))
+            out.append({"id":r[0],"sender":r[1],"text":r[2],"media_url":r[3],"reply_to":r[4],"read":r[5],"deleted":bool(r[6]),"created_at":str(r[7] or ""),"reactions":reactions_by.get(r[0],[]),"media_type":"audio" if is_audio else ("video" if is_video else "image" if r[3] else "")})
         return jsonify(out)
     finally:
         conn.close()
@@ -1489,6 +1542,7 @@ def api_send():
     txt = (request.form.get('text') or '')[:500]
     reply_to = (request.form.get('reply_to') or '')[:100]
     f = request.files.get('media')
+    media_type = (request.form.get('media_type') or '').strip().lower()[:20]
 
     if not me:
         return jsonify({"ok":False,"error":"Not logged in"}),401
@@ -1514,17 +1568,17 @@ def api_send():
 
         url = upload_to_cloud(f) if f and f.filename else ''
         q = (
-            "INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at) VALUES (%s,%s,%s,%s,%s,0,%s)"
+            "INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at,media_type) VALUES (%s,%s,%s,%s,%s,0,%s,%s)"
             if USE_POSTGRES else
-            "INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at) VALUES (?,?,?,?,?,0,?)"
+            "INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at,media_type) VALUES (?,?,?,?,?,0,?,?)"
         )
-        now=datetime.now().isoformat(); c.execute(q, (me,other,txt,url,reply_to,now))
+        now=datetime.now().isoformat(); c.execute(q, (me,other,txt,url,reply_to,now,media_type))
         conn.commit()
         notify_async(other,'message',me,me+' sent you a message')
         msg_id = c.lastrowid if not USE_POSTGRES else None
         if sio is not None:
             try:
-                sio.emit('chat_message', {'id':msg_id,'sender':me,'receiver':other,'text':txt,'media_url':url or '', 'reply_to':reply_to,'read':0,'deleted':False,'created_at':now,'media_type':('audio' if (url or '').lower().split('?')[0].endswith(('.mp3','.wav','.ogg','.m4a','.aac','.webm')) else '')}, room='pm:'+other)
+                sio.emit('chat_message', {'id':msg_id,'sender':me,'receiver':other,'text':txt,'media_url':url or '', 'reply_to':reply_to,'read':0,'deleted':False,'created_at':now,'media_type':media_type}, room='pm:'+other)
             except Exception: pass
         return jsonify({"ok":True,"id":msg_id,"created_at":now,"media_url":url})
     except Exception:
