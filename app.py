@@ -638,7 +638,7 @@ function connectRealtime(){
         appendRealtimeMessage(m);
         fetch('/api/messages/mark_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({with:m.sender}),credentials:'same-origin'}).catch(()=>{});
       }else{
-        bumpChatList(m.sender,1);
+        loadChatUsers();
       }
     });
     realtimeSocket.on('chat_read',d=>{if(d&&chatWith===d.by)loadMsgs(true);});
@@ -775,32 +775,66 @@ async function editPost(id,current){let t=prompt('Edit your post:',current||'');
 async function savePost(id){let r=await fetch('/api/post/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id})});let d=await r.json();if(!d.ok)alert(d.error||'Could not save');else loadPosts();}
 async function likePost(id){await fetch('/api/like',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id})});loadPosts();}
 async function commentPost(id){let t=prompt('Comment:');if(!t)return;await fetch('/api/comment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({post_id:id,text:t})});loadPosts();}
-let chatListCache=[];
-function filterChat(){const q=(document.getElementById('searchChat')?.value||'').toLowerCase().trim();renderChatUsers(chatListCache.filter(u=>(u.username||'').toLowerCase().includes(q)));}
-function bumpChatList(username,unreadDelta=0){
-  if(!username)return;
-  const u=chatListCache.find(x=>x.username===username);
-  if(u){u.last_message_at=new Date().toISOString();u.unread_count=Math.max(0,(u.unread_count||0)+unreadDelta);}
-  const list=document.getElementById('chatUsers');const row=list?.querySelector('[data-chat-user="'+CSS.escape(username)+'"]');
-  if(row&&list){list.prepend(row);const meta=row.querySelector('.chat-meta');if(meta&&u)meta.innerHTML=(u.online?'🟢 online':'⚪ offline')+(u.unread_count>0?' · '+u.unread_count+' unread':'');}
-}
+function filterChat(){let q=document.getElementById('searchChat').value.toLowerCase();let filtered=allUsers.filter(u=>u.username.toLowerCase().includes(q));renderChatUsers(filtered);}
 function renderChatUsers(users){
+  // Keep the most recently active conversation at the top. While a chat is open,
+  // that person stays first; once a message is sent/received, last_message_at
+  // persists the order across reloads. Users with no messages keep their order.
   const visible=users.filter(u=>u.username!==curUser).slice().sort((a,b)=>{
-    if(chatWith){if(a.username===chatWith&&b.username!==chatWith)return -1;if(b.username===chatWith&&a.username!==chatWith)return 1;}
-    const at=String(a.last_message_at||''),bt=String(b.last_message_at||'');if(at!==bt)return bt.localeCompare(at);return String(a.username||'').localeCompare(String(b.username||''));
+    if(chatWith){
+      if(a.username===chatWith && b.username!==chatWith)return -1;
+      if(b.username===chatWith && a.username!==chatWith)return 1;
+    }
+    const at=String(a.last_message_at||''); const bt=String(b.last_message_at||'');
+    if(at!==bt)return bt.localeCompare(at);
+    return String(a.username||'').localeCompare(String(b.username||''));
   });
-  const el=document.getElementById('chatUsers');if(!el)return;
+  const el=document.getElementById('chatUsers');
+  if(!el)return;
   if(!visible.length){el.innerHTML='<div class="card" style="color:#888">No friends yet - add in Search (needs approval)</div>';return;}
+  // Render immediately. Do not wait for status/unread requests before making chats tappable.
   el.innerHTML=visible.map(u=>{
-    const name=escapeHtml(u.username||'');const pic=u.pic_url?'<img src="'+u.pic_url+'" loading="lazy">':escapeHtml((u.username||'?')[0]);
-    const meta=(u.online?'🟢 online':'⚪ offline')+(u.unread_count>0?' · '+u.unread_count+' unread':'');
-    return '<div class="card chat-user-row" data-chat-user="'+name+'" style="display:flex;align-items:center;gap:10px;cursor:pointer"><div class=pic>'+pic+'</div><div style="min-width:0"><b>'+name+'</b><br><small class="chat-meta" style="color:#888">'+meta+'</small></div></div>';
+    const name=escapeHtml(u.username||'');
+    const pic=u.pic_url?`<img src="${u.pic_url}" loading="lazy">`:escapeHtml((u.username||'?')[0]);
+    return `<div class="card chat-user-row" data-chat-user="${name}" style="display:flex;align-items:center;gap:10px;cursor:pointer">`+
+      `<div class=pic>${pic}</div><div style="min-width:0"><b>${name}</b><br><small class="chat-meta" style="color:#888"></small></div></div>`;
   }).join('');
-  if(!el.dataset.bound){el.dataset.bound='1';el.addEventListener('click',e=>{const row=e.target.closest('.chat-user-row');if(!row)return;const name=row.getAttribute('data-chat-user');if(name)openChat(name);});}
+  // Event delegation: one listener instead of an onclick handler on every row.
+  if(!el.dataset.bound){
+    el.dataset.bound='1';
+    el.addEventListener('click',e=>{
+      const row=e.target.closest('.chat-user-row');
+      if(!row)return;
+      const name=row.getAttribute('data-chat-user');
+      if(name)openChat(name);
+    });
+  }
+  // Update status/unread in the background; never block opening a chat.
+  visible.forEach(async u=>{
+    try{
+      const [sr,ur]=await Promise.all([
+        fetch('/api/status/get?user='+encodeURIComponent(u.username)),
+        fetch('/api/messages/unread_count?with='+encodeURIComponent(u.username))
+      ]);
+      const st=await sr.json(), uc=await ur.json();
+      const row=el.querySelector(`[data-chat-user="${CSS.escape(u.username)}"]`);
+      if(row){const meta=row.querySelector('.chat-meta');if(meta)meta.innerHTML=(st.online?'🟢 online':'⚪ offline')+(uc.count>0?' · '+uc.count+' unread':'');}
+    }catch(e){}
+  });
 }
+
 async function loadChatUsers(){
-  try{const r=await fetch('/api/chat/list?t='+Date.now(),{credentials:'same-origin'});if(!r.ok)throw new Error('chat list failed');chatListCache=await r.json();renderChatUsers(chatListCache);}
-  catch(e){if(!chatListCache.length)renderChatUsers(allUsers);}
+  try{
+    let r=await fetch('/api/friends/list'); let friends=await r.json();
+    if(friends.length==0){ renderChatUsers(allUsers); return;}
+    // Merge the persisted recent-message timestamp from the server into the
+    // existing user objects so the list can be sorted without extra requests.
+    const recentByUser={};
+    friends.forEach(f=>{recentByUser[f.friend]=f.last_message_at||'';});
+    let friendNames = friends.map(f=>f.friend);
+    let filtered = allUsers.filter(u=> friendNames.includes(u.username)).map(u=>({...u,last_message_at:recentByUser[u.username]||''}));
+    renderChatUsers(filtered);
+  }catch(e){ renderChatUsers(allUsers); }
 }
 function openChat(username){
   chatWith=username;
@@ -874,7 +908,10 @@ async function sendMsg(){
      optimistic.querySelector('.msg-bubble')?.classList.remove('pending-msg');
      const tick=optimistic.querySelector('.msg-tick');if(tick)tick.innerText='✓';
    }
-   bumpChatList(receiver,0);
+   const chatList=document.getElementById('chatUsers');
+   const sentRow=chatList?.querySelector(`[data-chat-user="${CSS.escape(receiver)}"]`);
+   if(sentRow&&chatList)chatList.prepend(sentRow);
+   loadChatUsers();
  };
 
  try{
@@ -1291,35 +1328,739 @@ def api_friend_requests():
     rows=c.fetchall(); conn.close()
     return jsonify([{"sender":r[0],"username":r[0]} for r in rows])
 
-@app.route('/api/chat/list')
-def api_chat_list():
-    """Return the whole chat list in one DB round trip."""
+@app.route('/api/friends/list')
+def api_friends_list():
     me=session.get('username')
-    if not me: return jsonify([]), 401
     conn=get_conn(); c=conn.cursor()
+    # Return each friend together with the timestamp of the latest message in
+    # either direction. This preserves the existing friends list while giving
+    # the UI enough information to order chats like WhatsApp/Messenger.
     if USE_POSTGRES:
-        q = """SELECT CASE WHEN f.sender=%s THEN f.receiver ELSE f.sender END AS friend,
-                 (SELECT MAX(m.created_at) FROM messages m WHERE ((m.sender=%s AND m.receiver=(CASE WHEN f.sender=%s THEN f.receiver ELSE f.sender END)) OR (m.receiver=%s AND m.sender=(CASE WHEN f.sender=%s THEN f.receiver ELSE f.sender END)))) AS last_message_at,
-                 (SELECT COUNT(*) FROM messages u WHERE u.sender=(CASE WHEN f.sender=%s THEN f.receiver ELSE f.sender END) AND u.receiver=%s AND u.read=0) AS unread_count,
-                 p.pic_url,COALESCE(us.last_seen,0) AS last_seen
-                 FROM friends f LEFT JOIN profiles p ON p.username=(CASE WHEN f.sender=%s THEN f.receiver ELSE f.sender END)
-                 LEFT JOIN user_status us ON us.username=(CASE WHEN f.sender=%s THEN f.receiver ELSE f.sender END)
-                 WHERE (f.sender=%s OR f.receiver=%s) AND f.status='accepted'"""
-        args=(me,me,me,me,me,me,me,me,me,me,me)
+        q = """SELECT f.sender,f.receiver,
+                       (SELECT MAX(m.created_at) FROM messages m
+                        WHERE (m.sender=%s AND m.receiver=(CASE WHEN f.sender=%s THEN f.receiver ELSE f.sender END))
+                           OR (m.receiver=%s AND m.sender=(CASE WHEN f.sender=%s THEN f.receiver ELSE f.sender END))) AS last_message_at
+                FROM friends f WHERE (f.sender=%s OR f.receiver=%s) AND f.status='accepted'"""
+        c.execute(q,(me,me,me,me,me,me))
     else:
-        q = """SELECT CASE WHEN f.sender=? THEN f.receiver ELSE f.sender END AS friend,
-                 (SELECT MAX(m.created_at) FROM messages m WHERE ((m.sender=? AND m.receiver=(CASE WHEN f.sender=? THEN f.receiver ELSE f.sender END)) OR (m.receiver=? AND m.sender=(CASE WHEN f.sender=? THEN f.receiver ELSE f.sender END)))) AS last_message_at,
-                 (SELECT COUNT(*) FROM messages u WHERE u.sender=(CASE WHEN f.sender=? THEN f.receiver ELSE f.sender END) AND u.receiver=? AND u.read=0) AS unread_count,
-                 p.pic_url,COALESCE(us.last_seen,0) AS last_seen
-                 FROM friends f LEFT JOIN profiles p ON p.username=(CASE WHEN f.sender=? THEN f.receiver ELSE f.sender END)
-                 LEFT JOIN user_status us ON us.username=(CASE WHEN f.sender=? THEN f.receiver ELSE f.sender END)
-                 WHERE (f.sender=? OR f.receiver=?) AND f.status='accepted'"""
-        args=(me,me,me,me,me,me,me,me,me,me,me)
-    c.execute(q,args); rows=c.fetchall(); conn.close()
-    now=time.time(); out=[]
-    for friend,last_at,unread,pic,last_seen in rows:
-        if not friend: continue
-        online=bool(last_seen and now-float(last_seen)<40)
-        out.append({'username':friend,'friend':friend,'last_message_at':str(last_at or ''),'unread_count':int(unread or 0),'online':online,'pic_url':pic or ''})
-    out.sort(key=lambda x:(x.get('last_message_at',''),x.get('username','')), reverse=True)
+        q = """SELECT f.sender,f.receiver,
+                       (SELECT MAX(m.created_at) FROM messages m
+                        WHERE (m.sender=? AND m.receiver=(CASE WHEN f.sender=? THEN f.receiver ELSE f.sender END))
+                           OR (m.receiver=? AND m.sender=(CASE WHEN f.sender=? THEN f.receiver ELSE f.sender END))) AS last_message_at
+                FROM friends f WHERE (f.sender=? OR f.receiver=?) AND f.status='accepted'"""
+        c.execute(q,(me,me,me,me,me,me))
+    rows=c.fetchall(); conn.close()
+    out=[]
+    for s,r,last_at in rows:
+        other=r if s==me else s
+        if other:
+            out.append({"username":other,"friend":other,"last_message_at":str(last_at or '')})
+    out.sort(key=lambda x:x.get('last_message_at',''), reverse=True)
     return jsonify(out)
+
+@app.route('/api/status/ping', methods=['POST'])
+def api_status_ping():
+    import time; me=session.get('username'); now=time.time()
+    conn=get_conn(); c=conn.cursor()
+    if USE_POSTGRES: c.execute("INSERT INTO user_status (username,last_seen) VALUES (%s,%s) ON CONFLICT (username) DO UPDATE SET last_seen=%s",(me,now,now))
+    else: c.execute("INSERT OR REPLACE INTO user_status (username,last_seen) VALUES (?,?)",(me,now))
+    conn.commit(); conn.close(); return jsonify({"ok":True})
+
+@app.route('/api/status/get')
+def api_status_get():
+    import time; u=request.args.get('user'); conn=get_conn(); c=conn.cursor()
+    c.execute("SELECT last_seen FROM user_status WHERE username=%s" if USE_POSTGRES else "SELECT last_seen FROM user_status WHERE username=?",(u,)); row=c.fetchone();
+    try:
+        qp="SELECT show_last_seen FROM profiles WHERE username=%s" if USE_POSTGRES else "SELECT show_last_seen FROM profiles WHERE username=?";c.execute(qp,(u,));sp=c.fetchone();
+    except: sp=None
+    conn.close()
+    if sp and sp[0]==0 and u!=session.get('username'): return jsonify({"online":False,"hidden":True})
+    if not row:return jsonify({"online":False})
+    return jsonify({"online":(time.time()-float(row[0]))<40})
+
+@app.route('/api/posts')
+def api_posts():
+    me=session.get('username'); conn=get_conn(); c=conn.cursor()
+    c.execute("SELECT id,username,text,media_url,created_at,shared_post_id FROM posts ORDER BY id DESC LIMIT 50")
+    rows=c.fetchall(); out=[]
+    allowed_private={me}
+    try:
+        qf="SELECT sender,receiver FROM friends WHERE (sender=%s OR receiver=%s) AND status='accepted'" if USE_POSTGRES else "SELECT sender,receiver FROM friends WHERE (sender=? OR receiver=?) AND status='accepted'";c.execute(qf,(me,me));
+        for aa,bb in c.fetchall():allowed_private.add(bb if aa==me else aa)
+    except:pass
+    for r in rows:
+        try:
+            qp="SELECT private_account FROM profiles WHERE username=%s" if USE_POSTGRES else "SELECT private_account FROM profiles WHERE username=?";c.execute(qp,(r[1],));pv=c.fetchone();
+            if pv and pv[0] and r[1] not in allowed_private: continue
+        except:pass
+        pid=r[0]; lc=0; liked=False
+        try:
+            c.execute("SELECT COUNT(*) FROM post_likes WHERE post_id=%s" if USE_POSTGRES else "SELECT COUNT(*) FROM post_likes WHERE post_id=?",(pid,));lc=c.fetchone()[0]
+            c.execute("SELECT 1 FROM post_likes WHERE post_id=%s AND username=%s" if USE_POSTGRES else "SELECT 1 FROM post_likes WHERE post_id=? AND username=?",(pid,me));liked=bool(c.fetchone())
+        except: pass
+        try:c.execute("SELECT COUNT(*) FROM comments WHERE post_id=%s" if USE_POSTGRES else "SELECT COUNT(*) FROM comments WHERE post_id=?",(pid,));cc=c.fetchone()[0]
+        except:cc=0
+        try:c.execute("SELECT COUNT(*) FROM post_shares WHERE post_id=%s" if USE_POSTGRES else "SELECT COUNT(*) FROM post_shares WHERE post_id=?",(pid,));sc=c.fetchone()[0]
+        except:sc=0
+        media=[]
+        try:
+            c.execute("SELECT media_url,media_type FROM post_media WHERE post_id=%s ORDER BY id" if USE_POSTGRES else "SELECT media_url,media_type FROM post_media WHERE post_id=? ORDER BY id",(pid,));media=[{"url":x[0],"type":x[1] or ''} for x in c.fetchall()]
+        except:pass
+        if not media and r[3]:media=[{"url":r[3],"type":""}]
+        shared=None
+        if r[5]:
+            try:
+                q="SELECT username,text,media_url,created_at FROM posts WHERE id=%s" if USE_POSTGRES else "SELECT username,text,media_url,created_at FROM posts WHERE id=?";c.execute(q,(r[5],));x=c.fetchone()
+                if x:shared={"username":x[0],"text":x[1],"media_url":x[2],"created_at":str(x[3])}
+            except:pass
+        saved=False
+        try:
+            qs="SELECT 1 FROM saved_posts WHERE post_id=%s AND username=%s" if USE_POSTGRES else "SELECT 1 FROM saved_posts WHERE post_id=? AND username=?"
+            c.execute(qs,(pid,me)); saved=bool(c.fetchone())
+        except: pass
+        out.append({"id":pid,"username":r[1],"text":r[2],"media_url":r[3],"created_at":str(r[4]),"like_count":lc,"liked":liked,"saved":saved,"comment_count":cc,"share_count":sc,"shared_post_id":r[5],"media":media,"shared":shared})
+    conn.close();return jsonify(out)
+
+@app.route('/api/post', methods=['POST'])
+def api_post():
+    me=session.get('username'); txt=request.form.get('text','')[:500]; files=request.files.getlist('media')
+    if not txt and not files:return jsonify({"ok":False,"error":"empty"}),400
+    conn=get_conn();c=conn.cursor();now=datetime.now().isoformat();urls=[]
+    try:
+        for f in files[:6]:
+            if f and f.filename:
+                url=upload_to_cloud(f)
+                if url:urls.append((url,f.mimetype or ''))
+        first=urls[0][0] if urls else ''
+        q="INSERT INTO posts (username,text,media_url,created_at) VALUES (%s,%s,%s,%s) RETURNING id" if USE_POSTGRES else "INSERT INTO posts (username,text,media_url,created_at) VALUES (?,?,?,?)"
+        if USE_POSTGRES:
+            c.execute(q,(me,txt,first,now));pid=c.fetchone()[0]
+        else:
+            c.execute(q,(me,txt,first,now));pid=c.lastrowid
+        for url,mtype in urls:
+            q2="INSERT INTO post_media (post_id,media_url,media_type) VALUES (%s,%s,%s)" if USE_POSTGRES else "INSERT INTO post_media (post_id,media_url,media_type) VALUES (?,?,?)";c.execute(q2,(pid,url,mtype))
+        for mention in get_mentions(txt):
+            try:
+                qu="SELECT username FROM auth WHERE username=%s" if USE_POSTGRES else "SELECT username FROM auth WHERE username=?";c.execute(qu,(mention,));
+                if c.fetchone() and mention!=me:
+                    qn="INSERT INTO notifications (username,type,from_user,text,created_at,is_read) VALUES (%s,%s,%s,%s,%s,0)" if USE_POSTGRES else "INSERT INTO notifications (username,type,from_user,text,created_at,is_read) VALUES (?,?,?,?,?,0)";c.execute(qn,(mention,'mention',me,me+' mentioned you in a post',now))
+            except:pass
+        conn.commit();return jsonify({"ok":True,"id":pid})
+    except Exception:
+        conn.rollback();traceback.print_exc();return jsonify({"ok":False,"error":"Could not create post"}),500
+    finally:conn.close()
+
+@app.route('/api/post/delete', methods=['POST'])
+def api_post_delete():
+    me=session.get('username'); data=request.json; pid=data.get('id')
+    conn=get_conn(); c=conn.cursor()
+    c.execute("DELETE FROM posts WHERE id=%s AND username=%s" if USE_POSTGRES else "DELETE FROM posts WHERE id=? AND username=?", (pid,me)); conn.commit(); conn.close(); return jsonify({"ok":True})
+
+@app.route('/api/post/edit', methods=['POST'])
+def api_post_edit():
+    me=session.get('username'); data=request.json or {}; pid=data.get('id'); txt=(data.get('text') or '')[:500]
+    if not pid or not txt.strip(): return jsonify({"ok":False,"error":"Post text cannot be empty"}),400
+    conn=get_conn(); c=conn.cursor()
+    q="UPDATE posts SET text=%s, edited_at=%s WHERE id=%s AND username=%s" if USE_POSTGRES else "UPDATE posts SET text=?, edited_at=? WHERE id=? AND username=?"
+    c.execute(q,(txt.strip(),datetime.now().isoformat(),pid,me)); ok=c.rowcount>0; conn.commit(); conn.close()
+    return jsonify({"ok":ok})
+
+@app.route('/api/post/save', methods=['POST'])
+def api_post_save():
+    me=session.get('username'); data=request.json or {}; pid=data.get('post_id')
+    if not pid: return jsonify({"ok":False,"error":"Missing post"}),400
+    conn=get_conn(); c=conn.cursor()
+    q="SELECT 1 FROM saved_posts WHERE post_id=%s AND username=%s" if USE_POSTGRES else "SELECT 1 FROM saved_posts WHERE post_id=? AND username=?"
+    c.execute(q,(pid,me)); exists=bool(c.fetchone())
+    try:
+        if exists:
+            qd="DELETE FROM saved_posts WHERE post_id=%s AND username=%s" if USE_POSTGRES else "DELETE FROM saved_posts WHERE post_id=? AND username=?"; c.execute(qd,(pid,me)); saved=False
+        else:
+            qi="INSERT INTO saved_posts (post_id,username,created_at) VALUES (%s,%s,%s)" if USE_POSTGRES else "INSERT INTO saved_posts (post_id,username,created_at) VALUES (?,?,?)"; c.execute(qi,(pid,me,datetime.now().isoformat())); saved=True
+        conn.commit()
+    except Exception:
+        conn.rollback(); conn.close(); return jsonify({"ok":False,"error":"Could not save post"}),500
+    conn.close(); return jsonify({"ok":True,"saved":saved})
+
+@app.route('/api/post/saved')
+def api_saved_posts():
+    me=session.get('username'); conn=get_conn(); c=conn.cursor()
+    q="SELECT p.id,p.username,p.text,p.media_url,p.created_at FROM saved_posts s JOIN posts p ON p.id=s.post_id WHERE s.username=%s ORDER BY s.created_at DESC LIMIT 50" if USE_POSTGRES else "SELECT p.id,p.username,p.text,p.media_url,p.created_at FROM saved_posts s JOIN posts p ON p.id=s.post_id WHERE s.username=? ORDER BY s.created_at DESC LIMIT 50"
+    c.execute(q,(me,)); rows=c.fetchall(); conn.close()
+    return jsonify([{"id":r[0],"username":r[1],"text":r[2],"media_url":r[3],"created_at":str(r[4])} for r in rows])
+
+@app.route('/api/like', methods=['POST'])
+def api_like():
+    me=session.get('username'); data=request.json; pid=data.get('post_id'); conn=get_conn(); c=conn.cursor()
+    try:
+        c.execute("SELECT 1 FROM post_likes WHERE post_id=%s AND username=%s" if USE_POSTGRES else "SELECT 1 FROM post_likes WHERE post_id=? AND username=?", (pid,me))
+        if c.fetchone(): c.execute("DELETE FROM post_likes WHERE post_id=%s AND username=%s" if USE_POSTGRES else "DELETE FROM post_likes WHERE post_id=? AND username=?", (pid,me))
+        else: c.execute("INSERT INTO post_likes VALUES (%s,%s)" if USE_POSTGRES else "INSERT INTO post_likes VALUES (?,?)", (pid,me))
+        conn.commit()
+        try:
+            qown="SELECT username FROM posts WHERE id=%s" if USE_POSTGRES else "SELECT username FROM posts WHERE id=?";c.execute(qown,(pid,));own=c.fetchone()
+            if own and own[0]!=me: notify(own[0],'like',me,me+' liked your post')
+        except: pass
+    except: pass
+    conn.close(); return jsonify({"ok":True})
+
+@app.route('/api/search')
+def api_search():
+    me = session.get('username')
+    if not me:
+        return jsonify({"error": "Not logged in"}), 401
+    q = request.args.get('q', '').strip()
+    conn = get_conn()
+    c = conn.cursor()
+
+    # Show every registered user when the search box is empty.
+    # When a query is entered, filter the full user list by username.
+    try:
+        if q:
+            like = f"%{q.lower()}%"
+            c.execute(
+                "SELECT username,pic_url FROM profiles WHERE LOWER(username) LIKE %s ORDER BY LOWER(username) LIMIT 100"
+                if USE_POSTGRES
+                else
+                "SELECT username,pic_url FROM profiles WHERE LOWER(username) LIKE ? ORDER BY LOWER(username) LIMIT 100",
+                (like,)
+            )
+        else:
+            c.execute(
+                "SELECT username,pic_url FROM profiles ORDER BY LOWER(username) LIMIT 100"
+                if USE_POSTGRES
+                else
+                "SELECT username,pic_url FROM profiles ORDER BY LOWER(username) LIMIT 100"
+            )
+        rows = c.fetchall()
+    except Exception as e:
+        rows=[]
+    result=[]
+    for r in rows:
+        uname=r[0]; pic=r[1] or ""
+        status="none"
+        try:
+            c2q="SELECT sender,receiver,status FROM friends WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s)" if USE_POSTGRES else "SELECT sender,receiver,status FROM friends WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?)"
+            c.execute(c2q,(me,uname,uname,me))
+            fr=c.fetchone()
+            if fr:
+                s,r2,st=fr
+                if st=="accepted": status="friends"
+                elif s==me: status="pending_sent"
+                else: status="pending_received"
+        except: pass
+        result.append({"username":uname,"pic_url":pic,"profile_pic":pic,"friend_status":status})
+    conn.close()
+    return jsonify(result)
+   
+@app.route('/api/comment', methods=['POST'])
+def api_comment():
+    me=session.get('username'); data=request.json; pid=data.get('post_id'); txt=data.get('text','')[:200]
+    conn=get_conn(); c=conn.cursor()
+    now=datetime.now().isoformat();c.execute("INSERT INTO comments (post_id,username,text,created_at) VALUES (%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO comments (post_id,username,text,created_at) VALUES (?,?,?,?)",(pid,me,txt,now))
+    try:
+        qown="SELECT username FROM posts WHERE id=%s" if USE_POSTGRES else "SELECT username FROM posts WHERE id=?";c.execute(qown,(pid,));own=c.fetchone()
+        if own and own[0]!=me:
+            qn="INSERT INTO notifications (username,type,from_user,text,created_at,is_read) VALUES (%s,%s,%s,%s,%s,0)" if USE_POSTGRES else "INSERT INTO notifications (username,type,from_user,text,created_at,is_read) VALUES (?,?,?,?,?,0)";c.execute(qn,(own[0],'comment',me,me+' commented on your post',now))
+    except: pass
+    for mention in get_mentions(txt):
+        try:
+            qu="SELECT username FROM auth WHERE username=%s" if USE_POSTGRES else "SELECT username FROM auth WHERE username=?";c.execute(qu,(mention,))
+            if c.fetchone() and mention!=me:
+                qn="INSERT INTO notifications (username,type,from_user,text,created_at,is_read) VALUES (%s,%s,%s,%s,%s,0)" if USE_POSTGRES else "INSERT INTO notifications (username,type,from_user,text,created_at,is_read) VALUES (?,?,?,?,?,0)";c.execute(qn,(mention,'mention',me,me+' mentioned you in a comment',now))
+        except:pass
+    conn.commit(); conn.close(); return jsonify({"ok":True})
+
+@app.route('/api/stories')
+def api_stories():
+    me=session.get('username')
+    if not me:return jsonify([])
+    conn=get_conn();cur=conn.cursor();now=datetime.now().isoformat()
+    try:
+        q="SELECT id,username,media_url,text,created_at FROM stories WHERE expires_at>%s ORDER BY id DESC" if USE_POSTGRES else "SELECT id,username,media_url,text,created_at FROM stories WHERE expires_at>? ORDER BY id DESC"
+        cur.execute(q,(now,));rows=cur.fetchall()
+        # Track which active stories this viewer has already opened.
+        qv="SELECT story_id FROM story_views WHERE viewer=%s" if USE_POSTGRES else "SELECT story_id FROM story_views WHERE viewer=?"
+        cur.execute(qv,(me,))
+        viewed={x[0] for x in cur.fetchall()}
+        qf="SELECT sender,receiver FROM friends WHERE (sender=%s OR receiver=%s) AND LOWER(status)='accepted'" if USE_POSTGRES else "SELECT sender,receiver FROM friends WHERE (sender=? OR receiver=?) AND LOWER(status)='accepted'"
+        cur.execute(qf,(me,me))
+        allowed={me}
+        for a,b in cur.fetchall():
+            allowed.add(b if a==me else a)
+        result=[{"id":r[0],"username":r[1],"media_url":r[2] or "","text":r[3] or "","created_at":str(r[4]),"viewed":r[0] in viewed} for r in rows if r[1] in allowed]
+        conn.close()
+        return jsonify(result)
+    except Exception as e:
+        try: conn.close()
+        except Exception: pass
+        print("STORY LOAD ERROR:", repr(e), flush=True)
+        return jsonify({"ok":False,"error":"Could not load stories"}),500
+
+@app.route('/api/story', methods=['POST'])
+def api_story():
+    me=session.get('username'); f=request.files.get('media'); txt=request.form.get('text','')[:200]
+    if not f or not f.filename: return jsonify({"ok":False,"error":"no file"}),400
+    url=upload_to_cloud(f)
+    if not url: return jsonify({"ok":False,"error":"Add Cloudinary keys in Render"}),500
+    conn=get_conn(); c=conn.cursor(); now=datetime.now(); exp=now+timedelta(hours=24)
+    c.execute("INSERT INTO stories (username,media_url,text,created_at,expires_at) VALUES (%s,%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO stories (username,media_url,text,created_at,expires_at) VALUES (?,?,?,?,?)",(me,url,txt,now.isoformat(),exp.isoformat()))
+    conn.commit(); conn.close(); return jsonify({"ok":True})
+
+@app.route('/api/story/delete', methods=['POST'])
+def api_story_delete():
+    me=session.get('username'); data=request.json; sid=data.get('id')
+    conn=get_conn(); c=conn.cursor()
+    c.execute("DELETE FROM stories WHERE id=%s AND username=%s" if USE_POSTGRES else "DELETE FROM stories WHERE id=? AND username=?", (sid,me)); conn.commit(); conn.close(); return jsonify({"ok":True})
+
+@app.route('/api/story/text', methods=['POST'])
+def api_story_text():
+    me=session.get('username'); data=request.json; txt=data.get('text','')[:100]
+    conn=get_conn(); c=conn.cursor(); now=datetime.now(); exp=now+timedelta(hours=24)
+    c.execute("INSERT INTO stories (username,media_url,text,created_at,expires_at) VALUES (%s,%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO stories (username,media_url,text,created_at,expires_at) VALUES (?,?,?,?,?)", (me,"",txt,now.isoformat(),exp.isoformat()))
+    conn.commit(); conn.close(); return jsonify({"ok":True})
+
+@app.route('/api/story/viewers')
+def api_story_viewers():
+    me=session.get('username');sid=request.args.get('id');conn=get_conn();c=conn.cursor();q="SELECT username FROM stories WHERE id=%s" if USE_POSTGRES else "SELECT username FROM stories WHERE id=?";c.execute(q,(sid,));own=c.fetchone()
+    if not own or own[0]!=me:conn.close();return jsonify({"count":0,"viewers":[]})
+    qv="SELECT viewer FROM story_views WHERE story_id=%s" if USE_POSTGRES else "SELECT viewer FROM story_views WHERE story_id=?";c.execute(qv,(sid,));rows=[x[0] for x in c.fetchall()];conn.close();return jsonify({"count":len(rows),"viewers":rows})
+
+@app.route('/api/story/react',methods=['POST'])
+def api_story_react():
+    me=session.get('username');d=request.get_json(silent=True) or {};sid=d.get('id');reaction=str(d.get('reaction',''))[:8];conn=get_conn();c=conn.cursor();q="INSERT INTO story_reactions (story_id,username,reaction) VALUES (%s,%s,%s) ON CONFLICT (story_id,username) DO UPDATE SET reaction=%s" if USE_POSTGRES else "INSERT OR REPLACE INTO story_reactions (story_id,username,reaction) VALUES (?,?,?)";c.execute(q,(sid,me,reaction,reaction) if USE_POSTGRES else (sid,me,reaction));
+    try:
+        qo="SELECT username FROM stories WHERE id=%s" if USE_POSTGRES else "SELECT username FROM stories WHERE id=?";c.execute(qo,(sid,));o=c.fetchone()
+        conn.commit();conn.close();
+        if o:notify(o[0],'story_reaction',me,me+' reacted to your story')
+        return jsonify({"ok":True,"id":c.lastrowid if not USE_POSTGRES else None,"created_at":now,"media_url":url})
+    except Exception:
+        conn.rollback();conn.close();return jsonify({"ok":False}),500
+
+@app.route('/api/story/view', methods=['POST'])
+def api_story_view():
+    me=session.get('username'); data=request.json or {}; sid=data.get('id'); conn=get_conn(); c=conn.cursor()
+    try:
+        q="SELECT username FROM stories WHERE id=%s" if USE_POSTGRES else "SELECT username FROM stories WHERE id=?"
+        c.execute(q,(sid,)); owner=c.fetchone()
+        # A story owner does not count as their own viewer.
+        if not owner or not me or owner[0]==me:
+            conn.close(); return jsonify({"ok":True,"viewed":False})
+        c.execute("INSERT INTO story_views VALUES (%s,%s) ON CONFLICT DO NOTHING" if USE_POSTGRES else "INSERT OR IGNORE INTO story_views VALUES (?,?)", (sid,me))
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except: pass
+    conn.close(); return jsonify({"ok":True,"viewed":True})
+
+@app.route('/api/profile/pic', methods=['POST'])
+def api_profile_pic():
+    me=session.get('username'); f=request.files.get('media'); url=upload_to_cloud(f)
+    if not url: return jsonify({"ok":False,"error":"no file"}),400
+    conn=get_conn(); c=conn.cursor()
+    c.execute("UPDATE profiles SET pic_url=%s WHERE username=%s" if USE_POSTGRES else "UPDATE profiles SET pic_url=? WHERE username=?",(url,me)); conn.commit(); conn.close()
+    return jsonify({"ok":True,"url":url})
+
+# Private Socket.IO rooms are keyed to existing Prove Am usernames.
+if sio is not None:
+    @sio.event
+    def connect(sid, environ, auth=None):
+        try:
+            me=session.get('username')
+            if not me: return False
+            sio.enter_room(sid,'pm:'+me)
+            sio.save_session(sid,{'username':me})
+            return True
+        except Exception:
+            return False
+
+    @sio.event
+    def identify(sid):
+        try:
+            me=session.get('username') or (sio.get_session(sid) or {}).get('username')
+            if me: sio.enter_room(sid,'pm:'+me)
+        except Exception: pass
+
+    @sio.event
+    def send_message(sid, data):
+        """Low-latency text-message path: one DB connection, one validation query, then immediate Socket.IO delivery."""
+        try:
+            sess = sio.get_session(sid) or {}
+            me = session.get('username') or sess.get('username')
+            data = data or {}
+            other = str(data.get('receiver') or '').strip()
+            txt = str(data.get('text') or '')[:500]
+            reply_to = str(data.get('reply_to') or '')[:100]
+            if not me or not other or other == me or not txt:
+                return {'ok': False, 'error': 'Invalid message'}
+
+            conn = get_conn()
+            c = conn.cursor()
+            try:
+                # Validate the recipient, privacy and friendship in the same DB round-trip.
+                if USE_POSTGRES:
+                    c.execute(
+                        """SELECT a.username, COALESCE(p.message_privacy,'friends'),
+                                  EXISTS(
+                                    SELECT 1 FROM friends f
+                                    WHERE ((f.sender=%s AND f.receiver=%s) OR
+                                           (f.sender=%s AND f.receiver=%s))
+                                      AND f.status='accepted'
+                                  )
+                           FROM auth a
+                           LEFT JOIN profiles p ON p.username=a.username
+                           WHERE a.username=%s
+                           LIMIT 1""",
+                        (me, other, other, me, other)
+                    )
+                else:
+                    c.execute(
+                        """SELECT a.username, COALESCE(p.message_privacy,'friends'),
+                                  EXISTS(
+                                    SELECT 1 FROM friends f
+                                    WHERE ((f.sender=? AND f.receiver=?) OR
+                                           (f.sender=? AND f.receiver=?))
+                                      AND f.status='accepted'
+                                  )
+                           FROM auth a
+                           LEFT JOIN profiles p ON p.username=a.username
+                           WHERE a.username=?
+                           LIMIT 1""",
+                        (me, other, other, me, other)
+                    )
+                recipient = c.fetchone()
+                if not recipient:
+                    return {'ok': False, 'error': 'Recipient not found'}
+                privacy = recipient[1] or 'friends'
+                friend = bool(recipient[2])
+                if privacy == 'friends' and not friend:
+                    return {'ok': False, 'error': 'This user only accepts messages from friends'}
+
+                # Check both block directions without opening another connection.
+                qb = (
+                    "SELECT 1 FROM blocked_users WHERE (blocker=%s AND blocked=%s) OR (blocker=%s AND blocked=%s) LIMIT 1"
+                    if USE_POSTGRES else
+                    "SELECT 1 FROM blocked_users WHERE (blocker=? AND blocked=?) OR (blocker=? AND blocked=?) LIMIT 1"
+                )
+                c.execute(qb, (me, other, other, me))
+                if c.fetchone():
+                    return {'ok': False, 'error': 'Messaging is unavailable between these accounts'}
+
+                now = datetime.now().isoformat()
+                if USE_POSTGRES:
+                    c.execute(
+                        "INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at,media_type) VALUES (%s,%s,%s,'',%s,0,%s,'') RETURNING id",
+                        (me, other, txt, reply_to, now)
+                    )
+                    row = c.fetchone()
+                    msg_id = row[0] if row else None
+                else:
+                    c.execute(
+                        "INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at,media_type) VALUES (?,?,?,?,?,0,?,?)",
+                        (me, other, txt, '', reply_to, now, '')
+                    )
+                    msg_id = c.lastrowid
+                conn.commit()
+
+                payload = {
+                    'ok': True, 'id': msg_id, 'sender': me, 'receiver': other,
+                    'text': txt, 'media_url': '', 'reply_to': reply_to, 'read': 0,
+                    'deleted': False, 'created_at': now, 'media_type': ''
+                }
+                # Deliver first; notification persistence happens in the background.
+                sio.emit('chat_message', payload, room='pm:'+other)
+                notify_async(other, 'message', me, me+' sent you a message')
+                return payload
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+        except Exception:
+            traceback.print_exc()
+            return {'ok': False, 'error': 'Server could not save the message'}
+
+    @sio.event
+    def disconnect(sid):
+        pass
+
+@app.route('/api/messages')
+def api_messages():
+    me=session.get('username'); other=request.args.get('with','')
+    if not me or not other: return jsonify([])
+    conn=get_conn(); c=conn.cursor()
+    try:
+        q="SELECT id,sender,text,media_url,reply_to,read,deleted_at,created_at,media_type FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s) ORDER BY id DESC LIMIT 40" if USE_POSTGRES else "SELECT id,sender,text,media_url,reply_to,read,deleted_at,created_at,media_type FROM messages WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?) ORDER BY id DESC LIMIT 60"
+        c.execute(q,(me,other,other,me)); rows=list(reversed(c.fetchall()))
+        ids=[r[0] for r in rows]
+        reactions_by={}
+        if ids:
+            marks=','.join(['%s']*len(ids)) if USE_POSTGRES else ','.join(['?']*len(ids))
+            qr=f"SELECT message_id,reaction,COUNT(*) FROM message_reactions WHERE message_id IN ({marks}) GROUP BY message_id,reaction"
+            c.execute(qr,tuple(ids))
+            for mid,reaction,count in c.fetchall(): reactions_by.setdefault(mid,[]).append({"reaction":reaction,"count":count})
+        out=[]
+        for r in rows:
+            media_url=str(r[3] or '')
+            low=media_url.lower()
+            media_type=str(r[8] or '')
+            is_audio=media_type=='audio' or low.endswith(('.mp3','.wav','.ogg','.m4a','.aac','.webm'))
+            is_video=media_type=='video' or low.endswith(('.mp4','.mov','.m4v','.avi'))
+            out.append({"id":r[0],"sender":r[1],"text":r[2],"media_url":r[3],"reply_to":r[4],"read":r[5],"deleted":bool(r[6]),"created_at":str(r[7] or ""),"reactions":reactions_by.get(r[0],[]),"media_type":"audio" if is_audio else ("video" if is_video else "image" if r[3] else "")})
+        return jsonify(out)
+    finally:
+        conn.close()
+
+@app.route('/api/messages/unread_count')
+def api_unread_count():
+    me=session.get('username'); other=request.args.get('with',''); conn=get_conn(); c=conn.cursor()
+    c.execute("SELECT COUNT(*) FROM messages WHERE receiver=%s AND sender=%s AND read=0" if USE_POSTGRES else "SELECT COUNT(*) FROM messages WHERE receiver=? AND sender=? AND read=0",(me,other))
+    cnt=c.fetchone()[0]; conn.close(); return jsonify({"count":cnt})
+
+@app.route('/api/messages/mark_read', methods=['POST'])
+def api_mark_read():
+    me=session.get('username'); other=request.json.get('with'); conn=get_conn(); c=conn.cursor()
+    c.execute("UPDATE messages SET read=1 WHERE receiver=%s AND sender=%s" if USE_POSTGRES else "UPDATE messages SET read=1 WHERE receiver=? AND sender=?",(me,other))
+    conn.commit(); conn.close()
+    if sio is not None and me and other:
+        try: sio.emit('chat_read', {'by':me}, room='pm:'+other)
+        except Exception: pass
+    return jsonify({"ok":True})
+
+@app.route('/api/messages/search')
+def api_messages_search():
+    me=session.get('username');other=request.args.get('with','');q='%'+request.args.get('q','').lower()+'%';conn=get_conn();c=conn.cursor();sql="SELECT sender,text FROM messages WHERE ((sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s)) AND LOWER(COALESCE(text,'')) LIKE %s ORDER BY id DESC LIMIT 50" if USE_POSTGRES else "SELECT sender,text FROM messages WHERE ((sender=? AND receiver=?) OR (sender=? AND receiver=?)) AND LOWER(COALESCE(text,'')) LIKE ? ORDER BY id DESC LIMIT 50";c.execute(sql,(me,other,other,me,q));rows=c.fetchall();conn.close();return jsonify([{"sender":r[0],"text":r[1]} for r in rows])
+
+@app.route('/api/send', methods=['POST'])
+def api_send():
+    me = (session.get('username') or '').strip()
+    other = (request.form.get('receiver') or '').strip()
+    txt = (request.form.get('text') or '')[:500]
+    reply_to = (request.form.get('reply_to') or '')[:100]
+    f = request.files.get('media')
+    media_type = (request.form.get('media_type') or '').strip().lower()[:20]
+
+    if not me:
+        return jsonify({"ok":False,"error":"Not logged in"}),401
+    if not other:
+        return jsonify({"ok":False,"error":"No recipient selected"}),400
+    if other == me:
+        return jsonify({"ok":False,"error":"You cannot message yourself"}),400
+    if not txt and not (f and f.filename):
+        return jsonify({"ok":False,"error":"empty"}),400
+
+    conn = get_conn()
+    c = conn.cursor()
+    try:
+        if is_blocked(me,other) or is_blocked(other,me):
+            return jsonify({"ok":False,"error":"Messaging is unavailable between these accounts"}),403
+        qp="SELECT message_privacy FROM profiles WHERE username=%s" if USE_POSTGRES else "SELECT message_privacy FROM profiles WHERE username=?";c.execute(qp,(other,));pr=c.fetchone()
+        if pr and (pr[0] or 'friends')=='friends' and not is_friend(me,other):
+            return jsonify({"ok":False,"error":"This user only accepts messages from friends"}),403
+        q_user = "SELECT username FROM auth WHERE username=%s" if USE_POSTGRES else "SELECT username FROM auth WHERE username=?"
+        c.execute(q_user, (other,))
+        if not c.fetchone():
+            return jsonify({"ok":False,"error":"Recipient not found"}),404
+
+        url = upload_to_cloud(f) if f and f.filename else ''
+        q = (
+            "INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at,media_type) VALUES (%s,%s,%s,%s,%s,0,%s,%s)"
+            if USE_POSTGRES else
+            "INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at,media_type) VALUES (?,?,?,?,?,0,?,?)"
+        )
+        now=datetime.now().isoformat(); c.execute(q, (me,other,txt,url,reply_to,now,media_type))
+        conn.commit()
+        notify_async(other,'message',me,me+' sent you a message')
+        msg_id = c.lastrowid if not USE_POSTGRES else None
+        if sio is not None:
+            try:
+                sio.emit('chat_message', {'id':msg_id,'sender':me,'receiver':other,'text':txt,'media_url':url or '', 'reply_to':reply_to,'read':0,'deleted':False,'created_at':now,'media_type':media_type}, room='pm:'+other)
+            except Exception: pass
+        return jsonify({"ok":True,"id":msg_id,"created_at":now,"media_url":url})
+    except Exception:
+        conn.rollback()
+        print("SEND MESSAGE ERROR:")
+        traceback.print_exc()
+        return jsonify({"ok":False,"error":"Server could not save the message"}),500
+    finally:
+        conn.close()
+
+@app.route('/api/message/delete', methods=['POST'])
+def api_message_delete():
+    me=session.get('username'); data=request.json or {}; mid=data.get('id')
+    conn=get_conn(); c=conn.cursor()
+    q="UPDATE messages SET text=%s,deleted_at=%s WHERE id=%s AND sender=%s" if USE_POSTGRES else "UPDATE messages SET text=?,deleted_at=? WHERE id=? AND sender=?"
+    c.execute(q,('This message was deleted',datetime.now().isoformat(),mid,me));conn.commit();ok=c.rowcount>0;conn.close();return jsonify({"ok":ok})
+
+@app.route('/api/notifications')
+def api_notifications():
+    me=session.get('username'); conn=get_conn(); c=conn.cursor()
+    c.execute("SELECT id,type,from_user,text,created_at FROM notifications WHERE username=%s ORDER BY id DESC LIMIT 50" if USE_POSTGRES else "SELECT id,type,from_user,text,created_at FROM notifications WHERE username=? ORDER BY id DESC LIMIT 50",(me,))
+    rows=c.fetchall(); conn.close()
+    return jsonify([{"id":r[0],"type":r[1],"from_user":r[2],"text":r[3],"created_at":r[4]} for r in rows])
+
+@app.route('/api/notifications/read',methods=['POST'])
+def api_notifications_read():
+    me=session.get('username');conn=get_conn();c=conn.cursor();q="UPDATE notifications SET is_read=1 WHERE username=%s" if USE_POSTGRES else "UPDATE notifications SET is_read=1 WHERE username=?";c.execute(q,(me,));conn.commit();conn.close();return jsonify({"ok":True})
+
+@app.route('/api/notifications/count')
+def api_notifications_count():
+    me=session.get('username'); conn=get_conn(); c=conn.cursor()
+    c.execute("SELECT COUNT(*) FROM notifications WHERE username=%s AND is_read=0" if USE_POSTGRES else "SELECT COUNT(*) FROM notifications WHERE username=? AND is_read=0",(me,))
+    cnt=c.fetchone()[0]; conn.close(); return jsonify({"count":cnt})
+
+@app.route('/api/notifications/clear', methods=['POST'])
+def api_notifications_clear():
+    me=session.get('username'); conn=get_conn(); c=conn.cursor()
+    c.execute("DELETE FROM notifications WHERE username=%s" if USE_POSTGRES else "DELETE FROM notifications WHERE username=?",(me,)); conn.commit(); conn.close(); return jsonify({"ok":True})
+
+
+
+@app.route('/api/security/logout_all',methods=['POST'])
+def api_logout_all():
+    me=session.get('username');conn=get_conn();c=conn.cursor();q="UPDATE auth SET session_version=COALESCE(session_version,1)+1 WHERE username=%s" if USE_POSTGRES else "UPDATE auth SET session_version=COALESCE(session_version,1)+1 WHERE username=?";c.execute(q,(me,));conn.commit();conn.close();session.clear();return jsonify({"ok":True})
+
+@app.route('/api/profile/me')
+def api_profile_me():
+    me=session.get('username');
+    if not me:return jsonify({"error":"Not logged in"}),401
+    conn=get_conn();c=conn.cursor();q="SELECT pic_url,bio,cover_url,private_account,message_privacy,show_last_seen,show_read_receipts FROM profiles WHERE username=%s" if USE_POSTGRES else "SELECT pic_url,bio,cover_url,private_account,message_privacy,show_last_seen,show_read_receipts FROM profiles WHERE username=?";c.execute(q,(me,));r=c.fetchone();conn.close();r=r or ('','','',0,'friends',1,1);return jsonify({"username":me,"pic_url":r[0] or '',"bio":r[1] or '',"cover_url":r[2] or '',"private_account":int(r[3] or 0),"message_privacy":r[4] or 'friends',"show_last_seen":int(r[5] if r[5] is not None else 1),"show_read_receipts":int(r[6] if r[6] is not None else 1)})
+
+@app.route('/api/profile/update',methods=['POST'])
+def api_profile_update():
+    me=session.get('username');data=request.get_json(silent=True) or {};bio=str(data.get('bio',''))[:500];conn=get_conn();c=conn.cursor();q="UPDATE profiles SET bio=%s WHERE username=%s" if USE_POSTGRES else "UPDATE profiles SET bio=? WHERE username=?";c.execute(q,(bio,me));conn.commit();conn.close();return jsonify({"ok":True})
+
+@app.route('/api/profile/cover',methods=['POST'])
+def api_profile_cover():
+    me=session.get('username');f=request.files.get('media');url=upload_to_cloud(f)
+    if not url:return jsonify({"ok":False,"error":"Could not upload cover"}),500
+    conn=get_conn();c=conn.cursor();q="UPDATE profiles SET cover_url=%s WHERE username=%s" if USE_POSTGRES else "UPDATE profiles SET cover_url=? WHERE username=?";c.execute(q,(url,me));conn.commit();conn.close();return jsonify({"ok":True,"url":url})
+
+@app.route('/api/profile/settings',methods=['POST'])
+def api_profile_settings():
+    me=session.get('username');data=request.get_json(silent=True) or {};allowed={k:data[k] for k in ('private_account','message_privacy','show_last_seen','show_read_receipts') if k in data};conn=get_conn();c=conn.cursor()
+    if allowed:
+        sets=[];vals=[]
+        for k,v in allowed.items():sets.append(k+'=%s' if USE_POSTGRES else k+'=?');vals.append(v)
+        vals.append(me);q='UPDATE profiles SET '+','.join(sets)+' WHERE username='+('%s' if USE_POSTGRES else '?');c.execute(q,tuple(vals))
+    conn.commit();conn.close();return api_profile_me()
+
+@app.route('/api/profile/<username>')
+def api_public_profile(username):
+    me=session.get('username');conn=get_conn();c=conn.cursor();q="SELECT pic_url,bio,cover_url,private_account FROM profiles WHERE username=%s" if USE_POSTGRES else "SELECT pic_url,bio,cover_url,private_account FROM profiles WHERE username=?";c.execute(q,(username,));r=c.fetchone();
+    if not r:conn.close();return jsonify({"error":"User not found"}),404
+    qf="SELECT COUNT(*) FROM friends WHERE (sender=%s OR receiver=%s) AND status='accepted'" if USE_POSTGRES else "SELECT COUNT(*) FROM friends WHERE (sender=? OR receiver=?) AND status='accepted'";c.execute(qf,(username,username));fc=c.fetchone()[0]
+    q1="SELECT COUNT(*) FROM follows WHERE following=%s" if USE_POSTGRES else "SELECT COUNT(*) FROM follows WHERE following=?";c.execute(q1,(username,));followers=c.fetchone()[0]
+    q2="SELECT 1 FROM follows WHERE follower=%s AND following=%s" if USE_POSTGRES else "SELECT 1 FROM follows WHERE follower=? AND following=?";c.execute(q2,(me,username));following_me=bool(c.fetchone())
+    qb="SELECT 1 FROM blocked_users WHERE blocker=%s AND blocked=%s" if USE_POSTGRES else "SELECT 1 FROM blocked_users WHERE blocker=? AND blocked=?";c.execute(qb,(me,username));blocked=bool(c.fetchone());conn.close();return jsonify({"username":username,"pic_url":r[0] or '',"bio":r[1] or '',"cover_url":r[2] or '',"private_account":int(r[3] or 0),"friends_count":fc,"followers":followers,"following_me":following_me,"blocked":blocked})
+
+@app.route('/api/follow',methods=['POST'])
+def api_follow():
+    me=session.get('username');u=(request.get_json(silent=True) or {}).get('username','');
+    if not me or not u or me==u:return jsonify({"ok":False,"error":"Invalid user"}),400
+    conn=get_conn();c=conn.cursor();q="SELECT 1 FROM follows WHERE follower=%s AND following=%s" if USE_POSTGRES else "SELECT 1 FROM follows WHERE follower=? AND following=?";c.execute(q,(me,u));exists=bool(c.fetchone())
+    if exists:q2="DELETE FROM follows WHERE follower=%s AND following=%s" if USE_POSTGRES else "DELETE FROM follows WHERE follower=? AND following=?";c.execute(q2,(me,u));conn.commit();conn.close();return jsonify({"ok":True,"following":False})
+    q2="INSERT INTO follows (follower,following) VALUES (%s,%s)" if USE_POSTGRES else "INSERT INTO follows (follower,following) VALUES (?,?)";c.execute(q2,(me,u));conn.commit();conn.close();notify(u,'follow',me,me+' followed you');return jsonify({"ok":True,"following":True})
+
+@app.route('/api/block',methods=['POST'])
+def api_block():
+    me=session.get('username');u=(request.get_json(silent=True) or {}).get('username','');
+    if not me or not u:return jsonify({"ok":False}),400
+    conn=get_conn();c=conn.cursor();q="SELECT 1 FROM blocked_users WHERE blocker=%s AND blocked=%s" if USE_POSTGRES else "SELECT 1 FROM blocked_users WHERE blocker=? AND blocked=?";c.execute(q,(me,u));exists=bool(c.fetchone())
+    if exists:q2="DELETE FROM blocked_users WHERE blocker=%s AND blocked=%s" if USE_POSTGRES else "DELETE FROM blocked_users WHERE blocker=? AND blocked=?";c.execute(q2,(me,u));blocked=False
+    else:q2="INSERT INTO blocked_users (blocker,blocked) VALUES (%s,%s)" if USE_POSTGRES else "INSERT INTO blocked_users (blocker,blocked) VALUES (?,?)";c.execute(q2,(me,u));blocked=True
+    conn.commit();conn.close();return jsonify({"ok":True,"blocked":blocked})
+
+@app.route('/api/friend/remove',methods=['POST'])
+def api_friend_remove():
+    me=session.get('username');u=(request.get_json(silent=True) or {}).get('username','');conn=get_conn();c=conn.cursor();q="DELETE FROM friends WHERE ((sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s)) AND status='accepted'" if USE_POSTGRES else "DELETE FROM friends WHERE ((sender=? AND receiver=?) OR (sender=? AND receiver=?)) AND status='accepted'";c.execute(q,(me,u,u,me));conn.commit();conn.close();return jsonify({"ok":True})
+
+@app.route('/api/report',methods=['POST'])
+def api_report():
+    me=session.get('username');d=request.get_json(silent=True) or {};tt=str(d.get('target_type',''))[:20];tid=str(d.get('target_id',''))[:100];reason=str(d.get('reason',''))[:300];
+    if not me or not tt or not tid:return jsonify({"ok":False}),400
+    conn=get_conn();c=conn.cursor();q="INSERT INTO reports (reporter,target_type,target_id,reason,created_at) VALUES (%s,%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO reports (reporter,target_type,target_id,reason,created_at) VALUES (?,?,?,?,?)";c.execute(q,(me,tt,tid,reason,datetime.now().isoformat()));conn.commit();conn.close();return jsonify({"ok":True})
+
+@app.route('/api/message/react',methods=['POST'])
+def api_message_react():
+    me=session.get('username');d=request.get_json(silent=True) or {};mid=d.get('id');reaction=str(d.get('reaction',''))[:8];conn=get_conn();c=conn.cursor();q="SELECT 1 FROM message_reactions WHERE message_id=%s AND username=%s" if USE_POSTGRES else "SELECT 1 FROM message_reactions WHERE message_id=? AND username=?";c.execute(q,(mid,me));exists=bool(c.fetchone())
+    if exists:
+        q2="UPDATE message_reactions SET reaction=%s WHERE message_id=%s AND username=%s" if USE_POSTGRES else "UPDATE message_reactions SET reaction=? WHERE message_id=? AND username=?";c.execute(q2,(reaction,mid,me))
+    else:
+        q2="INSERT INTO message_reactions (message_id,username,reaction) VALUES (%s,%s,%s)" if USE_POSTGRES else "INSERT INTO message_reactions (message_id,username,reaction) VALUES (?,?,?)";c.execute(q2,(mid,me,reaction))
+    conn.commit();conn.close();return jsonify({"ok":True})
+
+@app.route('/api/message/edit',methods=['POST'])
+def api_message_edit():
+    me=session.get('username');d=request.get_json(silent=True) or {};mid=d.get('id');text=str(d.get('text',''))[:500];conn=get_conn();c=conn.cursor();q="UPDATE messages SET text=%s,edited_at=%s WHERE id=%s AND sender=%s AND deleted_at IS NULL" if USE_POSTGRES else "UPDATE messages SET text=?,edited_at=? WHERE id=? AND sender=? AND deleted_at IS NULL";c.execute(q,(text,datetime.now().isoformat(),mid,me));conn.commit();ok=c.rowcount>0;conn.close();return jsonify({"ok":ok,"error":None if ok else 'Message cannot be edited'})
+
+@app.route('/api/typing',methods=['POST'])
+def api_typing():
+    me=session.get('username');peer=(request.get_json(silent=True) or {}).get('peer','');conn=get_conn();c=conn.cursor();now=time.time();q="INSERT INTO user_typing (username,peer,last_seen) VALUES (%s,%s,%s) ON CONFLICT (username,peer) DO UPDATE SET last_seen=%s" if USE_POSTGRES else "INSERT OR REPLACE INTO user_typing (username,peer,last_seen) VALUES (?,?,?)";c.execute(q,(me,peer,now,now) if USE_POSTGRES else (me,peer,now));conn.commit();conn.close()
+    if sio is not None and me and peer:
+        try: sio.emit('chat_typing', {'from':me,'typing':True}, room='pm:'+peer)
+        except Exception: pass
+    return jsonify({"ok":True})
+
+@app.route('/api/typing')
+def api_typing_get():
+    me=session.get('username');peer=request.args.get('peer','');conn=get_conn();c=conn.cursor();q="SELECT last_seen FROM user_typing WHERE username=%s AND peer=%s" if USE_POSTGRES else "SELECT last_seen FROM user_typing WHERE username=? AND peer=?";c.execute(q,(peer,me));r=c.fetchone();conn.close();return jsonify({"typing":bool(r and time.time()-float(r[0])<4)})
+
+@app.route('/api/comment/like', methods=['POST'])
+def api_comment_like():
+    me=(session.get('username') or '').strip(); data=request.get_json(silent=True) or {}; cid=data.get('comment_id')
+    if not me:return jsonify({'ok':False,'error':'Not logged in'}),401
+    if not cid:return jsonify({'ok':False,'error':'Missing comment'}),400
+    conn=get_conn();c=conn.cursor()
+    try:
+        q="SELECT 1 FROM comments WHERE id=%s" if USE_POSTGRES else "SELECT 1 FROM comments WHERE id=?";c.execute(q,(cid,))
+        if not c.fetchone():return jsonify({'ok':False,'error':'Comment not found'}),404
+        q="SELECT 1 FROM comment_likes WHERE comment_id=%s AND username=%s" if USE_POSTGRES else "SELECT 1 FROM comment_likes WHERE comment_id=? AND username=?";c.execute(q,(cid,me));exists=bool(c.fetchone())
+        if exists:q="DELETE FROM comment_likes WHERE comment_id=%s AND username=%s" if USE_POSTGRES else "DELETE FROM comment_likes WHERE comment_id=? AND username=?";c.execute(q,(cid,me));liked=False
+        else:q="INSERT INTO comment_likes(comment_id,username) VALUES(%s,%s)" if USE_POSTGRES else "INSERT OR IGNORE INTO comment_likes(comment_id,username) VALUES(?,?)";c.execute(q,(cid,me));liked=True
+        q="SELECT COUNT(*) FROM comment_likes WHERE comment_id=%s" if USE_POSTGRES else "SELECT COUNT(*) FROM comment_likes WHERE comment_id=?";c.execute(q,(cid,));count=int(c.fetchone()[0] or 0);conn.commit();return jsonify({'ok':True,'liked':liked,'like_count':count})
+    except Exception:conn.rollback();return jsonify({'ok':False,'error':'Could not like comment'}),500
+    finally:conn.close()
+
+@app.route('/api/comments')
+def api_comments():
+    pid=request.args.get('post_id');me=session.get('username') or '';conn=get_conn();c=conn.cursor();q="SELECT id,username,text,created_at FROM comments WHERE post_id=%s ORDER BY id ASC" if USE_POSTGRES else "SELECT id,username,text,created_at FROM comments WHERE post_id=? ORDER BY id ASC";c.execute(q,(pid,));rows=c.fetchall();out=[]
+    for r in rows:
+        ql="SELECT COUNT(*) FROM comment_likes WHERE comment_id=%s" if USE_POSTGRES else "SELECT COUNT(*) FROM comment_likes WHERE comment_id=?";c.execute(ql,(r[0],));cnt=int(c.fetchone()[0] or 0)
+        ql2="SELECT 1 FROM comment_likes WHERE comment_id=%s AND username=%s" if USE_POSTGRES else "SELECT 1 FROM comment_likes WHERE comment_id=? AND username=?";c.execute(ql2,(r[0],me));liked=bool(c.fetchone());out.append({'id':r[0],'username':r[1],'text':r[2],'created_at':str(r[3] or ''),'like_count':cnt,'liked':liked})
+    conn.close();return jsonify(out)
+
+@app.route('/api/post/share',methods=['POST'])
+def api_post_share():
+    me=session.get('username');pid=(request.get_json(silent=True) or {}).get('post_id');conn=get_conn();c=conn.cursor();now=datetime.now().isoformat()
+    try:
+        q="SELECT username,text,media_url FROM posts WHERE id=%s" if USE_POSTGRES else "SELECT username,text,media_url FROM posts WHERE id=?";c.execute(q,(pid,));orig=c.fetchone()
+        if not orig:return jsonify({"ok":False,"error":"Post not found"}),404
+        qs="INSERT INTO post_shares (post_id,username,created_at) VALUES (%s,%s,%s) ON CONFLICT DO NOTHING" if USE_POSTGRES else "INSERT OR IGNORE INTO post_shares (post_id,username,created_at) VALUES (?,?,?)";c.execute(qs,(pid,me,now))
+        qp="INSERT INTO posts (username,text,media_url,created_at,shared_post_id) VALUES (%s,%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO posts (username,text,media_url,created_at,shared_post_id) VALUES (?,?,?,?,?)";c.execute(qp,(me,'🔄 Shared a post','',now,pid))
+        conn.commit();notify(orig[0],'share',me,me+' shared your post');return jsonify({"ok":True,"id":c.lastrowid if not USE_POSTGRES else None,"created_at":now,"media_url":url})
+    except Exception:conn.rollback();return jsonify({"ok":False,"error":"Could not share"}),500
+    finally:conn.close()
+
+@app.route('/api/global-search')
+def api_global_search():
+    me=session.get('username');q=request.args.get('q','').strip();conn=get_conn();c=conn.cursor();like='%'+q.lower()+'%';qp="SELECT id,username,text,created_at FROM posts WHERE LOWER(COALESCE(text,'')) LIKE %s OR LOWER(username) LIKE %s ORDER BY id DESC LIMIT 30" if USE_POSTGRES else "SELECT id,username,text,created_at FROM posts WHERE LOWER(COALESCE(text,'')) LIKE ? OR LOWER(username) LIKE ? ORDER BY id DESC LIMIT 30";c.execute(qp,(like,like));rows=c.fetchall();conn.close();return jsonify({"posts":[{"id":r[0],"username":r[1],"text":r[2],"created_at":str(r[3])} for r in rows]})
+
+@app.route('/static/uploads/<path:filename>')
+def uploads(filename): return send_from_directory('static/uploads', filename)
+
+application = socket_app
+
+# Render currently starts `app:app`. Expose the Socket.IO WSGI wrapper there so
+# the existing realtime client actually uses WebSocket/Socket.IO in production.
+# The Flask app remains the secondary WSGI application inside socket_app.
+if __name__ != '__main__' and sio is not None:
+    app = socket_app
+
+if __name__=='__main__':
+    port=int(os.environ.get("PORT",5000))
+    if sio is not None:
+        from werkzeug.serving import run_simple
+        run_simple('0.0.0.0',port,socket_app,threaded=True)
+    else:
+        app.run(host='0.0.0.0',port=port,threaded=True)
