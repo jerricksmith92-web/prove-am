@@ -1577,15 +1577,21 @@ def api_stories():
     if not me:return jsonify([])
     conn=get_conn();cur=conn.cursor();now=datetime.now().isoformat()
     try:
-        q="SELECT id,username,media_url,text,created_at FROM stories WHERE expires_at>%s ORDER BY id DESC" if USE_POSTGRES else "SELECT id,username,media_url,text,created_at FROM stories WHERE expires_at>? ORDER BY id DESC";cur.execute(q,(now,));rows=cur.fetchall()
-    except:rows=[]
-    allowed={me}
-    try:
-        qf="SELECT sender,receiver FROM friends WHERE (sender=%s OR receiver=%s) AND status='accepted'" if USE_POSTGRES else "SELECT sender,receiver FROM friends WHERE (sender=? OR receiver=?) AND status='accepted'";cur.execute(qf,(me,me));
-        for a,b in cur.fetchall():allowed.add(b if a==me else a)
-    except:pass
-    result=[{"id":r[0],"username":r[1],"media_url":r[2] or "","text":r[3] or "","created_at":str(r[4])} for r in rows if r[1] in allowed]
-    conn.close();return jsonify(result)
+        q="SELECT id,username,media_url,text,created_at FROM stories WHERE expires_at>%s ORDER BY id DESC" if USE_POSTGRES else "SELECT id,username,media_url,text,created_at FROM stories WHERE expires_at>? ORDER BY id DESC"
+        cur.execute(q,(now,));rows=cur.fetchall()
+        qf="SELECT sender,receiver FROM friends WHERE (sender=%s OR receiver=%s) AND LOWER(status)='accepted'" if USE_POSTGRES else "SELECT sender,receiver FROM friends WHERE (sender=? OR receiver=?) AND LOWER(status)='accepted'"
+        cur.execute(qf,(me,me))
+        allowed={me}
+        for a,b in cur.fetchall():
+            allowed.add(b if a==me else a)
+        result=[{"id":r[0],"username":r[1],"media_url":r[2] or "","text":r[3] or "","created_at":str(r[4])} for r in rows if r[1] in allowed]
+        conn.close()
+        return jsonify(result)
+    except Exception as e:
+        try: conn.close()
+        except Exception: pass
+        print("STORY LOAD ERROR:", repr(e), flush=True)
+        return jsonify({"ok":False,"error":"Could not load stories"}),500
 
 @app.route('/api/story', methods=['POST'])
 def api_story():
