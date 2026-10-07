@@ -1,4 +1,6 @@
+
 Flask
+flask-cors
 python-socketio
 simple-websocket
 gunicorn
