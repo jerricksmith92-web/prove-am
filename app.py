@@ -694,7 +694,7 @@ async function uploadStory(){
   if(d.ok){document.getElementById('storyPreview').style.display='none';document.getElementById('storySendBtn').style.display='none';document.getElementById('storyCaption').style.display='none';selectedStoryFile=null;loadStories();}
 }
 async function createTextStory(){let t=prompt('Text story (24h) friends only:');if(!t)return;let r=await fetch('/api/story/text',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})});let d=await r.json();if(d.ok)loadStories();}
-async function loadStories(){
+async async function loadStories(){
  try{
   if(!curUser)return;
   let r=await fetch('/api/stories?t='+Date.now(),{credentials:'same-origin',cache:'no-store'});
@@ -705,7 +705,7 @@ async function loadStories(){
   stories.forEach(st=>{if(!groupedStories[st.username])groupedStories[st.username]=[];groupedStories[st.username].push(st);});
   const mine=groupedStories[curUser]||[], pic=profiles[curUser]||'', mr=document.getElementById('myStatusRow');
   if(mr){const action=mine.length?'openGrouped(curUser)':"document.getElementById('storyFile').click()"; mr.innerHTML=`<div class="wa-status-row"><div class="wa-status-avatar ${pic?'':'empty'}">${pic?`<img src="${pic}">`:'+'}</div><div class="wa-status-info" onclick="${action}"><div class="wa-status-name">My status</div><div class="wa-status-time">${mine.length?'Tap to view your story':'Tap to add story'}</div></div><div class="wa-status-add" onclick="${action}">＋</div></div>`;}
-  let h=''; Object.keys(groupedStories).filter(u=>u!==curUser).forEach(u=>{const a=groupedStories[u],first=a[0],pp=profiles[u]||first.media_url||'';h+=`<div class="wa-status-row" onclick="openGrouped(${JSON.stringify(u)})"><div class="wa-status-avatar">${pp?`<img src="${pp}">`:'👤'}</div><div class="wa-status-info"><div class="wa-status-name">${escapeHtml(u)}</div><div class="wa-status-time">${a.length>1?a.length+' updates · ':''}${escapeHtml((first.created_at||'').slice(0,16))}</div></div></div>`;});
+  let h=''; Object.keys(groupedStories).filter(u=>u!==curUser).forEach(u=>{const a=groupedStories[u],first=a[0],pp=profiles[u]||first.media_url||'';const allViewed=a.length>0&&a.every(x=>x.viewed); const viewedText=allViewed?'✓ Viewed · ':''; h+=`<div class="wa-status-row" onclick="openGrouped(${JSON.stringify(u)})"><div class="wa-status-avatar" style="${allViewed?'opacity:.55;':''}">${pp?`<img src="${pp}">`:'👤'}</div><div class="wa-status-info"><div class="wa-status-name">${escapeHtml(u)}</div><div class="wa-status-time">${viewedText}${a.length>1?a.length+' updates · ':''}${escapeHtml((first.created_at||'').slice(0,16))}</div></div></div>`;});
   const bar=document.getElementById('storyBar'); if(bar)bar.innerHTML=h||'<div style="padding:18px;color:#888">No recent story updates</div>';
  }catch(e){console.error('Status load failed',e);const bar=document.getElementById('storyBar');if(bar)bar.innerHTML='<div style="padding:18px;color:#b33;text-align:center">Could not load stories. Tap ↻ to refresh.</div>';}
 }
@@ -1579,12 +1579,16 @@ def api_stories():
     try:
         q="SELECT id,username,media_url,text,created_at FROM stories WHERE expires_at>%s ORDER BY id DESC" if USE_POSTGRES else "SELECT id,username,media_url,text,created_at FROM stories WHERE expires_at>? ORDER BY id DESC"
         cur.execute(q,(now,));rows=cur.fetchall()
+        # Track which active stories this viewer has already opened.
+        qv="SELECT story_id FROM story_views WHERE viewer=%s" if USE_POSTGRES else "SELECT story_id FROM story_views WHERE viewer=?"
+        cur.execute(qv,(me,))
+        viewed={x[0] for x in cur.fetchall()}
         qf="SELECT sender,receiver FROM friends WHERE (sender=%s OR receiver=%s) AND LOWER(status)='accepted'" if USE_POSTGRES else "SELECT sender,receiver FROM friends WHERE (sender=? OR receiver=?) AND LOWER(status)='accepted'"
         cur.execute(qf,(me,me))
         allowed={me}
         for a,b in cur.fetchall():
             allowed.add(b if a==me else a)
-        result=[{"id":r[0],"username":r[1],"media_url":r[2] or "","text":r[3] or "","created_at":str(r[4])} for r in rows if r[1] in allowed]
+        result=[{"id":r[0],"username":r[1],"media_url":r[2] or "","text":r[3] or "","created_at":str(r[4]),"viewed":r[0] in viewed} for r in rows if r[1] in allowed]
         conn.close()
         return jsonify(result)
     except Exception as e:
@@ -1635,10 +1639,19 @@ def api_story_react():
 
 @app.route('/api/story/view', methods=['POST'])
 def api_story_view():
-    me=session.get('username'); data=request.json; sid=data.get('id'); conn=get_conn(); c=conn.cursor()
-    try: c.execute("INSERT INTO story_views VALUES (%s,%s) ON CONFLICT DO NOTHING" if USE_POSTGRES else "INSERT OR IGNORE INTO story_views VALUES (?,?)", (sid,me)); conn.commit()
-    except: pass
-    conn.close(); return jsonify({"ok":True})
+    me=session.get('username'); data=request.json or {}; sid=data.get('id'); conn=get_conn(); c=conn.cursor()
+    try:
+        q="SELECT username FROM stories WHERE id=%s" if USE_POSTGRES else "SELECT username FROM stories WHERE id=?"
+        c.execute(q,(sid,)); owner=c.fetchone()
+        # A story owner does not count as their own viewer.
+        if not owner or not me or owner[0]==me:
+            conn.close(); return jsonify({"ok":True,"viewed":False})
+        c.execute("INSERT INTO story_views VALUES (%s,%s) ON CONFLICT DO NOTHING" if USE_POSTGRES else "INSERT OR IGNORE INTO story_views VALUES (?,?)", (sid,me))
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except: pass
+    conn.close(); return jsonify({"ok":True,"viewed":True})
 
 @app.route('/api/profile/pic', methods=['POST'])
 def api_profile_pic():
