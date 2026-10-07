@@ -1022,12 +1022,14 @@ async function startRecording(){
     let mt=MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported('audio/webm;codecs=opus')?'audio/webm;codecs=opus':(MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported('audio/mp4')?'audio/mp4':'');
     mediaRecorder=mt?new MediaRecorder(stream,{mimeType:mt}):new MediaRecorder(stream);recordChunks=[];
     mediaRecorder.ondataavailable=e=>{if(e.data.size)recordChunks.push(e.data)};
-    mediaRecorder.onstop=()=>{stream.getTracks().forEach(t=>t.stop());let blob=new Blob(recordChunks,{type:mediaRecorder.mimeType||'audio/webm'});recordedAudioFile=new File([blob],'voice-'+Date.now()+'.webm',{type:blob.type||'audio/webm'});let url=URL.createObjectURL(blob);let a=document.getElementById('voicefunction getReplyPreview(){try{return document.getElementById("replyPreview")}catch(e){return null;}}
-function setReply(t){replyToText=t;const p=getReplyPreview();if(!p)return;p.style.display="block";p.innerHTML="Replying to: "+t+" <span onclick=\"cancelReply()\" style=\"float:right;cursor:pointer;color:red\">✕</span>";}
-function cancelReply(){replyToText="";const p=getReplyPreview();if(p)p.style.display="none";}age and message swipe navigation intentionally disabled. Normal vertical scrolling remains enabled.
+    mediaRecorder.onstop=()=>{stream.getTracks().forEach(t=>t.stop());let blob=new Blob(recordChunks,{type:mediaRecorder.mimeType||'audio/webm'});recordedAudioFile=new File([blob],'voice-'+Date.now()+'.webm',{type:blob.type||'audio/webm'});let url=URL.createObjectURL(blob);let a=document.getElementById('voicePreview');if(a){a.src=url;a.load();}let box=document.getElementById('chatVoiceReady');if(box)box.style.display='flex';setRecordingUi(false);document.getElementById('sendBtn')?.classList.add('ready');};
+    mediaRecorder.start();setRecordingUi(true);
+  }catch(e){setRecordingUi(false);alert('Microphone permission was denied or unavailable');}
+}
+// Page and message swipe navigation intentionally disabled. Normal vertical scrolling remains enabled.
 
-function setReply(t){replyToText=t;let p=document.getElementById('replyPreview');if(!p)return;p.style.display='block';p.innerHTML=`Replying to: ${t} <span onclick="cancelReply()" style="float:right;cursor:pointer;color:red">✕</span>`;}
-function cancelReply(){replyToText='';let p=document.getElementById('replyPreview');if(p)p.style.display='none';}
+function setReply(t){replyToText=t;const p=document.getElementById('replyPreview');if(!p)return;p.style.display='block';p.innerHTML=`Replying to: ${t} <span onclick="cancelReply()" style="float:right;cursor:pointer;color:red">✕</span>`;}
+function cancelReply(){replyToText='';const p=document.getElementById('replyPreview');if(p)p.style.display='none';}
 async function searchUsers(){
   let inp=document.getElementById('searchUsersInput');
   let q=inp ? inp.value.trim() : '';
