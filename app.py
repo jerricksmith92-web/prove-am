@@ -1301,7 +1301,7 @@ def api_chat_list():
         q = """SELECT CASE WHEN f.sender=%s THEN f.receiver ELSE f.sender END AS friend,
                  (SELECT MAX(m.created_at) FROM messages m WHERE ((m.sender=%s AND m.receiver=(CASE WHEN f.sender=%s THEN f.receiver ELSE f.sender END)) OR (m.receiver=%s AND m.sender=(CASE WHEN f.sender=%s THEN f.receiver ELSE f.sender END)))) AS last_message_at,
                  (SELECT COUNT(*) FROM messages u WHERE u.sender=(CASE WHEN f.sender=%s THEN f.receiver ELSE f.sender END) AND u.receiver=%s AND u.read=0) AS unread_count,
-                 p.pic_url,p.show_last_seen,COALESCE(us.last_seen,0) AS last_seen
+                 p.pic_url,COALESCE(us.last_seen,0) AS last_seen
                  FROM friends f LEFT JOIN profiles p ON p.username=(CASE WHEN f.sender=%s THEN f.receiver ELSE f.sender END)
                  LEFT JOIN user_status us ON us.username=(CASE WHEN f.sender=%s THEN f.receiver ELSE f.sender END)
                  WHERE (f.sender=%s OR f.receiver=%s) AND f.status='accepted'"""
@@ -1310,17 +1310,16 @@ def api_chat_list():
         q = """SELECT CASE WHEN f.sender=? THEN f.receiver ELSE f.sender END AS friend,
                  (SELECT MAX(m.created_at) FROM messages m WHERE ((m.sender=? AND m.receiver=(CASE WHEN f.sender=? THEN f.receiver ELSE f.sender END)) OR (m.receiver=? AND m.sender=(CASE WHEN f.sender=? THEN f.receiver ELSE f.sender END)))) AS last_message_at,
                  (SELECT COUNT(*) FROM messages u WHERE u.sender=(CASE WHEN f.sender=? THEN f.receiver ELSE f.sender END) AND u.receiver=? AND u.read=0) AS unread_count,
-                 p.pic_url,p.show_last_seen,COALESCE(us.last_seen,0) AS last_seen
+                 p.pic_url,COALESCE(us.last_seen,0) AS last_seen
                  FROM friends f LEFT JOIN profiles p ON p.username=(CASE WHEN f.sender=? THEN f.receiver ELSE f.sender END)
                  LEFT JOIN user_status us ON us.username=(CASE WHEN f.sender=? THEN f.receiver ELSE f.sender END)
                  WHERE (f.sender=? OR f.receiver=?) AND f.status='accepted'"""
         args=(me,me,me,me,me,me,me,me,me,me,me)
     c.execute(q,args); rows=c.fetchall(); conn.close()
     now=time.time(); out=[]
-    for friend,last_at,unread,pic,show_last_seen,last_seen in rows:
+    for friend,last_at,unread,pic,last_seen in rows:
         if not friend: continue
         online=bool(last_seen and now-float(last_seen)<40)
-        if show_last_seen==0 and friend!=me: online=False
         out.append({'username':friend,'friend':friend,'last_message_at':str(last_at or ''),'unread_count':int(unread or 0),'online':online,'pic_url':pic or ''})
     out.sort(key=lambda x:(x.get('last_message_at',''),x.get('username','')), reverse=True)
     return jsonify(out)
