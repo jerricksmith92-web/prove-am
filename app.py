@@ -673,11 +673,26 @@ function openProfile(){document.getElementById('storiesDiv').style.display='none
 async function loadMe(){let r=await fetch('/api/me');let d=await r.json();curUser=d.username;document.getElementById('profileName').innerText=curUser;loadProfiles();ping();setInterval(ping,30000);loadNotifCount();setInterval(loadNotifCount,15000);}
 function ping(){fetch('/api/status/ping',{method:'POST'});}
 async function loadProfiles(){
-  let r=await fetch('/api/users');let users=await r.json();allUsers=users;users.forEach(u=>{profiles[u.username]=u.pic_url});
+  const cacheKey='proveAmUsersCache';
+  try{
+    const cached=JSON.parse(sessionStorage.getItem(cacheKey)||'null');
+    if(Array.isArray(cached)&&cached.length){
+      allUsers=cached;cached.forEach(u=>{profiles[u.username]=u.pic_url||''});
+      renderTopPic();
+    }
+  }catch(e){}
+  const [usersRes,meRes]=await Promise.all([
+    fetch('/api/users',{credentials:'same-origin',cache:'no-store'}),
+    fetch('/api/profile/me',{credentials:'same-origin',cache:'no-store'})
+  ]);
+  const users=await usersRes.json();
+  allUsers=Array.isArray(users)?users:[];
+  allUsers.forEach(u=>{profiles[u.username]=u.pic_url||''});
+  try{sessionStorage.setItem(cacheKey,JSON.stringify(allUsers));}catch(e){}
   renderTopPic();
-  let me=await fetch('/api/profile/me'); let md=await me.json();
+  const md=await meRes.json();
   let url=profiles[curUser]; let big=document.getElementById('profilePicBig');
-  if(url && big){ let bust=url+'?t='+Date.now(); big.innerHTML=`<img src="${bust}" style="width:100%;height:100%;object-fit:cover">`; }
+  if(url && big){ let bust=url+'?t='+Date.now(); big.innerHTML=`<img src="${bust}" loading="lazy" style="width:100%;height:100%;object-fit:cover">`; }
   if(document.getElementById('bioInput')) document.getElementById('bioInput').value=md.bio||'';
   updatePrivacyButtons(md);
 }
@@ -809,18 +824,7 @@ function renderChatUsers(users){
       if(name)openChat(name);
     });
   }
-  // Update status/unread in the background; never block opening a chat.
-  visible.forEach(async u=>{
-    try{
-      const [sr,ur]=await Promise.all([
-        fetch('/api/status/get?user='+encodeURIComponent(u.username)),
-        fetch('/api/messages/unread_count?with='+encodeURIComponent(u.username))
-      ]);
-      const st=await sr.json(), uc=await ur.json();
-      const row=el.querySelector(`[data-chat-user="${CSS.escape(u.username)}"]`);
-      if(row){const meta=row.querySelector('.chat-meta');if(meta)meta.innerHTML=(st.online?'🟢 online':'⚪ offline')+(uc.count>0?' · '+uc.count+' unread':'');}
-    }catch(e){}
-  });
+  // Status/unread are loaded only when needed; avoid N×2 HTTP requests during list rendering.
 }
 
 async function loadChatUsers(){
@@ -1147,15 +1151,26 @@ loadMe();switchTab('stories');connectRealtime();
 </script></body></html>"""
 
 
+_SESSION_VERSION_CACHE={}
+_SESSION_VERSION_CACHE_TTL=30.0
+
 @app.before_request
 def enforce_session_version():
     if request.endpoint in ('login_page','login_api','signup','static') or request.path.startswith('/static/'):
         return
     me=session.get('username')
     if not me:return
+    now=time.time()
+    cached=_SESSION_VERSION_CACHE.get(me)
+    if cached and now-cached[1] < _SESSION_VERSION_CACHE_TTL:
+        if cached[0] != int(session.get('session_version',1)):
+            session.clear();return jsonify({"ok":False,"error":"Session expired. Please log in again."}),401
+        return
     try:
-        conn=get_conn();c=conn.cursor();q="SELECT session_version FROM auth WHERE username=%s" if USE_POSTGRES else "SELECT session_version FROM auth WHERE username=?";c.execute(q,(me,));r=c.fetchone();conn.close();
-        if r and int(r[0] or 1)!=int(session.get('session_version',1)):
+        conn=get_conn();c=conn.cursor();q="SELECT session_version FROM auth WHERE username=%s" if USE_POSTGRES else "SELECT session_version FROM auth WHERE username=?";c.execute(q,(me,));r=c.fetchone();conn.close()
+        db_version=int((r[0] if r else 1) or 1)
+        _SESSION_VERSION_CACHE[me]=(db_version,now)
+        if db_version!=int(session.get('session_version',1)):
             session.clear();return jsonify({"ok":False,"error":"Session expired. Please log in again."}),401
     except Exception:pass
 
