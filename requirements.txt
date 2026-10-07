@@ -1,6 +1,6 @@
 Flask
-flask-cors
-psycopg2-binary
-cloudinary
+python-socketio
+simple-websocket
 gunicorn
-Werkzeug
+cloudinary
+psycopg2-binary
