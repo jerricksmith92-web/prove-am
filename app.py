@@ -1017,8 +1017,8 @@ async function startRecording(){
 }
 // Page and message swipe navigation intentionally disabled. Normal vertical scrolling remains enabled.
 
-function setReply(t){replyToText=t;let p=document.getElementById('replyPreview');p.style.display='block';p.innerHTML=`Replying to: ${t} <span onclick="cancelReply()" style="float:right;cursor:pointer;color:red">✕</span>`;}
-function cancelReply(){replyToText='';document.getElementById('replyPreview').style.display='none';}
+function setReply(t){replyToText=t;let p=document.getElementById('replyPreview');if(!p)return;p.style.display='block';p.innerHTML=`Replying to: ${t} <span onclick="cancelReply()" style="float:right;cursor:pointer;color:red">✕</span>`;}
+function cancelReply(){replyToText='';let p=document.getElementById('replyPreview');if(p)p.style.display='none';}
 async function searchUsers(){
   let inp=document.getElementById('searchUsersInput');
   let q=inp ? inp.value.trim() : '';
