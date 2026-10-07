@@ -1878,6 +1878,12 @@ def uploads(filename): return send_from_directory('static/uploads', filename)
 
 application = socket_app
 
+# Render currently starts `app:app`. Expose the Socket.IO WSGI wrapper there so
+# the existing realtime client actually uses WebSocket/Socket.IO in production.
+# The Flask app remains the secondary WSGI application inside socket_app.
+if __name__ != '__main__' and sio is not None:
+    app = socket_app
+
 if __name__=='__main__':
     port=int(os.environ.get("PORT",5000))
     if sio is not None:
