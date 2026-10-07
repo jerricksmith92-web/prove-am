@@ -6,7 +6,8 @@
   "scripts": {
     "cap:sync": "cap sync",
     "cap:android": "cap add android",
-    "cap:ios": "cap add ios"
+    "cap:ios": "cap add ios",
+    "ios:release": "cap sync ios"
   },
   "dependencies": {
     "@capacitor/core": "^8.0.0",
