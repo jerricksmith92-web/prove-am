@@ -694,7 +694,7 @@ async function uploadStory(){
   if(d.ok){document.getElementById('storyPreview').style.display='none';document.getElementById('storySendBtn').style.display='none';document.getElementById('storyCaption').style.display='none';selectedStoryFile=null;loadStories();}
 }
 async function createTextStory(){let t=prompt('Text story (24h) friends only:');if(!t)return;let r=await fetch('/api/story/text',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})});let d=await r.json();if(d.ok)loadStories();}
-async async function loadStories(){
+async function loadStories(){
  try{
   if(!curUser)return;
   let r=await fetch('/api/stories?t='+Date.now(),{credentials:'same-origin',cache:'no-store'});
