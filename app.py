@@ -534,7 +534,7 @@ input,textarea{width:100%;background:var(--sec);border:none;border-radius:12px;p
 </div>
 <div class=content>
 <div id=storiesDiv>
-<div class=wa-status-head><button onclick="document.getElementById('storyFile').click()">＋ My status</button><input type=file id=storyFile accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" multiple style=display:none></div>
+<div class=wa-status-head><b>Story</b><button onclick="document.getElementById('storyFile').click()">＋ My story</button><input type=file id=storyFile accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" multiple style=display:none></div>
 <div class=wa-my-status id=myStatusRow></div>
 <div class=wa-section-title>RECENT UPDATES</div>
 <div id=storyBar class=wa-status-list></div>
@@ -632,8 +632,8 @@ function connectRealtime(){
   try{
     realtimeSocket=io({transports:['websocket','polling'],reconnection:true,reconnectionAttempts:Infinity,reconnectionDelay:250,timeout:5000});
     realtimeSocket.on('connect',()=>realtimeSocket.emit('identify'));
-    realtimeSocket.on('chat_message',m=>{if(m&&chatWith===m.sender)loadMsgs(true);else if(m)loadChatUsers();});
-    realtimeSocket.on('chat_read',d=>{if(d&&chatWith===d.by)loadMsgs(true);});
+    realtimeSocket.on('chat_message',m=>{if(!m)return;if(chatWith===m.sender){if(m.media_url)loadMsgs(true);else{appendRealtimeMessage(m);markChatReadFast(m.sender);}}else loadChatUsers(true);});
+    realtimeSocket.on('chat_read',d=>{if(d&&chatWith===d.by)updateVisibleTicks();});
     realtimeSocket.on('chat_typing',d=>{if(d&&chatWith===d.from){let el=document.getElementById('typingStatus');if(el)el.innerText=d.typing?(d.from+' is typing…'):'';}});
   }catch(e){console.warn('Realtime chat unavailable; REST fallback active',e);}
 }
@@ -690,9 +690,9 @@ async function loadStories(){
   let r=await fetch('/api/stories',{credentials:'same-origin',cache:'no-store'}); stories=await r.json(); groupedStories={};
   stories.forEach(st=>{if(!groupedStories[st.username])groupedStories[st.username]=[];groupedStories[st.username].push(st);});
   const mine=groupedStories[curUser]||[], pic=profiles[curUser]||'', mr=document.getElementById('myStatusRow');
-  if(mr){const action=mine.length?'openGrouped(curUser)':"document.getElementById('storyFile').click()"; mr.innerHTML=`<div class="wa-status-row"><div class="wa-status-avatar ${pic?'':'empty'}">${pic?`<img src="${pic}">`:'+'}</div><div class="wa-status-info" onclick="${action}"><div class="wa-status-name">My status</div><div class="wa-status-time">${mine.length?'Tap to view your status':'Tap to add status'}</div></div><div class="wa-status-add" onclick="${action}">＋</div></div>`;}
+  if(mr){const action=mine.length?'openGrouped(curUser)':"document.getElementById('storyFile').click()"; mr.innerHTML=`<div class="wa-status-row"><div class="wa-status-avatar ${pic?'':'empty'}">${pic?`<img src="${pic}">`:'+'}</div><div class="wa-status-info" onclick="${action}"><div class="wa-status-name">My story</div><div class="wa-status-time">${mine.length?'Tap to view your story':'Tap to add story'}</div></div><div class="wa-status-add" onclick="${action}">＋</div></div>`;}
   let h=''; Object.keys(groupedStories).filter(u=>u!==curUser).forEach(u=>{const a=groupedStories[u],first=a[0],pp=profiles[u]||first.media_url||'';h+=`<div class="wa-status-row" onclick="openGrouped(${JSON.stringify(u)})"><div class="wa-status-avatar">${pp?`<img src="${pp}">`:'👤'}</div><div class="wa-status-info"><div class="wa-status-name">${escapeHtml(u)}</div><div class="wa-status-time">${a.length>1?a.length+' updates · ':''}${escapeHtml((first.created_at||'').slice(0,16))}</div></div></div>`;});
-  const bar=document.getElementById('storyBar'); if(bar)bar.innerHTML=h||'<div style="padding:18px;color:#888">No recent status updates</div>';
+  const bar=document.getElementById('storyBar'); if(bar)bar.innerHTML=h||'<div style="padding:18px;color:#888">No recent story updates</div>';
  }catch(e){console.error('Status load failed',e);}
 }
 
@@ -892,6 +892,26 @@ async function sendMsg(){
   loadChatUsers();
  }catch(e){if(optimistic)optimistic.remove();alert('Could not send message. Please check the server connection.');}
  finally{if(sendBtn)sendBtn.disabled=false;updateSendButton();}
+}
+
+function markChatReadFast(username){
+ fetch('/api/messages/mark_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({with:username}),credentials:'same-origin'}).catch(()=>{});
+}
+function appendRealtimeMessage(m){
+ const el=document.getElementById('msgs'); if(!el||!m||!chatWith||m.sender!==chatWith)return;
+ if(m.id && el.querySelector('[data-msg-id="'+CSS.escape(String(m.id))+'"]'))return;
+ const text=m.deleted?'This message was deleted':(m.text||'');
+ const row=document.createElement('div'); row.className='msg-row'; if(m.id)row.dataset.msgId=String(m.id);
+ const bubble=document.createElement('span'); bubble.className='msg-bubble in'; bubble.dataset.replyText=text.slice(0,80);
+ const actions='<div class="msg-actions"><button onclick="event.stopPropagation();setReply('+JSON.stringify(text.slice(0,80))+')">↩ Reply</button><button onclick="event.stopPropagation();reactMsg('+m.id+',\'❤️\')">❤️</button><button onclick="event.stopPropagation();reactMsg('+m.id+',\'😂\')">😂</button><button onclick="event.stopPropagation();reactMsg('+m.id+',\'👍\')">👍</button></div>';
+ bubble.innerHTML=escapeHtml(text)+'<div><span class="msg-time">'+escapeHtml((m.created_at||'').slice(11,16))+'</span></div><div class="reaction-row"></div>'+actions;
+ bubble.onclick=function(){this.classList.toggle('show-actions');};
+ row.appendChild(bubble); el.appendChild(row);
+ const nearBottom=el.scrollHeight-el.scrollTop-el.clientHeight<180;
+ if(nearBottom)requestAnimationFrame(()=>{el.scrollTop=el.scrollHeight;});
+}
+function updateVisibleTicks(){
+ document.querySelectorAll('#msgs .msg-row.me .msg-tick').forEach(x=>{x.textContent='✓✓';});
 }
 
 async function loadMsgs(silent=false){
@@ -1609,7 +1629,7 @@ def api_messages():
     if not me or not other: return jsonify([])
     conn=get_conn(); c=conn.cursor()
     try:
-        q="SELECT id,sender,text,media_url,reply_to,read,deleted_at,created_at,media_type FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s) ORDER BY id DESC LIMIT 60" if USE_POSTGRES else "SELECT id,sender,text,media_url,reply_to,read,deleted_at,created_at,media_type FROM messages WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?) ORDER BY id DESC LIMIT 60"
+        q="SELECT id,sender,text,media_url,reply_to,read,deleted_at,created_at,media_type FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s) ORDER BY id DESC LIMIT 40" if USE_POSTGRES else "SELECT id,sender,text,media_url,reply_to,read,deleted_at,created_at,media_type FROM messages WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?) ORDER BY id DESC LIMIT 40"
         c.execute(q,(me,other,other,me)); rows=list(reversed(c.fetchall()))
         ids=[r[0] for r in rows]
         reactions_by={}
