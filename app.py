@@ -343,7 +343,7 @@ MAIN_HTML="""<!DOCTYPE html><html><head><meta name=viewport content="width=devic
 :root{--bg:#f6f6f6;--card:#fff;--text:#000;--sec:#efefef;--border:#e5e5e5}
 body.dark{--bg:#000;--card:#111;--text:#fff;--sec:#222;--border:#222}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,sans-serif;margin:0;overflow-x:hidden}
-[style*="display:none"]{pointer-events:none!important}
+[style*="display:none"]{pointer-events:none!important}.viewer[style*="display:none"],.sheet-backdrop[style*="display:none"],.profile-modal[style*="display:none"]{pointer-events:none!important}.viewer:not([style*="display:none"]),.sheet-backdrop:not([style*="display:none"]),.profile-modal:not([style*="display:none"]){pointer-events:auto!important}
 button,input,textarea,select,a{pointer-events:auto;touch-action:manipulation}
 .top{position:fixed;top:0;left:0;right:0;background:var(--card);padding:8px 10px;display:flex;align-items:center;justify-content:space-between;z-index:100;border-bottom:1px solid var(--border);height:50px;box-sizing:border-box}
 .logo{display:flex;align-items:center;gap:7px;font-weight:900;color:#c9a227;font-size:15px}.logo img{width:34px;height:34px;border-radius:50%;object-fit:cover}
