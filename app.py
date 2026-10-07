@@ -1323,4 +1323,3 @@ def api_chat_list():
         out.append({'username':friend,'friend':friend,'last_message_at':str(last_at or ''),'unread_count':int(unread or 0),'online':online,'pic_url':pic or ''})
     out.sort(key=lambda x:(x.get('last_message_at',''),x.get('username','')), reverse=True)
     return jsonify(out)
-)
