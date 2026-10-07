@@ -32,9 +32,7 @@ jobs:
         run: xcodebuild -project App/App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug -derivedDataPath build CODE_SIGNING_ALLOWED=NO
 
       - name: Package simulator app
-        run: |
-          cd mobile-app
-          zip -r prove-am-ios-simulator.zip ios/build/Build/Products/Debug-iphonesimulator/App.app
+        run: zip -r prove-am-ios-simulator.zip ios/build/Build/Products/Debug-iphonesimulator/App.app
 
       - name: Upload iOS simulator app
         uses: actions/upload-artifact@v4
