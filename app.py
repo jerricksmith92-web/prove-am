@@ -522,7 +522,7 @@ input,textarea{width:100%;background:var(--sec);border:none;border-radius:12px;p
 <div style="display:flex;gap:10px;align-items:center">
 <button onclick="toggleLow()" id=lowBtn style="padding:5px 8px;font-size:11px;border:1px solid var(--border);background:var(--sec);color:var(--text);border-radius:8px">📶 Low: OFF</button>
 <div style="position:relative;cursor:pointer" onclick="openNotifs()">🔔<span id=notifCount class=notif-dot style="display:none">0</span></div>
-<span onclick="toggleTheme()" style="cursor:pointer">🌙</span>
+<button onclick="refreshApp()" title="Refresh Prove Am" aria-label="Refresh Prove Am" style="border:0;background:var(--sec);color:var(--text);border-radius:10px;padding:6px 9px;font-size:18px;cursor:pointer">↻</button><span onclick="toggleTheme()" style="cursor:pointer">🌙</span>
 <div class=pic id=topPic onclick="openProfile()">J</div>
 </div>
 </div>
@@ -652,6 +652,7 @@ updateLowBtn();
 function updateLowBtn(){let b=document.getElementById('lowBtn'); if(!b)return; b.innerText=lowData?'📶 Low: ON':'📶 Low: OFF'; if(lowData) b.classList.add('low-on'); else b.classList.remove('low-on');}
 function toggleLow(){lowData=!lowData;localStorage.setItem('lowData',lowData?'1':'0'); updateLowBtn(); alert(lowData?'Low Data ON':'Low Data OFF'); loadPosts();}
 function toggleTheme(){dark=!dark;localStorage.setItem('theme',dark?'dark':'light');document.body.classList.toggle('dark');}
+function refreshApp(){try{if(window.msgAbort)window.msgAbort.abort();}catch(e){};location.reload();}
 async function showSavedPosts(){let r=await fetch('/api/post/saved');let d=await r.json();let h=d.length?d.map(p=>`<div class=card><b>${p.username}</b><small style="float:right">${(p.created_at||'').slice(0,16)}</small><p>${linkify(p.text||'')}</p>${p.media_url?`<img src="${p.media_url}" loading="lazy" style="width:100%;max-height:240px;object-fit:cover;border-radius:10px">`:''}</div>`).join(''):'<p style="color:#888">No saved posts yet.</p>';document.getElementById('savedList').innerHTML=h;document.getElementById('savedModal').style.display='flex';}
 function switchTab(t){
   document.querySelectorAll('.tab').forEach(e=>e.classList.remove('active'));
@@ -695,13 +696,18 @@ async function uploadStory(){
 async function createTextStory(){let t=prompt('Text story (24h) friends only:');if(!t)return;let r=await fetch('/api/story/text',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})});let d=await r.json();if(d.ok)loadStories();}
 async function loadStories(){
  try{
-  let r=await fetch('/api/stories',{credentials:'same-origin',cache:'no-store'}); stories=await r.json(); groupedStories={};
+  if(!curUser)return;
+  let r=await fetch('/api/stories?t='+Date.now(),{credentials:'same-origin',cache:'no-store'});
+  if(!r.ok)throw new Error('Stories request failed: HTTP '+r.status);
+  let data=await r.json();
+  if(!Array.isArray(data))throw new Error('Invalid stories response');
+  stories=data; groupedStories={};
   stories.forEach(st=>{if(!groupedStories[st.username])groupedStories[st.username]=[];groupedStories[st.username].push(st);});
   const mine=groupedStories[curUser]||[], pic=profiles[curUser]||'', mr=document.getElementById('myStatusRow');
   if(mr){const action=mine.length?'openGrouped(curUser)':"document.getElementById('storyFile').click()"; mr.innerHTML=`<div class="wa-status-row"><div class="wa-status-avatar ${pic?'':'empty'}">${pic?`<img src="${pic}">`:'+'}</div><div class="wa-status-info" onclick="${action}"><div class="wa-status-name">My status</div><div class="wa-status-time">${mine.length?'Tap to view your story':'Tap to add story'}</div></div><div class="wa-status-add" onclick="${action}">＋</div></div>`;}
   let h=''; Object.keys(groupedStories).filter(u=>u!==curUser).forEach(u=>{const a=groupedStories[u],first=a[0],pp=profiles[u]||first.media_url||'';h+=`<div class="wa-status-row" onclick="openGrouped(${JSON.stringify(u)})"><div class="wa-status-avatar">${pp?`<img src="${pp}">`:'👤'}</div><div class="wa-status-info"><div class="wa-status-name">${escapeHtml(u)}</div><div class="wa-status-time">${a.length>1?a.length+' updates · ':''}${escapeHtml((first.created_at||'').slice(0,16))}</div></div></div>`;});
   const bar=document.getElementById('storyBar'); if(bar)bar.innerHTML=h||'<div style="padding:18px;color:#888">No recent story updates</div>';
- }catch(e){console.error('Status load failed',e);}
+ }catch(e){console.error('Status load failed',e);const bar=document.getElementById('storyBar');if(bar)bar.innerHTML='<div style="padding:18px;color:#b33;text-align:center">Could not load stories. Tap ↻ to refresh.</div>';}
 }
 
 function openGrouped(username){ currentGroup=groupedStories[username]||[]; currentGroupIdx=0; document.getElementById('viewerModal').style.display='flex'; showGrouped(); }
@@ -791,7 +797,7 @@ function renderChatUsers(users){
     const name=escapeHtml(u.username||'');
     const pic=u.pic_url?`<img src="${u.pic_url}" loading="lazy">`:escapeHtml((u.username||'?')[0]);
     return `<div class="card chat-user-row" data-chat-user="${name}" style="display:flex;align-items:center;gap:10px;cursor:pointer">`+
-      `<div class=pic>${pic}</div><div style="min-width:0"><b>${name}</b><br><small class="chat-meta" style="color:#888">Checking…</small></div></div>`;
+      `<div class=pic>${pic}</div><div style="min-width:0"><b>${name}</b><br><small class="chat-meta" style="color:#888"></small></div></div>`;
   }).join('');
   // Event delegation: one listener instead of an onclick handler on every row.
   if(!el.dataset.bound){
