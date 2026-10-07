@@ -1697,7 +1697,7 @@ def api_story_react():
         qo="SELECT username FROM stories WHERE id=%s" if USE_POSTGRES else "SELECT username FROM stories WHERE id=?";c.execute(qo,(sid,));o=c.fetchone()
         conn.commit();conn.close();
         if o:notify(o[0],'story_reaction',me,me+' reacted to your story')
-        return jsonify({"ok":True,"id":c.lastrowid if not USE_POSTGRES else None,"created_at":now,"media_url":url})
+        return jsonify({"ok":True,"id":sid,"reaction":reaction})
     except Exception:
         conn.rollback();conn.close();return jsonify({"ok":False}),500
 
