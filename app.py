@@ -474,7 +474,7 @@ body.dark .comments-sheet .comment-input-row input{border-color:#333;background:
 .chat-screen .chat-bar{bottom:0!important;height:auto!important;padding:0 0 7px!important;background:transparent!important;border:0!important;z-index:60!important}.chat-screen .chat-composer{pointer-events:auto!important;touch-action:manipulation;left:10px!important;right:10px!important;bottom:7px!important;padding:5px!important;gap:5px!important;border-radius:31px!important;background:rgba(12,12,12,.96)!important;border:1px solid #303030!important;min-height:58px!important}.chat-screen .chat-input-wrap{min-height:48px!important;border-radius:26px!important;padding:0 7px 0 12px!important;background:#181a1d!important;border-color:#292b2e!important}.chat-screen .chat-input-wrap input{height:46px!important;font-size:15px!important}.chat-screen .chat-input-wrap button{font-size:20px!important;padding:3px!important}.chat-screen .chat-camera{width:44px!important;height:44px!important;background:#171717!important;border:1px solid #303030!important;color:#ffcc19!important;font-size:20px!important;flex:0 0 44px!important}.chat-screen .chat-circle.send{width:52px!important;height:52px!important;flex:0 0 52px!important;background:#ffcc19!important;color:#111!important;font-size:21px!important}.chat-screen .chat-circle.send.mic-mode{font-size:23px!important}.chat-screen .chat-circle.send.ready{box-shadow:0 0 0 3px rgba(255,204,25,.15)!important}.chat-screen .chat-voice-ready{left:12px!important;right:12px!important;bottom:73px!important;border-radius:18px!important;background:#17191b!important;padding:8px!important}.chat-screen .chat-media-preview{left:12px!important;right:12px!important;bottom:73px!important}.comment-item{align-items:flex-start!important}.comment-like-btn{border:0;background:transparent;color:#b5b8bd;font-size:18px;padding:4px;cursor:pointer}.comment-like-btn.liked{color:#ff375f}.comment-like-count{font-size:11px;color:#9da3aa;margin-left:2px}
 /* Main page swipe navigation */
 body{overscroll-behavior-x:none}
-.story-bar{display:flex;gap:12px;overflow-x:auto;padding:12px;background:var(--card);min-height:80px}
+.wa-status-head{display:flex;align-items:center;justify-content:space-between;padding:16px 14px 10px;background:var(--card);font-size:22px}.wa-status-head button{border:0;background:#ffcc00;color:#111;border-radius:18px;padding:8px 12px;font-weight:800}.wa-my-status{padding:4px 14px;background:var(--card)}.wa-status-row{display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:1px solid var(--border);cursor:pointer}.wa-status-avatar{width:52px;height:52px;border-radius:50%;padding:2px;background:#ffcc00;flex:0 0 52px;display:flex;align-items:center;justify-content:center;font-size:22px}.wa-status-avatar img{width:100%;height:100%;border-radius:50%;object-fit:cover}.wa-status-avatar.empty{background:#ddd;color:#555}.wa-status-info{min-width:0;flex:1}.wa-status-name{font-weight:800;font-size:16px}.wa-status-time{font-size:12px;color:#888;margin-top:3px}.wa-status-add{font-size:28px;color:#ffcc00}.wa-section-title{font-size:12px;font-weight:900;color:#777;padding:14px;background:var(--bg);letter-spacing:.5px}.wa-status-list{background:var(--card);padding:0 14px}.story-bar{display:flex;gap:12px;overflow-x:auto;padding:12px;background:var(--card);min-height:80px}
 .s-item{text-align:center;min-width:68px;cursor:pointer}
 .s-ring{width:62px;height:62px;border-radius:50%;background:#000;display:flex;align-items:center;justify-content:center;color:#fff;border:3px solid #ffcc00;overflow:hidden;position:relative}
 .s-ring img{width:100%;height:100%;object-fit:cover}
@@ -532,8 +532,10 @@ input,textarea{width:100%;background:var(--sec);border:none;border-radius:12px;p
 </div>
 <div class=content>
 <div id=storiesDiv>
-<div style="display:flex;justify-content:space-between;padding:12px;background:var(--card)"><b>Friends ></b><small style="color:#888">Friends can view (once chatting)</small><b style="color:#a855f7;cursor:pointer" onclick="document.getElementById('storyFile').click()">+ Add</b><input type=file id=storyFile accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" multiple style=display:none></div>
-<div class=story-bar id=storyBar></div>
+<div class=wa-status-head><b>Status</b><button onclick="document.getElementById('storyFile').click()">＋ My status</button><input type=file id=storyFile accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" multiple style=display:none></div>
+<div class=wa-my-status id=myStatusRow></div>
+<div class=wa-section-title>RECENT UPDATES</div>
+<div id=storyBar class=wa-status-list></div>
 <div class=story-card>
 <b>Post a Story ✨</b><br><small>1 user = 1 circle - Friends can view once you chat/are friends</small>
 <div class=btn-row><button class=btn-light onclick="document.getElementById('storyFile').click()">📷 Photo/Video</button><button class=btn-dark onclick="createTextStory()">A Text Story</button></div>
@@ -626,10 +628,10 @@ let realtimeSocket=null;
 function connectRealtime(){
   if(typeof io!=='function')return;
   try{
-    realtimeSocket=io({transports:['polling','websocket'],reconnection:true,reconnectionDelay:250});
+    realtimeSocket=io({transports:['websocket','polling'],reconnection:true,reconnectionAttempts:Infinity,reconnectionDelay:250,timeout:5000});
     realtimeSocket.on('connect',()=>realtimeSocket.emit('identify'));
-    realtimeSocket.on('chat_message',m=>{if(m&&chatWith===m.sender)loadMsgs(true);else if(m)loadChatUsers();});
-    realtimeSocket.on('chat_read',d=>{if(d&&chatWith===d.by)loadMsgs(true);});
+    realtimeSocket.on('chat_message',m=>{if(!m)return;if(chatWith===m.sender){appendRealtimeMessage(m);markChatReadFast(m.sender);}else{loadChatUsers(true);}});
+    realtimeSocket.on('chat_read',d=>{if(d&&chatWith===d.by)updateVisibleTicks();});
     realtimeSocket.on('chat_typing',d=>{if(d&&chatWith===d.from){let el=document.getElementById('typingStatus');if(el)el.innerText=d.typing?(d.from+' is typing…'):'';}});
   }catch(e){console.warn('Realtime chat unavailable; REST fallback active',e);}
 }
@@ -682,19 +684,7 @@ async function uploadStory(){
 }
 async function createTextStory(){let t=prompt('Text story (24h) friends only:');if(!t)return;let r=await fetch('/api/story/text',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})});let d=await r.json();if(d.ok)loadStories();}
 async function loadStories(){
-  let r=await fetch('/api/stories'); stories=await r.json();
-  groupedStories={}; stories.forEach(s=>{ if(!groupedStories[s.username]) groupedStories[s.username]=[]; groupedStories[s.username].push(s); });
-  let h='';
-  Object.keys(groupedStories).forEach(username=>{
-    let userStories=groupedStories[username];
-    let first=userStories[0];
-    let profPic=profiles[username];
-    let inner=profPic?`<div class=s-ring><img src="${profPic}"></div>`:`<div class=s-ring><img src="${first.media_url||''}"></div>`;
-    let countBadge=userStories.length>1?`<div class=s-count>${userStories.length}</div>`:'';
-    h+=`<div class=s-item onclick="openGrouped('${username}')"><div style="position:relative">${inner}${countBadge}</div><br><small><b>${username.slice(0,8)}</b></small></div>`;
-  });
-  document.getElementById('storyBar').innerHTML=h||'<small style=color:#888;padding:12px>No friends stories - add friends in Search, once friends you can view each other story</small>';
-}
+ try{const r=await fetch('/api/stories',{credentials:'same-origin',cache:'no-store'});stories=await r.json();groupedStories={};stories.forEach(s=>{if(!groupedStories[s.username])groupedStories[s.username]=[];groupedStories[s.username].push(s);});const my=groupedStories[curUser]||[],pic=profiles[curUser]||'',mr=document.getElementById('myStatusRow');if(mr)mr.innerHTML=`<div class="wa-status-row" onclick="${my.length?'openGrouped(curUser)':'document.getElementById(\'storyFile\').click()'}"><div class="wa-status-avatar ${pic?'':'empty'}">${pic?`<img src="${pic}">`:'+'}</div><div class="wa-status-info"><div class="wa-status-name">My status</div><div class="wa-status-time">${my.length?'Tap to view your status':'Tap to add status'}</div></div><div class="wa-status-add">＋</div></div>`;let h='';Object.keys(groupedStories).filter(u=>u!==curUser).forEach(u=>{const a=groupedStories[u],f=a[0],pp=profiles[u]||f.media_url||'';h+=`<div class="wa-status-row" onclick="openGrouped(${JSON.stringify(u)})"><div class="wa-status-avatar">${pp?`<img src="${pp}">`:'👤'}</div><div class="wa-status-info"><div class="wa-status-name">${escapeHtml(u)}</div><div class="wa-status-time">${a.length>1?a.length+' updates · ':''}${escapeHtml((f.created_at||'').slice(0,16))}</div></div></div>`;});document.getElementById('storyBar').innerHTML=h||'<div style="padding:18px;color:#888">No recent status updates</div>';}catch(e){console.error(e);}}
 function openGrouped(username){ currentGroup=groupedStories[username]||[]; currentGroupIdx=0; document.getElementById('viewerModal').style.display='flex'; showGrouped(); }
 function showGrouped(){
   clearTimeout(storyTimer); let s=currentGroup[currentGroupIdx]; if(!s){closeViewer();return;}
@@ -839,6 +829,26 @@ function appendOptimisticMessage(text,reply){const el=document.getElementById('m
 let mediaRecorder=null,recordChunks=[],recordedAudioFile=null;
 function updateSendButton(){const b=document.getElementById('sendBtn');if(!b)return;const ready=!!(recordedAudioFile||selectedChatFile||((document.getElementById('chatText')||{}).value||'').trim());b.innerText=ready?'➤':'🎤';b.title=ready?'Send':'Record voice';b.classList.toggle('mic-mode',!ready);b.classList.toggle('ready',ready);}
 function setRecordingUi(on){const b=document.getElementById('sendBtn');if(!b)return;b.classList.toggle('recording',on);b.innerText=on?'■':((recordedAudioFile||selectedChatFile||((document.getElementById('chatText')||{}).value||'').trim())?'➤':'🎤');b.title=on?'Stop recording':(b.innerText==='➤'?'Send':'Record voice');}
+async function sendTextRealtime(text, receiver, reply){
+  if(!realtimeSocket || !realtimeSocket.connected) return false;
+  return await new Promise(resolve=>{
+    let done=false; const finish=ok=>{if(done)return;done=true;resolve(!!ok);};
+    try{realtimeSocket.emit('send_chat',{receiver,text,reply_to:reply||''},resp=>finish(resp&&resp.ok));setTimeout(()=>finish(false),5000);}catch(e){finish(false);}
+  });
+}
+function appendRealtimeMessage(m){
+  const el=document.getElementById('msgs'); if(!el)return;
+  if(m.id && document.querySelector('[data-msg-id="'+m.id+'"]'))return;
+  const isMe=m.sender===curUser, text=m.deleted?'This message was deleted':(m.text||'');
+  const row=document.createElement('div'); row.className='msg-row '+(isMe?'me':''); if(m.id)row.setAttribute('data-msg-id',m.id);
+  const tick=isMe?(m.read?'✓✓':'✓'):'';
+  const reply=m.reply_to?`<div class="reply-quote"><b>${escapeHtml(m.sender)}</b>${escapeHtml(m.reply_to)}</div>`:'';
+  const bubble=document.createElement('span'); bubble.className='msg-bubble '+(isMe?'out':'in');
+  bubble.innerHTML=`${reply}${escapeHtml(text)}<div><span class="msg-time">${escapeHtml((m.created_at||'').slice(11,16))}</span>${isMe?`<span class="msg-tick">${tick}</span>`:''}</div><div class="reaction-row"></div><div class="msg-actions"><button onclick="event.stopPropagation();setReply(${JSON.stringify(text.slice(0,80))})">↩ Reply</button><button onclick="event.stopPropagation();reactMsg(${m.id},'❤️')">❤️</button><button onclick="event.stopPropagation();reactMsg(${m.id},'😂')">😂</button><button onclick="event.stopPropagation();reactMsg(${m.id},'👍')">👍</button>${isMe?`<button onclick="event.stopPropagation();editMsg(${m.id},${JSON.stringify(text)})">Edit</button><button onclick="event.stopPropagation();deleteMsg(${m.id})">Delete</button>`:''}</div>`;
+  bubble.onclick=()=>bubble.classList.toggle('show-actions'); row.appendChild(bubble); el.appendChild(row); requestAnimationFrame(()=>{el.scrollTop=el.scrollHeight;});
+}
+function updateVisibleTicks(){document.querySelectorAll('.msg-row.me .msg-tick').forEach(x=>x.textContent='✓✓');}
+function markChatReadFast(withUser){fetch('/api/messages/mark_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({with:withUser}),credentials:'same-origin',keepalive:true}).catch(()=>{});}
 async function sendMsg(){
  if(!chatWith){alert('Please select a user first.');return;}
  const input=document.getElementById('chatText'),fileInput=document.getElementById('chatFileHidden');
@@ -858,11 +868,19 @@ async function sendMsg(){
  if(file){fd.append('media',file);fd.append('media_type',isAudio?'audio':((file.type||'').startsWith('video/')?'video':'image'));}
  const sendBtn=document.getElementById('sendBtn');if(sendBtn)sendBtn.disabled=true;
  try{
-  const r=await fetch('/api/send',{method:'POST',body:fd,credentials:'same-origin'});const d=await r.json().catch(()=>({}));
-  if(!r.ok||!d.ok){if(optimistic)optimistic.remove();alert(d.error||'Could not send message');return;}
+  if(!file){
+    const fast=await sendTextRealtime(text,receiver,reply);
+    if(!fast){
+      const r=await fetch('/api/send',{method:'POST',body:fd,credentials:'same-origin'}); const d=await r.json().catch(()=>({}));
+      if(!r.ok||!d.ok){if(optimistic)optimistic.remove();alert(d.error||'Could not send message');return;}
+    }
+  }else{
+    const r=await fetch('/api/send',{method:'POST',body:fd,credentials:'same-origin'}); const d=await r.json().catch(()=>({}));
+    if(!r.ok||!d.ok){alert(d.error||'Could not send message');return;}
+    await loadMsgs(true);
+  }
   cancelReply();
   if(optimistic){optimistic.querySelector('.msg-bubble')?.classList.remove('pending-msg');const tick=optimistic.querySelector('.msg-tick');if(tick)tick.innerText='✓✓';}
-  await loadMsgs(true);
  }catch(e){if(optimistic)optimistic.remove();alert('Could not send message. Please check the server connection.');}
  finally{if(sendBtn)sendBtn.disabled=false;updateSendButton();}
 }
@@ -1557,6 +1575,28 @@ if sio is not None:
         except Exception: pass
 
     @sio.event
+    def send_chat(sid, data):
+        try:
+            sess=sio.get_session(sid) or {}; me=sess.get('username') or session.get('username')
+            other=str((data or {}).get('receiver') or '').strip(); txt=str((data or {}).get('text') or '')[:500]; reply=str((data or {}).get('reply_to') or '')[:100]
+            if not me or not other or other==me or not txt:return {'ok':False,'error':'Invalid message'}
+            conn=get_conn(); c=conn.cursor()
+            if is_blocked(me,other) or is_blocked(other,me):conn.close();return {'ok':False,'error':'Messaging is unavailable between these accounts'}
+            qp="SELECT message_privacy FROM profiles WHERE username=%s" if USE_POSTGRES else "SELECT message_privacy FROM profiles WHERE username=?";c.execute(qp,(other,));pr=c.fetchone()
+            if pr and (pr[0] or 'friends')=='friends' and not is_friend(me,other):conn.close();return {'ok':False,'error':'This user only accepts messages from friends'}
+            qu="SELECT username FROM auth WHERE username=%s" if USE_POSTGRES else "SELECT username FROM auth WHERE username=?";c.execute(qu,(other,))
+            if not c.fetchone():conn.close();return {'ok':False,'error':'Recipient not found'}
+            now=datetime.now().isoformat(); qi="INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at,media_type) VALUES (%s,%s,%s,%s,%s,0,%s,%s)" if USE_POSTGRES else "INSERT INTO messages (sender,receiver,text,media_url,reply_to,read,created_at,media_type) VALUES (?,?,?,?,?,0,?,?)"
+            c.execute(qi,(me,other,txt,'',reply,now,''));conn.commit();mid=c.lastrowid if not USE_POSTGRES else None;conn.close()
+            payload={'id':mid,'sender':me,'receiver':other,'text':txt,'media_url':'','reply_to':reply,'read':0,'deleted':False,'created_at':now,'media_type':''}
+            sio.emit('chat_message',payload,room='pm:'+other); sio.emit('chat_sent_ack',payload,to=sid)
+            try:notify_async(other,'message',me,me+' sent you a message')
+            except Exception:pass
+            return {'ok':True,'message':payload}
+        except Exception:
+            traceback.print_exc();return {'ok':False,'error':'Server could not save the message'}
+
+    @sio.event
     def disconnect(sid):
         pass
 
@@ -1566,7 +1606,7 @@ def api_messages():
     if not me or not other: return jsonify([])
     conn=get_conn(); c=conn.cursor()
     try:
-        q="SELECT id,sender,text,media_url,reply_to,read,deleted_at,created_at,media_type FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s) ORDER BY id DESC LIMIT 100" if USE_POSTGRES else "SELECT id,sender,text,media_url,reply_to,read,deleted_at,created_at,media_type FROM messages WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?) ORDER BY id DESC LIMIT 100"
+        q="SELECT id,sender,text,media_url,reply_to,read,deleted_at,created_at,media_type FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s) ORDER BY id DESC LIMIT 60" if USE_POSTGRES else "SELECT id,sender,text,media_url,reply_to,read,deleted_at,created_at,media_type FROM messages WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?) ORDER BY id DESC LIMIT 60"
         c.execute(q,(me,other,other,me)); rows=list(reversed(c.fetchall()))
         ids=[r[0] for r in rows]
         reactions_by={}
