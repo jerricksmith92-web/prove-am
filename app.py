@@ -670,7 +670,32 @@ function switchTab(t){
 }
 function openNotifs(){document.getElementById('storiesDiv').style.display='none';document.getElementById('postDiv').style.display='none';document.getElementById('chatDiv').style.display='none';document.getElementById('searchDiv').style.display='none';document.getElementById('profileDiv').style.display='none';document.getElementById('notifDiv').style.display='block';loadNotifs();}
 function openProfile(){document.getElementById('storiesDiv').style.display='none';document.getElementById('postDiv').style.display='none';document.getElementById('chatDiv').style.display='none';document.getElementById('searchDiv').style.display='none';document.getElementById('notifDiv').style.display='none';document.getElementById('profileDiv').style.display='block'; loadProfiles();}
-async function loadMe(){let r=await fetch('/api/me');let d=await r.json();curUser=d.username;document.getElementById('profileName').innerText=curUser;loadProfiles();ping();setInterval(ping,30000);loadNotifCount();setInterval(loadNotifCount,15000);}
+async function loadMe(){
+  try{
+    const cacheKey='proveAmUsersCache';
+    const cached=JSON.parse(sessionStorage.getItem(cacheKey)||'null');
+    if(Array.isArray(cached)&&cached.length){allUsers=cached;cached.forEach(u=>{profiles[u.username]=u.pic_url||''});}
+  }catch(e){}
+  try{
+    const r=await fetch('/api/bootstrap',{credentials:'same-origin',cache:'no-store'});
+    if(!r.ok)throw new Error('Bootstrap failed');
+    const d=await r.json();
+    curUser=d.username||'';
+    document.getElementById('profileName').innerText=curUser;
+    allUsers=Array.isArray(d.users)?d.users:[];
+    allUsers.forEach(u=>{profiles[u.username]=u.pic_url||''});
+    try{sessionStorage.setItem('proveAmUsersCache',JSON.stringify(allUsers));}catch(e){}
+    const md=d.profile||{};
+    let url=profiles[curUser];let big=document.getElementById('profilePicBig');
+    if(url&&big)big.innerHTML='<img src="'+url+'" loading="lazy" style="width:100%;height:100%;object-fit:cover">';
+    if(document.getElementById('bioInput'))document.getElementById('bioInput').value=md.bio||'';
+    updatePrivacyButtons(md);
+    loadStories();
+  }catch(e){
+    const r=await fetch('/api/me');const d=await r.json();curUser=d.username||'';document.getElementById('profileName').innerText=curUser;loadProfiles();loadStories();
+  }
+  ping();setInterval(ping,30000);loadNotifCount();setInterval(loadNotifCount,15000);
+}
 function ping(){fetch('/api/status/ping',{method:'POST'});}
 async function loadProfiles(){
   const cacheKey='proveAmUsersCache';
@@ -1248,6 +1273,26 @@ def api_users():
         rows=[]
     conn.close()
     return jsonify([{"username":r[0],"pic_url":(r[1] or "")} for r in rows])
+
+@app.route('/api/bootstrap')
+def api_bootstrap():
+    me=session.get('username','')
+    if not me:
+        return jsonify({"username":"","users":[],"profile":{}}),401
+    conn=get_conn(); c=conn.cursor()
+    try:
+        c.execute("SELECT username,pic_url FROM profiles")
+        users_rows=c.fetchall()
+        q="SELECT pic_url,bio,cover_url,private_account,message_privacy,show_last_seen,show_read_receipts FROM profiles WHERE username=%s" if USE_POSTGRES else "SELECT pic_url,bio,cover_url,private_account,message_privacy,show_last_seen,show_read_receipts FROM profiles WHERE username=?"
+        c.execute(q,(me,)); r=c.fetchone()
+    except Exception:
+        users_rows=[]; r=None
+    finally:
+        conn.close()
+    r=r or ('','','',0,'friends',1,1)
+    profile={"username":me,"pic_url":r[0] or "","bio":r[1] or "","cover_url":r[2] or "","private_account":int(r[3] or 0),"message_privacy":r[4] or "friends","show_last_seen":int(r[5] if r[5] is not None else 1),"show_read_receipts":int(r[6] if r[6] is not None else 1)}
+    users=[{"username":u[0],"pic_url":u[1] or ""} for u in users_rows]
+    return jsonify({"username":me,"users":users,"profile":profile})
       
 @app.route('/api/friend/request', methods=['POST'])
 def api_friend_request():
@@ -1346,32 +1391,25 @@ def api_friend_requests():
 @app.route('/api/friends/list')
 def api_friends_list():
     me=session.get('username')
+    if not me:return jsonify([])
     conn=get_conn(); c=conn.cursor()
-    # Return each friend together with the timestamp of the latest message in
-    # either direction. This preserves the existing friends list while giving
-    # the UI enough information to order chats like WhatsApp/Messenger.
-    if USE_POSTGRES:
-        q = """SELECT f.sender,f.receiver,
-                       (SELECT MAX(m.created_at) FROM messages m
-                        WHERE (m.sender=%s AND m.receiver=(CASE WHEN f.sender=%s THEN f.receiver ELSE f.sender END))
-                           OR (m.receiver=%s AND m.sender=(CASE WHEN f.sender=%s THEN f.receiver ELSE f.sender END))) AS last_message_at
-                FROM friends f WHERE (f.sender=%s OR f.receiver=%s) AND f.status='accepted'"""
-        c.execute(q,(me,me,me,me,me,me))
-    else:
-        q = """SELECT f.sender,f.receiver,
-                       (SELECT MAX(m.created_at) FROM messages m
-                        WHERE (m.sender=? AND m.receiver=(CASE WHEN f.sender=? THEN f.receiver ELSE f.sender END))
-                           OR (m.receiver=? AND m.sender=(CASE WHEN f.sender=? THEN f.receiver ELSE f.sender END))) AS last_message_at
-                FROM friends f WHERE (f.sender=? OR f.receiver=?) AND f.status='accepted'"""
-        c.execute(q,(me,me,me,me,me,me))
-    rows=c.fetchall(); conn.close()
-    out=[]
-    for s,r,last_at in rows:
-        other=r if s==me else s
-        if other:
-            out.append({"username":other,"friend":other,"last_message_at":str(last_at or '')})
-    out.sort(key=lambda x:x.get('last_message_at',''), reverse=True)
-    return jsonify(out)
+    try:
+        qf="SELECT sender,receiver FROM friends WHERE (sender=%s OR receiver=%s) AND status='accepted'" if USE_POSTGRES else "SELECT sender,receiver FROM friends WHERE (sender=? OR receiver=?) AND status='accepted'"
+        c.execute(qf,(me,me)); friend_rows=c.fetchall()
+        qm=("SELECT CASE WHEN sender=%s THEN receiver ELSE sender END AS other, MAX(created_at) "
+            "FROM messages WHERE sender=%s OR receiver=%s GROUP BY other") if USE_POSTGRES else ("SELECT CASE WHEN sender=? THEN receiver ELSE sender END AS other, MAX(created_at) "
+            "FROM messages WHERE sender=? OR receiver=? GROUP BY other")
+        c.execute(qm,(me,me,me)); msg_rows=c.fetchall()
+        recent={str(row[0]):str(row[1] or '') for row in msg_rows}
+        out=[]
+        for sender,receiver in friend_rows:
+            other=receiver if sender==me else sender
+            if other:
+                other=str(other); out.append({"username":other,"friend":other,"last_message_at":recent.get(other,'')})
+        out.sort(key=lambda x:x.get('last_message_at',''), reverse=True)
+        return jsonify(out)
+    finally:
+        conn.close()
 
 @app.route('/api/status/ping', methods=['POST'])
 def api_status_ping():
