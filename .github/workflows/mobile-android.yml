@@ -2,6 +2,8 @@ name: Prove-am Android
 
 on:
   workflow_dispatch:
+  push:
+    branches: [mobile-app-wrapper]
 
 jobs:
   build:
