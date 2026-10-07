@@ -62,6 +62,17 @@ app = Flask(__name__)
 CORS(app, supports_credentials=True)
 app.secret_key = os.environ.get("SECRET","prove-am-v35-all-in-one")
 
+# Always serve the inline app shell fresh so an older cached JavaScript copy cannot keep calling missing DOM elements after a deployment.
+@app.after_request
+def no_stale_app_shell(response):
+    try:
+        if response.mimetype == "text/html":
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+    except Exception:
+        pass
+    return response
+
 sio = None
 socket_app = app
 if socketio is not None:
@@ -1011,11 +1022,9 @@ async function startRecording(){
     let mt=MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported('audio/webm;codecs=opus')?'audio/webm;codecs=opus':(MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported('audio/mp4')?'audio/mp4':'');
     mediaRecorder=mt?new MediaRecorder(stream,{mimeType:mt}):new MediaRecorder(stream);recordChunks=[];
     mediaRecorder.ondataavailable=e=>{if(e.data.size)recordChunks.push(e.data)};
-    mediaRecorder.onstop=()=>{stream.getTracks().forEach(t=>t.stop());let blob=new Blob(recordChunks,{type:mediaRecorder.mimeType||'audio/webm'});recordedAudioFile=new File([blob],'voice-'+Date.now()+'.webm',{type:blob.type||'audio/webm'});let url=URL.createObjectURL(blob);let a=document.getElementById('voicePreview');if(a){a.src=url;a.load();}let box=document.getElementById('chatVoiceReady');if(box)box.style.display='flex';setRecordingUi(false);document.getElementById('sendBtn')?.classList.add('ready');};
-    mediaRecorder.start();setRecordingUi(true);
-  }catch(e){setRecordingUi(false);alert('Microphone permission was denied or unavailable');}
-}
-// Page and message swipe navigation intentionally disabled. Normal vertical scrolling remains enabled.
+    mediaRecorder.onstop=()=>{stream.getTracks().forEach(t=>t.stop());let blob=new Blob(recordChunks,{type:mediaRecorder.mimeType||'audio/webm'});recordedAudioFile=new File([blob],'voice-'+Date.now()+'.webm',{type:blob.type||'audio/webm'});let url=URL.createObjectURL(blob);let a=document.getElementById('voicefunction getReplyPreview(){try{return document.getElementById("replyPreview")}catch(e){return null;}}
+function setReply(t){replyToText=t;const p=getReplyPreview();if(!p)return;p.style.display="block";p.innerHTML="Replying to: "+t+" <span onclick=\"cancelReply()\" style=\"float:right;cursor:pointer;color:red\">✕</span>";}
+function cancelReply(){replyToText="";const p=getReplyPreview();if(p)p.style.display="none";}age and message swipe navigation intentionally disabled. Normal vertical scrolling remains enabled.
 
 function setReply(t){replyToText=t;let p=document.getElementById('replyPreview');if(!p)return;p.style.display='block';p.innerHTML=`Replying to: ${t} <span onclick="cancelReply()" style="float:right;cursor:pointer;color:red">✕</span>`;}
 function cancelReply(){replyToText='';let p=document.getElementById('replyPreview');if(p)p.style.display='none';}
