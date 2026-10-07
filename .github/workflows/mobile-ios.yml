@@ -1,0 +1,43 @@
+name: Prove-am iOS
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: mobile-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile-app/package.json
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Add iOS platform
+        run: npx cap add ios
+
+      - name: Sync Capacitor
+        run: npx cap sync ios
+
+      - name: Build iOS simulator app
+        working-directory: mobile-app/ios
+        run: xcodebuild -workspace App/App.xcworkspace -scheme App -sdk iphonesimulator -configuration Debug -derivedDataPath build CODE_SIGNING_ALLOWED=NO
+
+      - name: Package simulator app
+        run: |
+          cd mobile-app
+          zip -r prove-am-ios-simulator.zip ios/build/Build/Products/Debug-iphonesimulator/App.app
+
+      - name: Upload iOS simulator app
+        uses: actions/upload-artifact@v4
+        with:
+          name: prove-am-ios-simulator
+          path: mobile-app/prove-am-ios-simulator.zip
