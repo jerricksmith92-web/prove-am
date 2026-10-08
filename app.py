@@ -847,8 +847,11 @@ function renderChatUsers(users){
   el.innerHTML=visible.map(u=>{
     const name=escapeHtml(u.username||'');
     const pic=u.pic_url?`<img src="${u.pic_url}" loading="lazy">`:escapeHtml((u.username||'?')[0]);
+    const isOnline=!!u.online;
+    const statusText=isOnline?'Online':'Offline';
+    const statusStyle=isOnline?'color:#22c55e;font-weight:700':'color:#888';
     return `<div class="card chat-user-row" data-chat-user="${name}" style="display:flex;align-items:center;gap:10px;cursor:pointer">`+
-      `<div class=pic>${pic}</div><div style="min-width:0"><b>${name}</b><br><small class="chat-meta" style="color:#888"></small></div></div>`;
+      `<div class=pic>${pic}</div><div style="min-width:0"><b>${name}</b><br><small class="chat-list-status" data-chat-status="${name}" style="${statusStyle}">${isOnline?'● ':''}${statusText}</small></div></div>`;
   }).join('');
   // Event delegation: one listener instead of an onclick handler on every row.
   if(!el.dataset.bound){
@@ -863,17 +866,54 @@ function renderChatUsers(users){
   // Status/unread are loaded only when needed; avoid N×2 HTTP requests during list rendering.
 }
 
+function applyChatListPresence(friends){
+  const byUser={};
+  friends.forEach(f=>{byUser[f.friend||f.username]=f;});
+  document.querySelectorAll('.chat-list-status[data-chat-status]').forEach(el=>{
+    const key=el.getAttribute('data-chat-status');
+    const f=byUser[key];
+    if(!f)return;
+    const on=!!f.online;
+    el.textContent=(on?'● ':'')+(on?'Online':'Offline');
+    el.style.color=on?'#22c55e':'#888';
+    el.style.fontWeight=on?'700':'400';
+  });
+}
+
+async function refreshChatListPresence(){
+  try{
+    const r=await fetch('/api/friends/list',{credentials:'same-origin',cache:'no-store'});
+    const friends=await r.json();
+    if(Array.isArray(friends))applyChatListPresence(friends);
+  }catch(e){}
+}
+
 async function loadChatUsers(){
   try{
-    let r=await fetch('/api/friends/list'); let friends=await r.json();
-    if(friends.length==0){ renderChatUsers(allUsers); return;}
-    // Merge the persisted recent-message timestamp from the server into the
-    // existing user objects so the list can be sorted without extra requests.
+    let r=await fetch('/api/friends/list',{credentials:'same-origin',cache:'no-store'}); let friends=await r.json();
+    if(friends.length==0){
+      renderChatUsers(allUsers);
+      refreshChatListPresence();
+      return;
+    }
     const recentByUser={};
-    friends.forEach(f=>{recentByUser[f.friend]=f.last_message_at||'';});
+    const presenceByUser={};
+    friends.forEach(f=>{
+      recentByUser[f.friend]=f.last_message_at||'';
+      presenceByUser[f.friend]={online:!!f.online,status_hidden:!!f.status_hidden};
+    });
     let friendNames = friends.map(f=>f.friend);
-    let filtered = allUsers.filter(u=> friendNames.includes(u.username)).map(u=>({...u,last_message_at:recentByUser[u.username]||''}));
+    let filtered = allUsers.filter(u=> friendNames.includes(u.username)).map(u=>({
+      ...u,
+      last_message_at:recentByUser[u.username]||'',
+      online:!!presenceByUser[u.username]?.online,
+      status_hidden:!!presenceByUser[u.username]?.status_hidden
+    }));
     renderChatUsers(filtered);
+    if(!window.chatListPresenceTimer){
+      window.chatListPresenceTimer=setInterval(refreshChatListPresence,10000);
+    }
+    refreshChatListPresence();
   }catch(e){ renderChatUsers(allUsers); }
 }
 function openChat(username){
@@ -1419,11 +1459,40 @@ def api_friends_list():
             "FROM messages WHERE sender=? OR receiver=? GROUP BY other")
         c.execute(qm,(me,me,me)); msg_rows=c.fetchall()
         recent={str(row[0]):str(row[1] or '') for row in msg_rows}
+
+        # Include presence in this response so the chat list does not need one
+        # status request per friend.
+        status_map={}
+        profile_map={}
+        try:
+            c.execute("SELECT username,last_seen FROM user_status")
+            for su,sl in c.fetchall():
+                status_map[str(su)]=(float(sl) if sl is not None else None)
+        except Exception:
+            status_map={}
+        try:
+            c.execute("SELECT username,show_last_seen FROM profiles")
+            for pu,ps in c.fetchall():
+                profile_map[str(pu)]=int(ps if ps is not None else 1)
+        except Exception:
+            profile_map={}
+
+        now=time.time()
         out=[]
         for sender,receiver in friend_rows:
             other=receiver if sender==me else sender
             if other:
-                other=str(other); out.append({"username":other,"friend":other,"last_message_at":recent.get(other,'')})
+                other=str(other)
+                last_seen=status_map.get(other)
+                hidden=(profile_map.get(other,1)==0 and other!=me)
+                online=(last_seen is not None and (now-last_seen)<40 and not hidden)
+                out.append({
+                    "username":other,
+                    "friend":other,
+                    "last_message_at":recent.get(other,''),
+                    "online":bool(online),
+                    "status_hidden":bool(hidden)
+                })
         out.sort(key=lambda x:x.get('last_message_at',''), reverse=True)
         return jsonify(out)
     finally:
