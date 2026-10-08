@@ -326,6 +326,11 @@ def notify(username, ntype, from_user='', text=''):
         q="INSERT INTO notifications (username,type,from_user,text,created_at,is_read) VALUES (%s,%s,%s,%s,%s,0)" if USE_POSTGRES else "INSERT INTO notifications (username,type,from_user,text,created_at,is_read) VALUES (?,?,?,?,?,0)"
         c.execute(q,(username,ntype,from_user,text,datetime.now().isoformat()))
         conn.commit()
+        if sio is not None:
+            try:
+                sio.emit('notification', {'type':ntype,'from_user':from_user,'text':text}, room='pm:'+username)
+            except Exception:
+                pass
     except Exception:
         conn.rollback()
     finally: conn.close()
@@ -654,6 +659,7 @@ function connectRealtime(){
     });
     realtimeSocket.on('chat_read',d=>{if(d&&chatWith===d.by)loadMsgs(true);});
     realtimeSocket.on('chat_typing',d=>{if(d&&chatWith===d.from){let el=document.getElementById('typingStatus');if(el)el.innerText=d.typing?(d.from+' is typing…'):'';}});
+    realtimeSocket.on('notification',d=>{if(!d)return;loadNotifCount();if(navigator.vibrate)navigator.vibrate(25);});
   }catch(e){console.warn('Realtime chat unavailable; REST fallback active',e);}
 }
 let curUser='',chatWith='',stories=[],groupedStories={},currentGroup=[],currentGroupIdx=0,storyTimer=null,allUsers=[],profiles={},selectedStoryFile=null,selectedPostFile=null,selectedChatFile=null,selectedProfileFile=null,replyToText='';
