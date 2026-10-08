@@ -677,7 +677,7 @@ function connectRealtime(){
       }
     });
     realtimeSocket.on('chat_read',d=>{if(d&&chatWith===d.by)loadMsgs(true);});
-    realtimeSocket.on('chat_typing',d=>{if(d&&chatWith===d.from){let el=document.getElementById('typingStatus');if(el)el.innerText=d.typing?(d.from+' is typing…'):'';}});
+    realtimeSocket.on('chat_typing',d=>{if(d&&d.from!==curUser&&chatWith===d.from){let el=document.getElementById('typingStatus');if(el)el.innerText=d.typing?(d.from+' is typing…'):'';}});
     realtimeSocket.on('notification',d=>{if(!d)return;loadNotifCount();if(document.getElementById('notifDiv')?.style.display==='block')loadNotifs();if(navigator.vibrate)navigator.vibrate(25);});
   }catch(e){console.warn('Realtime chat unavailable; REST fallback active',e);}
 }
@@ -1209,7 +1209,7 @@ async function reactMsg(id,reaction){let r=await fetch('/api/message/react',{met
 async function editMsg(id,current){let t=prompt('Edit message:',current||'');if(t===null)return;let r=await fetch('/api/message/edit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,text:t})});let d=await r.json();if(!d.ok)alert(d.error||'Could not edit');loadMsgs();}
 async function deleteMsg(id){if(!confirm('Delete this message?'))return;let r=await fetch('/api/message/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});let d=await r.json();if(!d.ok)alert(d.error||'Could not delete');loadMsgs();}
 let typingSendTimer=0;function sendTyping(){if(!chatWith)return;clearTimeout(typingSendTimer);typingSendTimer=setTimeout(()=>{fetch('/api/typing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({peer:chatWith})}).catch(()=>{});},350);}
-async function pollTyping(){if(!chatWith)return;try{let d=await (await fetch('/api/typing?peer='+encodeURIComponent(chatWith))).json();let el=document.getElementById('typingStatus');if(el)el.innerText=d.typing?chatWith+' is typing…':'';}catch(e){}}
+async function pollTyping(){if(!chatWith)return;try{let d=await (await fetch('/api/typing?peer='+encodeURIComponent(chatWith))).json();let el=document.getElementById('typingStatus');if(el)el.innerText=(d.typing&&d.from_user&&d.from_user!==curUser)?d.from_user+' is typing…':'';}catch(e){}}
 async function startRecording(){
   if(mediaRecorder&&mediaRecorder.state==='recording'){try{mediaRecorder.stop();}catch(e){}return;}
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){alert('Voice recording is not supported by this browser');return;}
@@ -2375,7 +2375,7 @@ def api_typing():
 
 @app.route('/api/typing')
 def api_typing_get():
-    me=session.get('username');peer=request.args.get('peer','');conn=get_conn();c=conn.cursor();q="SELECT last_seen FROM user_typing WHERE username=%s AND peer=%s" if USE_POSTGRES else "SELECT last_seen FROM user_typing WHERE username=? AND peer=?";c.execute(q,(peer,me));r=c.fetchone();conn.close();return jsonify({"typing":bool(r and time.time()-float(r[0])<4)})
+    me=session.get('username');peer=request.args.get('peer','');conn=get_conn();c=conn.cursor();q="SELECT last_seen FROM user_typing WHERE username=%s AND peer=%s" if USE_POSTGRES else "SELECT last_seen FROM user_typing WHERE username=? AND peer=?";c.execute(q,(peer,me));r=c.fetchone();conn.close();return jsonify({"typing":bool(r and time.time()-float(r[0])<4),"from_user":peer if r else ""})
 
 @app.route('/api/comment/like', methods=['POST'])
 def api_comment_like():
