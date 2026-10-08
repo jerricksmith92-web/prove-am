@@ -705,7 +705,7 @@ async function loadMe(){
   }catch(e){
     const r=await fetch('/api/me');const d=await r.json();curUser=d.username||'';document.getElementById('profileName').innerText=curUser;loadProfiles();loadStories();
   }
-  ping();setInterval(ping,30000);loadNotifCount();setInterval(loadNotifCount,15000);
+  ping();setInterval(ping,15000);loadNotifCount();setInterval(loadNotifCount,15000);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')ping();});
 }
 function ping(){fetch('/api/status/ping',{method:'POST'});}
 async function loadProfiles(){
@@ -890,7 +890,7 @@ function openChat(username){
   document.getElementById('chatFileHidden').addEventListener('change',e=>{const f=e.target.files[0];if(f){selectedChatFile=f;showSelectedChatFile(f);updateSendButton();}});
   document.getElementById('chatText').addEventListener('input',()=>{updateSendButton();sendTyping();}); document.getElementById('chatText').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}});
   if(window.typingTimer)clearInterval(window.typingTimer); window.typingTimer=setInterval(pollTyping,3500); loadMsgs();
-  fetch('/api/status/get?user='+encodeURIComponent(username)).then(r=>r.json()).then(st=>{let x=document.getElementById('chatOnlineState');if(x)x.innerHTML=st.online?'<span class="chat-online-dot"></span> Online':'<span style="display:inline-block;width:8px;height:8px;background:#777;border-radius:50%;margin-right:4px"></span> Offline';}).catch(()=>{});
+  const refreshChatPresence=()=>{if(chatWith!==username)return;fetch('/api/status/get?user='+encodeURIComponent(username),{credentials:'same-origin',cache:'no-store'}).then(r=>r.json()).then(st=>{let x=document.getElementById('chatOnlineState');if(x)x.innerHTML=st.online?'<span class="chat-online-dot"></span> Online':'<span style="display:inline-block;width:8px;height:8px;background:#777;border-radius:50%;margin-right:4px"></span> Offline';}).catch(()=>{});}; refreshChatPresence(); if(window.presenceTimer)clearInterval(window.presenceTimer); window.presenceTimer=setInterval(refreshChatPresence,10000);
   fetch('/api/messages/mark_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({with:username})}).catch(()=>{});
 }
 function sendOrRecord(){const input=document.getElementById('chatText');const hasText=!!((input?.value||'').trim());if(recordedAudioFile||selectedChatFile||hasText){sendMsg();return;}startRecording();}
@@ -902,7 +902,7 @@ function clearRecordedAudio(){recordedAudioFile=null;const b=document.getElement
 async function searchConversation(){if(!chatWith)return;let q=prompt('Search this conversation:');if(!q)return;let r=await fetch('/api/messages/search?with='+encodeURIComponent(chatWith)+'&q='+encodeURIComponent(q));let d=await r.json();alert(d.map(m=>(m.sender===curUser?'You':m.sender)+': '+m.text).join('\\n')||'No matching messages');}
 function backChat(){
   chatWith='';
-  if(window.typingTimer){clearInterval(window.typingTimer);window.typingTimer=null;}
+  if(window.typingTimer){clearInterval(window.typingTimer);window.typingTimer=null;} if(window.presenceTimer){clearInterval(window.presenceTimer);window.presenceTimer=null;}
   let box=document.getElementById('chatBox');
   if(box){box.style.display='none';box.innerHTML='';}
   let users=document.getElementById('chatUsers');if(users)users.style.display='block';
