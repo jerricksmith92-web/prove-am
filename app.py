@@ -918,6 +918,11 @@ async function refreshChatListPresence(){
 }
 
 async function loadChatUsers(){
+  // Render the last known chat list immediately, then refresh it in the background.
+  // This keeps returning to Chat feeling instant without changing realtime delivery.
+  if(window.chatListCache && Array.isArray(window.chatListCache)){
+    renderChatUsers(window.chatListCache);
+  }
   try{
     let r=await fetch('/api/friends/list',{credentials:'same-origin',cache:'no-store'}); let friends=await r.json();
     if(friends.length==0){
@@ -939,6 +944,7 @@ async function loadChatUsers(){
       status_hidden:!!presenceByUser[u.username]?.status_hidden,
       unread_count:Number(presenceByUser[u.username]?.unread_count||0)
     }));
+    window.chatListCache=filtered;
     renderChatUsers(filtered);
     if(!window.chatListPresenceTimer){
       window.chatListPresenceTimer=setInterval(refreshChatListPresence,10000);
