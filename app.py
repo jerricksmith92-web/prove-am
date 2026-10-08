@@ -310,8 +310,10 @@ def create_chat_indexes():
     try:
         conn=get_conn(); c=conn.cursor()
         c.execute("CREATE INDEX IF NOT EXISTS idx_messages_pair_id ON messages(sender,receiver,id DESC)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_messages_reverse_pair_id ON messages(receiver,sender,id DESC)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_messages_receiver_read ON messages(receiver,sender,read)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_friends_pair_status ON friends(sender,receiver,status)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_friends_reverse_status ON friends(receiver,sender,status)")
         conn.commit(); conn.close()
     except Exception:
         try: conn.close()
