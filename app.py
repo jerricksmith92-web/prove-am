@@ -853,7 +853,7 @@ function renderChatUsers(users){
     const unread=Number(u.unread_count||0);
     const unreadBadge=unread>0?`<span class="chat-unread-badge">${unread>99?'99+':unread}</span>`:'';
     return `<div class="card chat-user-row" data-chat-user="${name}" style="display:flex;align-items:center;gap:10px;cursor:pointer">`+
-      `<div class=pic>${pic}</div><div style="min-width:0;flex:1"><b>${name}</b><br><small class="chat-list-status" data-chat-status="${name}" style="${statusStyle}">${isOnline?'● ':''}${statusText}</small></div><div class="chat-unread-slot">${unreadBadge}</div></div>`;
+      `<div class=pic>${pic}</div><div style="min-width:0;flex:1"><b>${name}</b><br><small class="chat-list-status" data-chat-status="${name}" style="${statusStyle}">${isOnline?'● ':''}${statusText}</small></div><div class="chat-unread-slot" data-chat-unread-slot="${name}">${unreadBadge}</div></div>`;
   }).join('');
   // Event delegation: one listener instead of an onclick handler on every row.
   if(!el.dataset.bound){
@@ -879,6 +879,13 @@ function applyChatListPresence(friends){
     el.textContent=(on?'● ':'')+(on?'Online':'Offline');
     el.style.color=on?'#22c55e':'#888';
     el.style.fontWeight=on?'700':'400';
+  });
+  document.querySelectorAll('.chat-unread-slot[data-chat-unread-slot]').forEach(slot=>{
+    const key=slot.getAttribute('data-chat-unread-slot');
+    const f=byUser[key];
+    if(!f)return;
+    const unread=Number(f.unread_count||0);
+    slot.innerHTML=unread>0?`<span class="chat-unread-badge">${unread>99?'99+':unread}</span>`:'';
   });
 }
 
