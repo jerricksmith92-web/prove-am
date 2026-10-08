@@ -1233,10 +1233,17 @@ def logout(): session.clear(); return redirect('/login')
 def login_api():
     data=request.json; u=data.get('username','').strip()[:20]; p=data.get('password','')
     conn=get_conn(); c=conn.cursor()
-    c.execute("SELECT password FROM auth WHERE username=%s" if USE_POSTGRES else "SELECT password FROM auth WHERE username=?", (u,))
+    c.execute("SELECT password, COALESCE(session_version,1) FROM auth WHERE username=%s" if USE_POSTGRES else "SELECT password, COALESCE(session_version,1) FROM auth WHERE username=?", (u,))
     row=c.fetchone(); conn.close()
     if not row or not check_password_hash(row[0],p): return jsonify({"ok":False,"error":"Wrong pass"})
-    session['username']=u; session['session_version']=1; return jsonify({"ok":True})
+    # Keep the browser session aligned with the database session version.
+    # Older sessions could otherwise be cleared immediately after a deploy,
+    # making users/search/messages appear empty even though the data remains.
+    db_session_version=int(row[1] or 1)
+    session['username']=u
+    session['session_version']=db_session_version
+    _SESSION_VERSION_CACHE[u]=(db_session_version,time.time())
+    return jsonify({"ok":True})
 
 @app.route('/signup', methods=['POST'])
 def signup():
@@ -1425,6 +1432,8 @@ def api_friends_list():
 @app.route('/api/status/ping', methods=['POST'])
 def api_status_ping():
     import time; me=session.get('username'); now=time.time()
+    if not me:
+        return jsonify({"ok":False,"error":"Not logged in"}),401
     conn=get_conn(); c=conn.cursor()
     if USE_POSTGRES: c.execute("INSERT INTO user_status (username,last_seen) VALUES (%s,%s) ON CONFLICT (username) DO UPDATE SET last_seen=%s",(me,now,now))
     else: c.execute("INSERT OR REPLACE INTO user_status (username,last_seen) VALUES (?,?)",(me,now))
