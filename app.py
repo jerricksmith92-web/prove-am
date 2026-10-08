@@ -1,7 +1,7 @@
 import os, uuid, sqlite3, time, traceback, base64, threading
 from io import BytesIO
 from datetime import datetime, timedelta
-from flask import Flask, request, jsonify, session, redirect, url_for, render_template, render_template_string, send_from_directory, send_file
+from flask import Flask, request, jsonify, session, redirect, url_for, render_template, render_template_string, send_from_directory, send_file, Response
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 import cloudinary
@@ -126,7 +126,7 @@ def _choose_sqlite_path():
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), "app.db")
 
 SQLITE_DB_PATH = _choose_sqlite_path()
-print("=== PROVE AM DATABASE ===", "POSTGRES" if USE_POSTGRES else "SQLITE", DB_URL.split('@')[0] if USE_POSTGRES else SQLITE_DB_PATH)
+print("=== PROVE AM DATABASE ===", "POSTGRES" if USE_POSTGRES else "SQLITE")
 
 def get_conn():
     if USE_POSTGRES:
@@ -2140,6 +2140,18 @@ def pwa_icon_192():
 @app.route('/pwa-icon-512.png')
 def pwa_icon_512():
     return send_file(BytesIO(base64.b64decode(PROVE_AM_LOGO_B64)), mimetype='image/jpeg')
+
+@app.route('/healthz')
+def healthz():
+    try:
+        conn=get_conn(); c=conn.cursor(); c.execute("SELECT 1"); c.fetchone(); conn.close()
+        return jsonify({"ok": True, "database": "ok"}), 200
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return jsonify({"ok": False, "database": "error"}), 503
 
 @app.route('/sw.js')
 def pwa_service_worker():
