@@ -641,7 +641,7 @@ let realtimeSocket=null;
 function connectRealtime(){
   if(typeof io!=='function')return;
   try{
-    realtimeSocket=io({transports:['websocket','polling'],reconnection:true,reconnectionAttempts:Infinity,reconnectionDelay:250,timeout:5000});
+    realtimeSocket=io({transports:['websocket','polling'],tryAllTransports:true,reconnection:true,reconnectionAttempts:Infinity,reconnectionDelay:250,timeout:5000});
     realtimeSocket.on('connect',()=>realtimeSocket.emit('identify'));
     realtimeSocket.on('chat_message',m=>{
       if(!m)return;
