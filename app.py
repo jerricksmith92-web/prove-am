@@ -1764,6 +1764,7 @@ def api_stories():
 @app.route('/api/story', methods=['POST'])
 def api_story():
     me=session.get('username'); f=request.files.get('media'); txt=request.form.get('text','')[:200]
+    if not me:return jsonify({"ok":False,"error":"Not logged in"}),401
     if not f or not f.filename: return jsonify({"ok":False,"error":"no file"}),400
     url=upload_to_cloud(f)
     if not url: return jsonify({"ok":False,"error":"Add Cloudinary keys in Render"}),500
@@ -1773,13 +1774,17 @@ def api_story():
 
 @app.route('/api/story/delete', methods=['POST'])
 def api_story_delete():
-    me=session.get('username'); data=request.json; sid=data.get('id')
+    me=session.get('username'); data=request.get_json(silent=True) or {}; sid=data.get('id')
+    if not me:return jsonify({"ok":False,"error":"Not logged in"}),401
+    if not sid:return jsonify({"ok":False,"error":"Missing story"}),400
     conn=get_conn(); c=conn.cursor()
-    c.execute("DELETE FROM stories WHERE id=%s AND username=%s" if USE_POSTGRES else "DELETE FROM stories WHERE id=? AND username=?", (sid,me)); conn.commit(); conn.close(); return jsonify({"ok":True})
+    c.execute("DELETE FROM stories WHERE id=%s AND username=%s" if USE_POSTGRES else "DELETE FROM stories WHERE id=? AND username=?", (sid,me)); ok=c.rowcount>0; conn.commit(); conn.close(); return jsonify({"ok":ok})
 
 @app.route('/api/story/text', methods=['POST'])
 def api_story_text():
-    me=session.get('username'); data=request.json; txt=data.get('text','')[:100]
+    me=session.get('username'); data=request.get_json(silent=True) or {}; txt=str(data.get('text',''))[:100].strip()
+    if not me:return jsonify({"ok":False,"error":"Not logged in"}),401
+    if not txt:return jsonify({"ok":False,"error":"Empty story"}),400
     conn=get_conn(); c=conn.cursor(); now=datetime.now(); exp=now+timedelta(hours=24)
     c.execute("INSERT INTO stories (username,media_url,text,created_at,expires_at) VALUES (%s,%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO stories (username,media_url,text,created_at,expires_at) VALUES (?,?,?,?,?)", (me,"",txt,now.isoformat(),exp.isoformat()))
     conn.commit(); conn.close(); return jsonify({"ok":True})
@@ -1792,30 +1797,50 @@ def api_story_viewers():
 
 @app.route('/api/story/react',methods=['POST'])
 def api_story_react():
-    me=session.get('username');d=request.get_json(silent=True) or {};sid=d.get('id');reaction=str(d.get('reaction',''))[:8];conn=get_conn();c=conn.cursor();q="INSERT INTO story_reactions (story_id,username,reaction) VALUES (%s,%s,%s) ON CONFLICT (story_id,username) DO UPDATE SET reaction=%s" if USE_POSTGRES else "INSERT OR REPLACE INTO story_reactions (story_id,username,reaction) VALUES (?,?,?)";c.execute(q,(sid,me,reaction,reaction) if USE_POSTGRES else (sid,me,reaction));
+    me=session.get('username'); d=request.get_json(silent=True) or {}; sid=d.get('id'); reaction=str(d.get('reaction',''))[:8]
+    if not me:return jsonify({"ok":False,"error":"Not logged in"}),401
+    if not sid or not reaction:return jsonify({"ok":False,"error":"Missing story or reaction"}),400
+    conn=get_conn(); c=conn.cursor(); now=datetime.now().isoformat()
     try:
-        qo="SELECT username FROM stories WHERE id=%s" if USE_POSTGRES else "SELECT username FROM stories WHERE id=?";c.execute(qo,(sid,));o=c.fetchone()
-        conn.commit();conn.close();
-        if o:notify(o[0],'story_reaction',me,me+' reacted to your story')
-        return jsonify({"ok":True,"id":c.lastrowid if not USE_POSTGRES else None,"created_at":now,"media_url":url})
-    except Exception:
-        conn.rollback();conn.close();return jsonify({"ok":False}),500
-
-@app.route('/api/story/view', methods=['POST'])
-def api_story_view():
-    me=session.get('username'); data=request.json or {}; sid=data.get('id'); conn=get_conn(); c=conn.cursor()
-    try:
-        q="SELECT username FROM stories WHERE id=%s" if USE_POSTGRES else "SELECT username FROM stories WHERE id=?"
-        c.execute(q,(sid,)); owner=c.fetchone()
-        # A story owner does not count as their own viewer.
-        if not owner or not me or owner[0]==me:
-            conn.close(); return jsonify({"ok":True,"viewed":False})
-        c.execute("INSERT INTO story_views VALUES (%s,%s) ON CONFLICT DO NOTHING" if USE_POSTGRES else "INSERT OR IGNORE INTO story_views VALUES (?,?)", (sid,me))
-        conn.commit()
+        qs="SELECT username FROM stories WHERE id=%s AND expires_at>%s" if USE_POSTGRES else "SELECT username FROM stories WHERE id=? AND expires_at>?"
+        c.execute(qs,(sid,now)); o=c.fetchone()
+        if not o:return conn.rollback() or jsonify({"ok":False,"error":"Story not found or expired"}),404
+        owner=o[0]
+        if owner==me:return conn.rollback() or jsonify({"ok":False,"error":"You cannot react to your own story"}),400
+        qf="SELECT 1 FROM friends WHERE ((sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s)) AND LOWER(status)='accepted' LIMIT 1" if USE_POSTGRES else "SELECT 1 FROM friends WHERE ((sender=? AND receiver=?) OR (sender=? AND receiver=?)) AND LOWER(status)='accepted' LIMIT 1"
+        c.execute(qf,(me,owner,owner,me)); 
+        if not c.fetchone():return conn.rollback() or jsonify({"ok":False,"error":"Story is not available to you"}),403
+        q="INSERT INTO story_reactions (story_id,username,reaction) VALUES (%s,%s,%s) ON CONFLICT (story_id,username) DO UPDATE SET reaction=%s" if USE_POSTGRES else "INSERT OR REPLACE INTO story_reactions (story_id,username,reaction) VALUES (?,?,?)"
+        c.execute(q,(sid,me,reaction,reaction) if USE_POSTGRES else (sid,me,reaction))
+        conn.commit(); conn.close()
+        notify(owner,'story_reaction',me,me+' reacted to your story')
+        return jsonify({"ok":True})
     except Exception:
         try: conn.rollback()
         except: pass
-    conn.close(); return jsonify({"ok":True,"viewed":True})
+        conn.close(); return jsonify({"ok":False,"error":"Could not react to story"}),500
+
+@app.route('/api/story/view', methods=['POST'])
+def api_story_view():
+    me=session.get('username'); data=request.get_json(silent=True) or {}; sid=data.get('id')
+    if not me:return jsonify({"ok":False,"error":"Not logged in"}),401
+    if not sid:return jsonify({"ok":False,"error":"Missing story"}),400
+    conn=get_conn(); c=conn.cursor(); now=datetime.now().isoformat()
+    try:
+        q="SELECT username FROM stories WHERE id=%s AND expires_at>%s" if USE_POSTGRES else "SELECT username FROM stories WHERE id=? AND expires_at>?"
+        c.execute(q,(sid,now)); owner=c.fetchone()
+        if not owner or owner[0]==me:
+            conn.close(); return jsonify({"ok":True,"viewed":False})
+        qf="SELECT 1 FROM friends WHERE ((sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s)) AND LOWER(status)='accepted' LIMIT 1" if USE_POSTGRES else "SELECT 1 FROM friends WHERE ((sender=? AND receiver=?) OR (sender=? AND receiver=?)) AND LOWER(status)='accepted' LIMIT 1"
+        c.execute(qf,(me,owner[0],owner[0],me))
+        if not c.fetchone():
+            conn.close(); return jsonify({"ok":False,"error":"Story is not available to you"}),403
+        c.execute("INSERT INTO story_views (story_id,viewer) VALUES (%s,%s) ON CONFLICT DO NOTHING" if USE_POSTGRES else "INSERT OR IGNORE INTO story_views (story_id,viewer) VALUES (?,?)", (sid,me))
+        conn.commit(); conn.close(); return jsonify({"ok":True,"viewed":True})
+    except Exception:
+        try: conn.rollback()
+        except: pass
+        conn.close(); return jsonify({"ok":False,"error":"Could not record story view"}),500
 
 @app.route('/api/profile/pic', methods=['POST'])
 def api_profile_pic():
