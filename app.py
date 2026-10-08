@@ -753,20 +753,29 @@ async function uploadStory(){
   if(d.ok){document.getElementById('storyPreview').style.display='none';document.getElementById('storySendBtn').style.display='none';document.getElementById('storyCaption').style.display='none';selectedStoryFile=null;loadStories();}
 }
 async function createTextStory(){let t=prompt('Text story (24h) friends only:');if(!t)return;let r=await fetch('/api/story/text',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})});let d=await r.json();if(d.ok)loadStories();}
-async function loadStories(){
- try{
-  if(!curUser)return;
-  let r=await fetch('/api/stories?t='+Date.now(),{credentials:'same-origin',cache:'no-store'});
-  if(!r.ok)throw new Error('Stories request failed: HTTP '+r.status);
-  let data=await r.json();
-  if(!Array.isArray(data))throw new Error('Invalid stories response');
+function renderStoriesList(data){
   stories=data; groupedStories={};
   stories.forEach(st=>{if(!groupedStories[st.username])groupedStories[st.username]=[];groupedStories[st.username].push(st);});
   const mine=groupedStories[curUser]||[], pic=profiles[curUser]||'', mr=document.getElementById('myStatusRow');
   if(mr){const action=mine.length?'openGrouped(curUser)':"document.getElementById('storyFile').click()"; mr.innerHTML=`<div class="wa-status-row"><div class="wa-status-avatar ${pic?'':'empty'}">${pic?`<img src="${pic}">`:'+'}</div><div class="wa-status-info" onclick="${action}"><div class="wa-status-name">My status</div><div class="wa-status-time">${mine.length?'Tap to view your story':'Tap to add story'}</div></div><div class="wa-status-add" onclick="${action}">＋</div></div>`;}
   let h=''; Object.keys(groupedStories).filter(u=>u!==curUser).forEach(u=>{const a=groupedStories[u],first=a[0],pp=profiles[u]||first.media_url||'';const allViewed=a.length>0&&a.every(x=>x.viewed); const viewedText=allViewed?'✓ Viewed · ':''; h+=`<div class="wa-status-row" onclick='openGrouped(${JSON.stringify(u).replace(/'/g,"&#39;")})'><div class="wa-status-avatar" style="${allViewed?'opacity:.55;':''}">${pp?`<img src="${pp}">`:'👤'}</div><div class="wa-status-info"><div class="wa-status-name">${escapeHtml(u)}</div><div class="wa-status-time">${viewedText}${a.length>1?a.length+' updates · ':''}${escapeHtml((first.created_at||'').slice(0,16))}</div></div></div>`;});
   const bar=document.getElementById('storyBar'); if(bar)bar.innerHTML=h||'<div style="padding:18px;color:#888">No recent story updates</div>';
- }catch(e){console.error('Status load failed',e);const bar=document.getElementById('storyBar');if(bar)bar.innerHTML='<div style="padding:18px;color:#b33;text-align:center">Could not load stories. Tap ↻ to refresh.</div>';}
+}
+async function loadStories(){
+ try{
+  if(!curUser)return;
+  // Show the last known stories immediately, then refresh from the server in the background.
+  // This improves tab return/open speed without changing story viewing or delivery behavior.
+  if(window.storiesCache && Array.isArray(window.storiesCache)){
+    renderStoriesList(window.storiesCache);
+  }
+  let r=await fetch('/api/stories?t='+Date.now(),{credentials:'same-origin',cache:'no-store'});
+  if(!r.ok)throw new Error('Stories request failed: HTTP '+r.status);
+  let data=await r.json();
+  if(!Array.isArray(data))throw new Error('Invalid stories response');
+  window.storiesCache=data;
+  renderStoriesList(data);
+ }catch(e){console.error('Status load failed',e);const bar=document.getElementById('storyBar');if(bar && !(window.storiesCache&&Array.isArray(window.storiesCache)))bar.innerHTML='<div style="padding:18px;color:#b33;text-align:center">Could not load stories. Tap ↻ to refresh.</div>';}
 }
 
 function openGrouped(username){ currentGroup=groupedStories[username]||[]; currentGroupIdx=0; document.getElementById('viewerModal').style.display='flex'; showGrouped(); }
