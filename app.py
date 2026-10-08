@@ -2000,7 +2000,33 @@ def api_messages():
     if not me or not other: return jsonify([])
     conn=get_conn(); c=conn.cursor()
     try:
-        q="SELECT id,sender,text,media_url,reply_to,read,deleted_at,created_at,media_type FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s) ORDER BY id DESC LIMIT 40" if USE_POSTGRES else "SELECT id,sender,text,media_url,reply_to,read,deleted_at,created_at,media_type FROM messages WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?) ORDER BY id DESC LIMIT 60"
+        limit_n=40 if USE_POSTGRES else 60
+        if USE_POSTGRES:
+            q=f"""SELECT id,sender,text,media_url,reply_to,read,deleted_at,created_at,media_type
+                  FROM (
+                    SELECT id,sender,text,media_url,reply_to,read,deleted_at,created_at,media_type
+                    FROM messages WHERE sender=%s AND receiver=%s ORDER BY id DESC LIMIT {limit_n}
+                  ) a
+                  UNION ALL
+                  SELECT id,sender,text,media_url,reply_to,read,deleted_at,created_at,media_type
+                  FROM (
+                    SELECT id,sender,text,media_url,reply_to,read,deleted_at,created_at,media_type
+                    FROM messages WHERE sender=%s AND receiver=%s ORDER BY id DESC LIMIT {limit_n}
+                  ) b
+                  ORDER BY id DESC LIMIT {limit_n}"""
+        else:
+            q=f"""SELECT id,sender,text,media_url,reply_to,read,deleted_at,created_at,media_type
+                  FROM (
+                    SELECT id,sender,text,media_url,reply_to,read,deleted_at,created_at,media_type
+                    FROM messages WHERE sender=? AND receiver=? ORDER BY id DESC LIMIT {limit_n}
+                  ) a
+                  UNION ALL
+                  SELECT id,sender,text,media_url,reply_to,read,deleted_at,created_at,media_type
+                  FROM (
+                    SELECT id,sender,text,media_url,reply_to,read,deleted_at,created_at,media_type
+                    FROM messages WHERE sender=? AND receiver=? ORDER BY id DESC LIMIT {limit_n}
+                  ) b
+                  ORDER BY id DESC LIMIT {limit_n}"""
         c.execute(q,(me,other,other,me)); rows=list(reversed(c.fetchall()))
         ids=[r[0] for r in rows]
         reactions_by={}
