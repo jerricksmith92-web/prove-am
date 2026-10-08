@@ -2233,13 +2233,18 @@ def api_comments():
 
 @app.route('/api/post/share',methods=['POST'])
 def api_post_share():
-    me=session.get('username');pid=(request.get_json(silent=True) or {}).get('post_id');conn=get_conn();c=conn.cursor();now=datetime.now().isoformat()
+    me=(session.get('username') or '').strip()
+    pid=(request.get_json(silent=True) or {}).get('post_id')
+    if not me:return jsonify({"ok":False,"error":"Not logged in"}),401
+    if not pid:return jsonify({"ok":False,"error":"Missing post"}),400
+    conn=get_conn();c=conn.cursor();now=datetime.now().isoformat()
     try:
         q="SELECT username,text,media_url FROM posts WHERE id=%s" if USE_POSTGRES else "SELECT username,text,media_url FROM posts WHERE id=?";c.execute(q,(pid,));orig=c.fetchone()
         if not orig:return jsonify({"ok":False,"error":"Post not found"}),404
+        if orig[0]==me:return jsonify({"ok":False,"error":"You cannot share your own post"}),400
         qs="INSERT INTO post_shares (post_id,username,created_at) VALUES (%s,%s,%s) ON CONFLICT DO NOTHING" if USE_POSTGRES else "INSERT OR IGNORE INTO post_shares (post_id,username,created_at) VALUES (?,?,?)";c.execute(qs,(pid,me,now))
         qp="INSERT INTO posts (username,text,media_url,created_at,shared_post_id) VALUES (%s,%s,%s,%s,%s)" if USE_POSTGRES else "INSERT INTO posts (username,text,media_url,created_at,shared_post_id) VALUES (?,?,?,?,?)";c.execute(qp,(me,'🔄 Shared a post','',now,pid))
-        conn.commit();notify(orig[0],'share',me,me+' shared your post');return jsonify({"ok":True,"id":c.lastrowid if not USE_POSTGRES else None,"created_at":now,"media_url":url})
+        conn.commit();notify(orig[0],'share',me,me+' shared your post');return jsonify({"ok":True,"id":c.lastrowid if not USE_POSTGRES else None,"created_at":now,"media_url":orig[2] or ''})
     except Exception:conn.rollback();return jsonify({"ok":False,"error":"Could not share"}),500
     finally:conn.close()
 
