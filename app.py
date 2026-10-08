@@ -771,12 +771,24 @@ function showGrouped(){
   let img=document.getElementById('viewerMedia'),vid=document.getElementById('viewerVideo'),txt=document.getElementById('viewerText'),cap=document.getElementById('viewerCaption');
   img.style.display=vid.style.display=txt.style.display=cap.style.display='none';
   let m=s.media_url||''; let low=m.toLowerCase();
-  if(s.text &&!m){txt.style.display='block';txt.innerText=s.text;}
-  else if(low.includes('.mp4')||low.includes('.mov')||low.includes('.webm')){vid.style.display='block';vid.src=m;vid.load(); if(!lowData) vid.play().catch(()=>{}); if(s.text){cap.style.display='block';cap.innerText=s.text;}}
-  else if(m){img.style.display='block';img.src=m; if(s.text){cap.style.display='block';cap.innerText=s.text;}}
-  fetch('/api/story/view',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:s.id})});
-  if(s.username==curUser){fetch('/api/story/viewers?id='+s.id).then(r=>r.json()).then(v=>{document.getElementById('viewerCounter').innerText='👁️ '+v.count;}).catch(()=>{});}else{document.getElementById('viewerCounter').disabled=true;}
-  storyTimer=setTimeout(()=>{nextStory()},6000);
+  if(s.text &&!m){
+    txt.style.display='block';txt.innerText=s.text;
+    storyTimer=setTimeout(()=>nextStory(),6000);
+  } else if(low.includes('.mp4')||low.includes('.mov')||low.includes('.webm')){
+    vid.style.display='block';vid.src=m;vid.load();
+    if(!lowData)vid.play().catch(()=>{});
+    if(s.text){cap.style.display='block';cap.innerText=s.text;}
+    const advance=()=>{clearTimeout(storyTimer);nextStory();};
+    vid.onended=advance;
+    storyTimer=setTimeout(advance,30000);
+  } else if(m){
+    img.style.display='block';img.src=m;if(s.text){cap.style.display='block';cap.innerText=s.text;}
+    storyTimer=setTimeout(()=>nextStory(),6000);
+  } else {
+    storyTimer=setTimeout(()=>nextStory(),6000);
+  }
+  fetch('/api/story/view',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:s.id}),credentials:'same-origin'}).catch(()=>{});
+  if(s.username==curUser){fetch('/api/story/viewers?id='+s.id,{credentials:'same-origin'}).then(r=>r.json()).then(v=>{document.getElementById('viewerCounter').innerText='👁️ '+v.count;}).catch(()=>{});}else{document.getElementById('viewerCounter').disabled=true;}
 }
 async function openStoryViewers(){let s=currentGroup[currentGroupIdx];if(!s||s.username!==curUser)return;let box=document.getElementById('storyViewerList');document.getElementById('storyViewersModal').style.display='flex';box.innerHTML='<div style="padding:25px;text-align:center;color:#aaa">Loading viewers…</div>';try{let r=await fetch('/api/story/viewers?id='+s.id);let d=await r.json();box.innerHTML=d.viewers.length?d.viewers.map(u=>{let pic=profiles[u];return `<div class=viewer-person><div class=comment-avatar>${pic?`<img src="${pic}" loading="lazy">`:escapeHtml((u||'?')[0])}</div><b>${escapeHtml(u)}</b></div>`}).join(''):'<div style="padding:25px;text-align:center;color:#aaa">No viewers yet</div>';}catch(e){box.innerHTML='<div style="padding:25px;text-align:center;color:#aaa">Could not load viewers</div>';}}
 function closeStoryViewers(e){if(!e||e.target.id==='storyViewersModal')document.getElementById('storyViewersModal').style.display='none';}
