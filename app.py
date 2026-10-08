@@ -778,34 +778,113 @@ async function loadStories(){
  }catch(e){console.error('Status load failed',e);const bar=document.getElementById('storyBar');if(bar && !(window.storiesCache&&Array.isArray(window.storiesCache)))bar.innerHTML='<div style="padding:18px;color:#b33;text-align:center">Could not load stories. Tap ↻ to refresh.</div>';}
 }
 
-function openGrouped(username){ currentGroup=groupedStories[username]||[]; currentGroupIdx=0; document.getElementById('viewerModal').style.display='flex'; showGrouped(); }
+function preloadStoryMedia(index){
+  if(lowData)return;
+  const s=currentGroup[index];
+  if(!s || !s.media_url)return;
+  const url=s.media_url, low=url.toLowerCase();
+  window.storyPrefetch=window.storyPrefetch||{};
+  if(window.storyPrefetch[url])return;
+  if(low.includes('.mp4')||low.includes('.mov')||low.includes('.webm')){
+    const v=document.createElement('video');
+    v.preload='auto'; v.muted=true; v.playsInline=true; v.src=url;
+    window.storyPrefetch[url]=v;
+    try{v.load();}catch(e){}
+  }else{
+    const im=new Image();
+    im.decoding='async'; im.src=url;
+    window.storyPrefetch[url]=im;
+  }
+}
+function openGrouped(username){
+  currentGroup=groupedStories[username]||[];
+  currentGroupIdx=0;
+  document.getElementById('viewerModal').style.display='flex';
+  preloadStoryMedia(0);
+  preloadStoryMedia(1);
+  showGrouped();
+}
 function showGrouped(){
-  clearTimeout(storyTimer); let s=currentGroup[currentGroupIdx]; if(!s){closeViewer();return;}
+  clearTimeout(storyTimer);
+  let s=currentGroup[currentGroupIdx];
+  if(!s){closeViewer();return;}
+  preloadStoryMedia(currentGroupIdx+1);
   document.getElementById('viewerUser').innerText=s.username;
-  document.getElementById('viewerCounter').innerText='👁️ 0';document.getElementById('viewerCounter').disabled=false;
+  document.getElementById('viewerCounter').innerText='👁️ 0';
+  document.getElementById('viewerCounter').disabled=false;
   document.getElementById('delStoryBtn').style.display=(s.username==curUser)?'inline-block':'none';
-  let bar=document.getElementById('progressBar'); bar.innerHTML=currentGroup.map((_,idx)=>`<div class="${idx==currentGroupIdx?'active':idx<currentGroupIdx?'seen':''}"></div>`).join('');
+  let bar=document.getElementById('progressBar');
+  bar.innerHTML=currentGroup.map((_,idx)=>`<div class="${idx==currentGroupIdx?'active':idx<currentGroupIdx?'seen':''}"></div>`).join('');
   let img=document.getElementById('viewerMedia'),vid=document.getElementById('viewerVideo'),txt=document.getElementById('viewerText'),cap=document.getElementById('viewerCaption');
   img.style.display=vid.style.display=txt.style.display=cap.style.display='none';
-  let m=s.media_url||''; let low=m.toLowerCase();
-  if(s.text &&!m){
-    txt.style.display='block';txt.innerText=s.text;
+  let m=s.media_url||'', low=m.toLowerCase();
+  if(s.text && !m){
+    txt.style.display='block'; txt.innerText=s.text;
     storyTimer=setTimeout(()=>nextStory(),6000);
-  } else if(low.includes('.mp4')||low.includes('.mov')||low.includes('.webm')){
-    vid.style.display='block';vid.src=m;vid.load();
+  }else if(low.includes('.mp4')||low.includes('.mov')||low.includes('.webm')){
+    vid.style.display='block';
+    vid.preload=lowData?'metadata':'auto';
+    vid.src=m; vid.load();
     if(!lowData)vid.play().catch(()=>{});
     if(s.text){cap.style.display='block';cap.innerText=s.text;}
     const advance=()=>{clearTimeout(storyTimer);nextStory();};
     vid.onended=advance;
+    vid.onloadedmetadata=()=>{
+      if(vid.duration && isFinite(vid.duration)){
+        clearTimeout(storyTimer);
+        storyTimer=setTimeout(advance,Math.max(1000,vid.duration*1000+500));
+      }
+    };
     storyTimer=setTimeout(advance,30000);
-  } else if(m){
-    img.style.display='block';img.src=m;if(s.text){cap.style.display='block';cap.innerText=s.text;}
+  }else if(m){
+    img.style.display='block';
+    img.decoding='async';
+    img.loading='eager';
+    try{img.fetchPriority='high';}catch(e){}
+    img.src=m;
+    if(s.text){cap.style.display='block';cap.innerText=s.text;}
     storyTimer=setTimeout(()=>nextStory(),6000);
-  } else {
+  }else{
     storyTimer=setTimeout(()=>nextStory(),6000);
   }
-  fetch('/api/story/view',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:s.id}),credentials:'same-origin'}).catch(()=>{});
-  if(s.username==curUser){fetch('/api/story/viewers?id='+s.id,{credentials:'same-origin'}).then(r=>r.json()).then(v=>{document.getElementById('viewerCounter').innerText='👁️ '+v.count;}).catch(()=>{});}else{document.getElementById('viewerCounter').disabled=true;}
+
+  // Mark the story viewed immediately in the UI, then persist it in the background.
+  if(s.username!==curUser){
+    s.viewed=true;
+    renderStoriesList(stories);
+  }
+  fetch('/api/story/view',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:s.id}),credentials:'same-origin'})
+    .catch(()=>{});
+
+  if(s.username==curUser){
+    fetch('/api/story/viewers?id='+s.id,{credentials:'same-origin'})
+      .then(r=>r.json())
+      .then(v=>{document.getElementById('viewerCounter').innerText='👁️ '+v.count;})
+      .catch(()=>{});
+  }else{
+    document.getElementById('viewerCounter').disabled=true;
+  }
+}
+function nextStory(){
+  if(currentGroupIdx<currentGroup.length-1){
+    currentGroupIdx++;
+    showGrouped();
+  }else{
+    closeViewer();
+    loadStories();
+  }
+}
+function prevStory(){
+  if(currentGroupIdx>0){
+    currentGroupIdx--;
+    showGrouped();
+  }
+}
+function closeViewer(){
+  clearTimeout(storyTimer);
+  document.getElementById('viewerModal').style.display='none';
+  let v=document.getElementById('viewerVideo');
+  v.pause();
 }
 async function openStoryViewers(){let s=currentGroup[currentGroupIdx];if(!s||s.username!==curUser)return;let box=document.getElementById('storyViewerList');document.getElementById('storyViewersModal').style.display='flex';box.innerHTML='<div style="padding:25px;text-align:center;color:#aaa">Loading viewers…</div>';try{let r=await fetch('/api/story/viewers?id='+s.id);let d=await r.json();box.innerHTML=d.viewers.length?d.viewers.map(u=>{let pic=profiles[u];return `<div class=viewer-person><div class=comment-avatar>${pic?`<img src="${pic}" loading="lazy">`:escapeHtml((u||'?')[0])}</div><b>${escapeHtml(u)}</b></div>`}).join(''):'<div style="padding:25px;text-align:center;color:#aaa">No viewers yet</div>';}catch(e){box.innerHTML='<div style="padding:25px;text-align:center;color:#aaa">Could not load viewers</div>';}}
 function closeStoryViewers(e){if(!e||e.target.id==='storyViewersModal')document.getElementById('storyViewersModal').style.display='none';}
