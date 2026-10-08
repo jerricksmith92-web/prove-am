@@ -679,7 +679,7 @@ function switchTab(t){
   if(t=='chat')loadChatUsers();
   if(t=='search'){searchUsers(); loadFriendRequests(); loadMyFriends();} if(t=='post') loadPosts();
 }
-function openNotifs(){document.getElementById('storiesDiv').style.display='none';document.getElementById('postDiv').style.display='none';document.getElementById('chatDiv').style.display='none';document.getElementById('searchDiv').style.display='none';document.getElementById('profileDiv').style.display='none';document.getElementById('notifDiv').style.display='block';loadNotifs();}
+function openNotifs(){document.getElementById('storiesDiv').style.display='none';document.getElementById('postDiv').style.display='none';document.getElementById('chatDiv').style.display='none';document.getElementById('searchDiv').style.display='none';document.getElementById('profileDiv').style.display='none';document.getElementById('notifDiv').style.display='block';loadNotifs().finally(()=>loadNotifCount());}
 function openProfile(){document.getElementById('storiesDiv').style.display='none';document.getElementById('postDiv').style.display='none';document.getElementById('chatDiv').style.display='none';document.getElementById('searchDiv').style.display='none';document.getElementById('notifDiv').style.display='none';document.getElementById('profileDiv').style.display='block'; loadProfiles();}
 async function loadMe(){
   try{
@@ -2095,24 +2095,32 @@ def api_message_delete():
 
 @app.route('/api/notifications')
 def api_notifications():
-    me=session.get('username'); conn=get_conn(); c=conn.cursor()
+    me=session.get('username')
+    if not me:return jsonify([]),401
+    conn=get_conn(); c=conn.cursor()
     c.execute("SELECT id,type,from_user,text,created_at FROM notifications WHERE username=%s ORDER BY id DESC LIMIT 50" if USE_POSTGRES else "SELECT id,type,from_user,text,created_at FROM notifications WHERE username=? ORDER BY id DESC LIMIT 50",(me,))
     rows=c.fetchall(); conn.close()
     return jsonify([{"id":r[0],"type":r[1],"from_user":r[2],"text":r[3],"created_at":r[4]} for r in rows])
 
 @app.route('/api/notifications/read',methods=['POST'])
 def api_notifications_read():
-    me=session.get('username');conn=get_conn();c=conn.cursor();q="UPDATE notifications SET is_read=1 WHERE username=%s" if USE_POSTGRES else "UPDATE notifications SET is_read=1 WHERE username=?";c.execute(q,(me,));conn.commit();conn.close();return jsonify({"ok":True})
+    me=session.get('username')
+    if not me:return jsonify({'ok':False,'error':'Not logged in'}),401
+    conn=get_conn();c=conn.cursor();q="UPDATE notifications SET is_read=1 WHERE username=%s" if USE_POSTGRES else "UPDATE notifications SET is_read=1 WHERE username=?";c.execute(q,(me,));conn.commit();conn.close();return jsonify({"ok":True})
 
 @app.route('/api/notifications/count')
 def api_notifications_count():
-    me=session.get('username'); conn=get_conn(); c=conn.cursor()
+    me=session.get('username')
+    if not me:return jsonify({'count':0}),401
+    conn=get_conn(); c=conn.cursor()
     c.execute("SELECT COUNT(*) FROM notifications WHERE username=%s AND is_read=0" if USE_POSTGRES else "SELECT COUNT(*) FROM notifications WHERE username=? AND is_read=0",(me,))
     cnt=c.fetchone()[0]; conn.close(); return jsonify({"count":cnt})
 
 @app.route('/api/notifications/clear', methods=['POST'])
 def api_notifications_clear():
-    me=session.get('username'); conn=get_conn(); c=conn.cursor()
+    me=session.get('username')
+    if not me:return jsonify({'ok':False,'error':'Not logged in'}),401
+    conn=get_conn(); c=conn.cursor()
     c.execute("DELETE FROM notifications WHERE username=%s" if USE_POSTGRES else "DELETE FROM notifications WHERE username=?",(me,)); conn.commit(); conn.close(); return jsonify({"ok":True})
 
 
