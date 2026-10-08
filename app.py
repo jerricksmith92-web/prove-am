@@ -413,10 +413,27 @@ button,input,textarea,select,a{pointer-events:auto;touch-action:manipulation}
   text-overflow:ellipsis;
 }
 .chat-screen .chat-header .chat-search-btn{flex:0 0 auto}
-.chat-screen #replyPreview,.chat-screen #typingStatus{position:absolute;left:8px;right:8px;z-index:25}
+.chat-screen #replyPreview{position:absolute;left:8px;right:8px;top:82px!important;z-index:35}
+.chat-screen #typingStatus{
+  position:absolute;
+  top:54px!important;
+  left:8px;
+  right:8px;
+  height:28px;
+  box-sizing:border-box;
+  padding:4px 10px;
+  display:flex;
+  align-items:center;
+  color:#aaa;
+  background:rgba(23,25,28,.96);
+  border-bottom:1px solid rgba(255,255,255,.06);
+  font-size:13px;
+  font-weight:700;
+  z-index:30;
+}
 .chat-screen #msgs{
   position:absolute;
-  top:54px;
+  top:82px;
   left:0;
   right:0;
   bottom:64px;
@@ -438,7 +455,7 @@ button,input,textarea,select,a{pointer-events:auto;touch-action:manipulation}
 @media (max-width:600px){
   .chat-screen .chat-header{height:54px;padding:8px}
   .chat-screen .chat-header .chat-back{font-size:14px}
-  .chat-screen #msgs{top:54px;bottom:64px;padding-bottom:24px!important}
+  .chat-screen #msgs{top:82px;bottom:64px;padding-bottom:24px!important}
 }
 
 /* Reference-style GH NOT chat UI */
@@ -1049,7 +1066,7 @@ function openChat(username){
   const users=document.getElementById('chatUsers'), search=document.getElementById('searchChat'), box=document.getElementById('chatBox');
   if(users)users.style.display='none'; if(search)search.style.display='none'; if(!box)return; box.style.display='block';
   const pic=profiles[username]||''; const avatar=pic?`<img src="${pic}" loading="lazy">`:escapeHtml((username||'?')[0].toUpperCase());
-  box.innerHTML=`<div class="chat-header"><button onclick="backChat()" class="chat-back" aria-label="Back">←</button><div class="chat-profile"><div class="chat-profile-avatar">${avatar}</div><div style="min-width:0"><div class="chat-profile-name">${escapeHtml(username)}</div><div class="chat-profile-status" id="chatOnlineState"></div></div></div><button class="chat-head-btn" onclick="alert('Voice calling is not connected yet')">☎</button><button class="chat-head-btn" onclick="alert('Video calling is not connected yet')">▣</button><button class="chat-head-btn chat-head-more" onclick="searchConversation()">⋮</button></div><div id="replyPreview" style="display:none;background:#17191c;color:#fff;padding:8px 10px;margin:8px;border-radius:12px;border-left:3px solid #ffcc19;position:absolute;top:76px;left:8px;right:8px;z-index:35"></div><div id="typingStatus" class="typing" style="position:absolute;top:80px;left:20px;right:20px;z-index:30;color:#aaa"></div><div id="msgs"></div><div id="chatMediaPreview" class="chat-media-preview"></div><div id="chatVoiceReady" class="chat-voice-ready"><span class="voice-label">🎤 Voice message ready</span><audio id="voicePreview" controls></audio><button onclick="clearRecordedAudio()" style="border:0;background:#333;color:#fff;border-radius:10px;padding:7px">✕</button></div><div class="chat-bar"><div class="chat-composer"><button class="chat-circle chat-camera" onclick="document.getElementById('chatFileHidden').click()" title="Photo / video">📷</button><div class="chat-input-wrap"><input id="chatText" placeholder="Type a message..." autocomplete="off"><button onclick="toggleChatEmoji()" title="Emoji">😊</button><button onclick="document.getElementById('chatFileHidden').click()" title="Attach">📎</button><button onclick="document.getElementById('chatFileHidden').click()" title="Photo / video">🖼️</button></div><input type="file" id="chatFileHidden" accept="image/*,video/*" style="display:none"><button class="chat-circle send mic-mode" id="sendBtn" onclick="sendOrRecord()" title="Record voice">🎤</button></div></div>`;
+  box.innerHTML=`<div class="chat-header"><button onclick="backChat()" class="chat-back" aria-label="Back">←</button><div class="chat-profile"><div class="chat-profile-avatar">${avatar}</div><div style="min-width:0"><div class="chat-profile-name">${escapeHtml(username)}</div><div class="chat-profile-status" id="chatOnlineState"></div></div></div><button class="chat-head-btn" onclick="alert('Voice calling is not connected yet')">☎</button><button class="chat-head-btn" onclick="alert('Video calling is not connected yet')">▣</button><button class="chat-head-btn chat-head-more" onclick="searchConversation()">⋮</button></div><div id="replyPreview" style="display:none;background:#17191c;color:#fff;padding:8px 10px;margin:8px;border-radius:12px;border-left:3px solid #ffcc19;position:absolute;top:76px;left:8px;right:8px;z-index:35"></div><div id="typingStatus" class="typing" style="display:flex;align-items:center;height:28px;position:absolute;top:54px;left:8px;right:8px;z-index:30;color:#aaa"></div><div id="msgs"></div><div id="chatMediaPreview" class="chat-media-preview"></div><div id="chatVoiceReady" class="chat-voice-ready"><span class="voice-label">🎤 Voice message ready</span><audio id="voicePreview" controls></audio><button onclick="clearRecordedAudio()" style="border:0;background:#333;color:#fff;border-radius:10px;padding:7px">✕</button></div><div class="chat-bar"><div class="chat-composer"><button class="chat-circle chat-camera" onclick="document.getElementById('chatFileHidden').click()" title="Photo / video">📷</button><div class="chat-input-wrap"><input id="chatText" placeholder="Type a message..." autocomplete="off"><button onclick="toggleChatEmoji()" title="Emoji">😊</button><button onclick="document.getElementById('chatFileHidden').click()" title="Attach">📎</button><button onclick="document.getElementById('chatFileHidden').click()" title="Photo / video">🖼️</button></div><input type="file" id="chatFileHidden" accept="image/*,video/*" style="display:none"><button class="chat-circle send mic-mode" id="sendBtn" onclick="sendOrRecord()" title="Record voice">🎤</button></div></div>`;
   document.getElementById('chatFileHidden').addEventListener('change',e=>{const f=e.target.files[0];if(f){selectedChatFile=f;showSelectedChatFile(f);updateSendButton();}});
   document.getElementById('chatText').addEventListener('input',()=>{updateSendButton();sendTyping();}); document.getElementById('chatText').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}});
   if(window.typingTimer)clearInterval(window.typingTimer); window.typingTimer=setInterval(pollTyping,3500);
