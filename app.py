@@ -920,7 +920,7 @@ async function loadChatUsers(){
     let r=await fetch('/api/friends/list',{credentials:'same-origin',cache:'no-store'}); let friends=await r.json();
     if(friends.length==0){
       renderChatUsers(allUsers);
-      refreshChatListPresence();
+      if(!window.chatListPresenceTimer){window.chatListPresenceTimer=setInterval(refreshChatListPresence,10000);}
       return;
     }
     const recentByUser={};
@@ -941,7 +941,6 @@ async function loadChatUsers(){
     if(!window.chatListPresenceTimer){
       window.chatListPresenceTimer=setInterval(refreshChatListPresence,10000);
     }
-    refreshChatListPresence();
   }catch(e){ renderChatUsers(allUsers); }
 }
 function openChat(username){
