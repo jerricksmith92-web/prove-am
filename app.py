@@ -659,7 +659,7 @@ function connectRealtime(){
     });
     realtimeSocket.on('chat_read',d=>{if(d&&chatWith===d.by)loadMsgs(true);});
     realtimeSocket.on('chat_typing',d=>{if(d&&chatWith===d.from){let el=document.getElementById('typingStatus');if(el)el.innerText=d.typing?(d.from+' is typing…'):'';}});
-    realtimeSocket.on('notification',d=>{if(!d)return;loadNotifCount();if(navigator.vibrate)navigator.vibrate(25);});
+    realtimeSocket.on('notification',d=>{if(!d)return;loadNotifCount();if(document.getElementById('notifDiv')?.style.display==='block')loadNotifs();if(navigator.vibrate)navigator.vibrate(25);});
   }catch(e){console.warn('Realtime chat unavailable; REST fallback active',e);}
 }
 let curUser='',chatWith='',stories=[],groupedStories={},currentGroup=[],currentGroupIdx=0,storyTimer=null,allUsers=[],profiles={},selectedStoryFile=null,selectedPostFile=null,selectedChatFile=null,selectedProfileFile=null,replyToText='';
@@ -1216,10 +1216,12 @@ async function loadNotifCount(){
   try{
     let r=await fetch('/api/notifications/count'); let d=await r.json();
     let el=document.getElementById('notifCount');
-    if(d.count>0){el.style.display='block'; el.innerText=d.count>99?'99+':d.count;} else {el.style.display='none';}
+    let count=Number(d.count||0);
+    if(count>0){el.style.display='block'; el.innerText=count>99?'99+':count;} else {el.style.display='none';}
+    if('setAppBadge' in navigator){try{count?navigator.setAppBadge(count):navigator.clearAppBadge();}catch(e){}}
   }catch(e){}
 }
-async function clearNotifs(){await fetch('/api/notifications/clear',{method:'POST'}); loadNotifs(); loadNotifCount();}
+async function clearNotifs(){await fetch('/api/notifications/clear',{method:'POST'}); loadNotifs(); loadNotifCount(); if('clearAppBadge' in navigator){try{navigator.clearAppBadge();}catch(e){}}}
 async function uploadProfilePic(){
   let f=selectedProfileFile||document.getElementById('profilePicInput').files[0];
   if(!f){alert('Pick pic - tap 📎');return}
