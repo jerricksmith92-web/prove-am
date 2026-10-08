@@ -850,8 +850,10 @@ function renderChatUsers(users){
     const isOnline=!!u.online;
     const statusText=isOnline?'Online':'Offline';
     const statusStyle=isOnline?'color:#22c55e;font-weight:700':'color:#888';
+    const unread=Number(u.unread_count||0);
+    const unreadBadge=unread>0?`<span class="chat-unread-badge">${unread>99?'99+':unread}</span>`:'';
     return `<div class="card chat-user-row" data-chat-user="${name}" style="display:flex;align-items:center;gap:10px;cursor:pointer">`+
-      `<div class=pic>${pic}</div><div style="min-width:0"><b>${name}</b><br><small class="chat-list-status" data-chat-status="${name}" style="${statusStyle}">${isOnline?'● ':''}${statusText}</small></div></div>`;
+      `<div class=pic>${pic}</div><div style="min-width:0;flex:1"><b>${name}</b><br><small class="chat-list-status" data-chat-status="${name}" style="${statusStyle}">${isOnline?'● ':''}${statusText}</small></div><div class="chat-unread-slot">${unreadBadge}</div></div>`;
   }).join('');
   // Event delegation: one listener instead of an onclick handler on every row.
   if(!el.dataset.bound){
@@ -900,14 +902,15 @@ async function loadChatUsers(){
     const presenceByUser={};
     friends.forEach(f=>{
       recentByUser[f.friend]=f.last_message_at||'';
-      presenceByUser[f.friend]={online:!!f.online,status_hidden:!!f.status_hidden};
+      presenceByUser[f.friend]={online:!!f.online,status_hidden:!!f.status_hidden,unread_count:Number(f.unread_count||0)};
     });
     let friendNames = friends.map(f=>f.friend);
     let filtered = allUsers.filter(u=> friendNames.includes(u.username)).map(u=>({
       ...u,
       last_message_at:recentByUser[u.username]||'',
       online:!!presenceByUser[u.username]?.online,
-      status_hidden:!!presenceByUser[u.username]?.status_hidden
+      status_hidden:!!presenceByUser[u.username]?.status_hidden,
+      unread_count:Number(presenceByUser[u.username]?.unread_count||0)
     }));
     renderChatUsers(filtered);
     if(!window.chatListPresenceTimer){
@@ -1460,8 +1463,19 @@ def api_friends_list():
         c.execute(qm,(me,me,me)); msg_rows=c.fetchall()
         recent={str(row[0]):str(row[1] or '') for row in msg_rows}
 
-        # Include presence in this response so the chat list does not need one
-        # status request per friend.
+        unread_map={}
+        try:
+            qu=("SELECT sender,COUNT(*) FROM messages WHERE receiver=%s AND read=0 GROUP BY sender"
+                if USE_POSTGRES else
+                "SELECT sender,COUNT(*) FROM messages WHERE receiver=? AND read=0 GROUP BY sender")
+            c.execute(qu,(me,))
+            for us,uc in c.fetchall():
+                unread_map[str(us)]=int(uc or 0)
+        except Exception:
+            unread_map={}
+
+        # Include presence and unread counts in this response so the chat list
+        # can update with one request instead of N requests per friend.
         status_map={}
         profile_map={}
         try:
@@ -1491,7 +1505,8 @@ def api_friends_list():
                     "friend":other,
                     "last_message_at":recent.get(other,''),
                     "online":bool(online),
-                    "status_hidden":bool(hidden)
+                    "status_hidden":bool(hidden),
+                    "unread_count":int(unread_map.get(other,0))
                 })
         out.sort(key=lambda x:x.get('last_message_at',''), reverse=True)
         return jsonify(out)
